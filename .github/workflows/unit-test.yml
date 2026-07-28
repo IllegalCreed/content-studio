@@ -13,3 +13,6 @@ permissions: {}
 jobs:
   unit-test:
     uses: sxzz/workflows/.github/workflows/unit-test.yml@v1
+    with:
+      typecheck: pnpm run type-check
+      lint: pnpm run lint:check
