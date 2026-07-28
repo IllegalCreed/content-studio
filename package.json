@@ -1,0 +1,44 @@
+{
+  "name": "@illegalcreed/content-studio",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.29.2",
+  "description": "Cross-project content and video plan generator for owner-controlled publishing workflows",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./cli": "./dist/cli.mjs",
+    "./package.json": "./package.json"
+  },
+  "types": "./dist/index.d.mts",
+  "bin": {
+    "content-studio": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "coverage": "vitest run --coverage",
+    "generate:example": "pnpm build && node dist/cli.mjs generate --project examples/algorithm-visualizer/project.json --campaign examples/algorithm-visualizer/campaign.json --out .content-studio/example",
+    "lint": "eslint . --fix",
+    "lint:check": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc --noEmit",
+    "verify": "pnpm lint:check && pnpm type-check && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "catalog:dev",
+    "@types/node": "catalog:dev",
+    "@vitest/coverage-v8": "catalog:dev",
+    "eslint": "catalog:dev",
+    "eslint-plugin-format": "catalog:dev",
+    "tsdown": "catalog:dev",
+    "typescript": "catalog:dev",
+    "vitest": "catalog:dev"
+  }
+}

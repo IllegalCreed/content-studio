@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "projectId": "algorithm-visualizer",
+  "name": "Algorithm Visualizer",
+  "canonicalUrl": "https://algo.illegalscreed.cn/",
+  "repositoryUrl": "https://github.com/IllegalCreed/algorithms-visualization",
+  "locales": [
+    "zh-CN",
+    "en"
+  ],
+  "tagline": {
+    "zh-CN": "通过交互动画学习数据结构与算法。",
+    "en": "Learn data structures and algorithms through interactive animation."
+  },
+  "facts": [
+    {
+      "id": "bilingual-catalog",
+      "text": {
+        "zh-CN": "中英文各有 95 个可索引页面，并提供双向语言切换。",
+        "en": "Includes 95 indexable pages in both Chinese and English with bidirectional language switching."
+      }
+    },
+    {
+      "id": "interactive-player",
+      "text": {
+        "zh-CN": "算法播放器支持进度拖动、逐步执行、速度控制和同步代码高亮。",
+        "en": "The algorithm player supports scrubbing, step execution, speed control, and synchronized code highlighting."
+      }
+    },
+    {
+      "id": "source-languages",
+      "text": {
+        "zh-CN": "代表算法提供 TypeScript、Python、Go 和 Rust 四种实现。",
+        "en": "Representative algorithms include TypeScript, Python, Go, and Rust implementations."
+      }
+    }
+  ],
+  "captureFlows": [
+    {
+      "id": "quick-sort-zh",
+      "title": {
+        "zh-CN": "快速排序中文演示",
+        "en": "Quick sort Chinese demo"
+      },
+      "startPath": "/docs/quick-sort",
+      "steps": [
+        {
+          "kind": "click",
+          "locator": {
+            "by": "role",
+            "value": "button",
+            "name": "播放"
+          }
+        },
+        {
+          "kind": "wait",
+          "durationMs": 2400
+        },
+        {
+          "kind": "capture",
+          "label": "partition-animation-zh",
+          "durationMs": 3600
+        }
+      ]
+    },
+    {
+      "id": "quick-sort-en",
+      "title": {
+        "zh-CN": "快速排序英文演示",
+        "en": "Quick sort English demo"
+      },
+      "startPath": "/en/docs/quick-sort",
+      "steps": [
+        {
+          "kind": "click",
+          "locator": {
+            "by": "role",
+            "value": "button",
+            "name": "Play"
+          }
+        },
+        {
+          "kind": "wait",
+          "durationMs": 2400
+        },
+        {
+          "kind": "capture",
+          "label": "partition-animation-en",
+          "durationMs": 3600
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+shellEmulator: true
+
+trustPolicy: no-downgrade
+
+packages:
+  - .
+
+catalogs:
+  dev:
+    '@antfu/eslint-config': 9.2.0
+    '@types/node': ^22.0.0
+    '@vitest/coverage-v8': 4.1.10
+    eslint: 10.8.0
+    eslint-plugin-format: 2.0.1
+    tsdown: 0.22.14
+    typescript: 6.0.3
+    vitest: 4.1.10

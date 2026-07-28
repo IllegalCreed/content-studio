@@ -1,0 +1,138 @@
+import type { CampaignSpec, ProjectManifest } from '../types'
+import { describe, expect, it } from 'vitest'
+import { compileVideoPlan } from './compile'
+
+const project: ProjectManifest = {
+  schemaVersion: 1,
+  projectId: 'algorithm-visualizer',
+  name: 'Algorithm Visualizer',
+  canonicalUrl: 'https://algo.illegalscreed.cn/',
+  repositoryUrl: 'https://github.com/IllegalCreed/algorithms-visualization',
+  locales: ['zh-CN', 'en'],
+  tagline: {
+    'en': 'Learn algorithms through interactive animation.',
+    'zh-CN': '通过交互动画学习算法。',
+  },
+  facts: [],
+  captureFlows: [
+    {
+      id: 'quick-sort',
+      title: {
+        'en': 'Quick sort walkthrough',
+        'zh-CN': '快速排序演示',
+      },
+      startPath: '/quick-sort',
+      steps: [
+        {
+          kind: 'click',
+          locator: {
+            by: 'role',
+            value: 'button',
+            name: 'Start',
+          },
+        },
+        {
+          kind: 'capture',
+          label: 'partition',
+          durationMs: 2400,
+        },
+      ],
+    },
+  ],
+}
+
+const campaign: CampaignSpec = {
+  schemaVersion: 1,
+  campaignId: 'quick-sort-launch',
+  topic: {
+    'en': 'Understand quick sort partitioning',
+    'zh-CN': '看懂快速排序的分区过程',
+  },
+  goal: 'education',
+  targetUrl: 'https://algo.illegalscreed.cn/quick-sort/',
+  highlights: [],
+  tags: ['algorithms'],
+  channels: [
+    {
+      id: 'youtube',
+      locale: 'en',
+    },
+  ],
+  video: {
+    flowIds: ['quick-sort'],
+    format: 'landscape',
+  },
+}
+
+describe('video plan compiler', () => {
+  it('turns semantic project flows into a deterministic recording timeline', () => {
+    expect(compileVideoPlan(project, campaign)).toMatchInlineSnapshot(`
+      {
+        "campaignId": "quick-sort-launch",
+        "durationMs": 3000,
+        "format": "landscape",
+        "scenes": [
+          {
+            "actions": [
+              {
+                "durationMs": 600,
+                "kind": "click",
+                "locator": {
+                  "by": "role",
+                  "name": "Start",
+                  "value": "button",
+                },
+                "startMs": 0,
+              },
+              {
+                "durationMs": 2400,
+                "kind": "capture",
+                "label": "partition",
+                "startMs": 600,
+              },
+            ],
+            "id": "quick-sort",
+            "startMs": 0,
+            "startPath": "/quick-sort",
+            "title": "Quick sort walkthrough",
+          },
+        ],
+        "viewport": {
+          "height": 1080,
+          "width": 1920,
+        },
+      }
+    `)
+  })
+
+  it('uses the first package locale and requested viewport without a video channel', () => {
+    const plan = compileVideoPlan(project, {
+      ...campaign,
+      channels: [
+        {
+          id: 'github',
+          locale: 'zh-CN',
+        },
+      ],
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'portrait',
+      },
+    })
+
+    expect(plan.viewport).toEqual({
+      height: 1920,
+      width: 1080,
+    })
+    expect(plan.scenes[0]!.title).toBe('快速排序演示')
+  })
+
+  it('fails when compilation is requested without a video section', () => {
+    expect(() =>
+      compileVideoPlan(project, {
+        ...campaign,
+        video: undefined,
+      }),
+    ).toThrow(/does not define a video plan/)
+  })
+})

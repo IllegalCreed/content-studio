@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "campaignId": "quick-sort-visual-guide",
+  "topic": {
+    "zh-CN": "用动画看懂快速排序的分区过程",
+    "en": "See quick sort partitioning through animation"
+  },
+  "goal": "education",
+  "targetUrl": "https://algo.illegalscreed.cn/docs/quick-sort/",
+  "highlights": [
+    "bilingual-catalog",
+    "interactive-player",
+    "source-languages"
+  ],
+  "tags": [
+    "algorithms",
+    "visualization",
+    "opensource"
+  ],
+  "channels": [
+    {
+      "id": "github",
+      "locale": "en"
+    },
+    {
+      "id": "bluesky",
+      "locale": "en"
+    },
+    {
+      "id": "dev",
+      "locale": "en"
+    },
+    {
+      "id": "mastodon",
+      "locale": "en"
+    },
+    {
+      "id": "x",
+      "locale": "en"
+    },
+    {
+      "id": "facebook",
+      "locale": "en"
+    },
+    {
+      "id": "zhihu",
+      "locale": "zh-CN"
+    },
+    {
+      "id": "juejin",
+      "locale": "zh-CN"
+    },
+    {
+      "id": "jianshu",
+      "locale": "zh-CN"
+    },
+    {
+      "id": "bilibili",
+      "locale": "zh-CN"
+    },
+    {
+      "id": "youtube",
+      "locale": "en"
+    },
+    {
+      "id": "douyin",
+      "locale": "zh-CN"
+    }
+  ],
+  "video": {
+    "flowIds": [
+      "quick-sort-zh",
+      "quick-sort-en"
+    ],
+    "format": "landscape"
+  }
+}

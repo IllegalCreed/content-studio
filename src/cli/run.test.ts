@@ -1,0 +1,152 @@
+import { access, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import process from 'node:process'
+import { describe, expect, it } from 'vitest'
+import { runCli } from './run'
+
+const project = {
+  schemaVersion: 1,
+  projectId: 'algorithm-visualizer',
+  name: 'Algorithm Visualizer',
+  canonicalUrl: 'https://algo.illegalscreed.cn/',
+  repositoryUrl: 'https://github.com/IllegalCreed/algorithms-visualization',
+  locales: ['zh-CN', 'en'],
+  tagline: {
+    'en': 'Learn algorithms through interactive animation.',
+    'zh-CN': '通过交互动画学习算法。',
+  },
+  facts: [],
+  captureFlows: [],
+}
+
+const campaign = {
+  schemaVersion: 1,
+  campaignId: 'quick-sort-launch',
+  topic: {
+    'en': 'Understand quick sort partitioning',
+    'zh-CN': '看懂快速排序的分区过程',
+  },
+  goal: 'education',
+  targetUrl: 'https://algo.illegalscreed.cn/quick-sort/',
+  highlights: [],
+  tags: ['algorithms'],
+  channels: [
+    {
+      id: 'github',
+      locale: 'en',
+    },
+  ],
+}
+
+describe('content-studio CLI', () => {
+  it('validates and generates a bundle through a fixed argument grammar', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
+    const projectPath = join(temporaryDirectory, 'project.json')
+    const campaignPath = join(temporaryDirectory, 'campaign.json')
+    const outputPath = join(temporaryDirectory, 'output')
+    const messages: string[] = []
+
+    try {
+      await writeFile(projectPath, JSON.stringify(project), 'utf8')
+      await writeFile(campaignPath, JSON.stringify(campaign), 'utf8')
+
+      await expect(
+        runCli(
+          [
+            'generate',
+            '--project',
+            projectPath,
+            '--campaign',
+            campaignPath,
+            '--out',
+            outputPath,
+          ],
+          {
+            cwd: temporaryDirectory,
+            write: message => messages.push(message),
+          },
+        ),
+      ).resolves.toBe(0)
+      await expect(access(join(outputPath, 'bundle.json'))).resolves.toBeUndefined()
+      expect(messages.at(-1)).toContain('1 content package')
+    }
+    finally {
+      await rm(temporaryDirectory, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
+
+  it('rejects unknown flags without reading files', async () => {
+    await expect(
+      runCli(['generate', '--project', 'project.json', '--unsafe', 'value']),
+    ).rejects.toThrow(/Unknown option/)
+  })
+
+  it('supports help and fails closed for unknown commands and incomplete options', async () => {
+    const messages: string[] = []
+    await expect(
+      runCli(['help'], {
+        cwd: process.cwd(),
+        write: message => messages.push(message),
+      }),
+    ).resolves.toBe(0)
+    expect(messages[0]).toContain('content-studio generate')
+
+    await expect(runCli(['publish'])).rejects.toThrow(/Unknown command/)
+    await expect(runCli(['generate', 'project.json'])).rejects.toThrow(/Expected an option/)
+    await expect(runCli(['generate', '--project'])).rejects.toThrow(/Missing value/)
+    await expect(
+      runCli([
+        'generate',
+        '--project',
+        'one.json',
+        '--project',
+        'two.json',
+      ]),
+    ).rejects.toThrow(/Duplicate option/)
+    await expect(
+      runCli([
+        'generate',
+        '--project',
+        'project.json',
+      ]),
+    ).rejects.toThrow(/Missing required option: --campaign/)
+  })
+
+  it('validates inputs without writing a bundle', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
+    const projectPath = join(temporaryDirectory, 'project.json')
+    const campaignPath = join(temporaryDirectory, 'campaign.json')
+    const messages: string[] = []
+
+    try {
+      await writeFile(projectPath, JSON.stringify(project), 'utf8')
+      await writeFile(campaignPath, JSON.stringify(campaign), 'utf8')
+      await expect(
+        runCli(
+          [
+            'validate',
+            '--project',
+            projectPath,
+            '--campaign',
+            campaignPath,
+          ],
+          {
+            cwd: temporaryDirectory,
+            write: message => messages.push(message),
+          },
+        ),
+      ).resolves.toBe(0)
+      expect(messages[0]).toContain('Validated algorithm-visualizer')
+    }
+    finally {
+      await rm(temporaryDirectory, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
+})
