@@ -2,7 +2,16 @@
 
 ## Purpose
 
-Content Studio is a cross-project content and video-production toolkit. It compiles versioned project facts and campaign briefs into deterministic content packages and semantic video plans. Publishing belongs to `marketing-ops`, not this repository.
+Content Studio is a cross-project content-production control plane. It compiles
+versioned project facts and campaign briefs into deterministic content packages
+and semantic video plans, then coordinates observable recording, composition,
+Owner handoffs, and reporting from one reusable workspace. Algorithm Visualizer
+is the first proving project, not a product-specific boundary.
+
+The future Vue workspace is a replaceable control surface over the same core,
+job, artifact, and `marketing-ops` contracts used by the CLI. It must not become
+a second generation, recording, composition, or publishing engine. Publishing
+belongs to `marketing-ops`, not this repository.
 
 ## Required boundaries
 
@@ -12,6 +21,9 @@ Content Studio is a cross-project content and video-production toolkit. It compi
 - A generated package never grants publishing authority. Any external write still requires the separate matching campaign authorization and channel policy.
 - Project capture flows may use only semantic role, label, text, and test-id locators.
 - Keep generated output under `.content-studio/` or another explicit narrow directory. Never delete unknown output files.
+- Displayed channel health, policy, authorization, and publication state must
+  come from fresh `marketing-ops` snapshots or receipts; local UI state cannot
+  grant or expand external-write authority.
 
 ## Engineering conventions
 

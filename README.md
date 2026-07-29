@@ -1,13 +1,19 @@
 # Content Studio
 
-Content Studio turns a small, versioned project manifest and a campaign brief into:
+Content Studio is a cross-project content-production control plane. It turns a
+small, versioned project manifest and a campaign brief into:
 
 - platform-native content packages for a 19-channel inventory;
 - an owner/API/content-only delivery classification without granting publishing authority;
 - a deterministic video recording plan built from semantic project interactions;
-- a local bundle that can later be handed to `marketing-ops`.
+- observable media jobs and local artifacts;
+- a versioned handoff that can later be submitted to independent `marketing-ops`.
 
 The default content engine is deterministic and uses only declared project facts. It does not require a paid LLM API, channel credentials, browser cookies, or modifications to the target project's business logic.
+
+The future visual workspace is a control surface over the same reusable core. It
+does not duplicate content generation, recording, composition, or publishing
+logic in the browser application.
 
 ## Why this is cross-project
 
@@ -41,6 +47,11 @@ The example writes:
     └── plan.json
 ```
 
+V0.1 is complete. V0.2 is now focused on an observable, cancellable, retryable
+Playwright recorder that consumes only the compiled semantic video plan. The
+Vue 3 workspace follows the recorder contract instead of defining a second
+execution path.
+
 Use the CLI with another project:
 
 ```bash
@@ -57,9 +68,20 @@ node dist/cli.mjs generate \
 
 ## Safety boundary
 
-Content Studio does not publish, log in, solve challenges, store credentials, or run arbitrary browser scripts/selectors. Generated packages describe delivery candidates only. Real publishing remains subject to the matching campaign authorization and channel policy enforced by `marketing-ops`; owner-assisted channels keep login, 2FA/CAPTCHA, review, and final publish in the platform's official UI.
+Content Studio does not publish, log in, solve challenges, store credentials, or
+run arbitrary browser scripts/selectors. Generated packages describe delivery
+candidates only. Real publishing remains subject to the matching campaign
+authorization and channel policy enforced by `marketing-ops`.
 
-See [architecture](docs/architecture.md) and [roadmap](docs/roadmap.md).
+For owner-assisted channels, Content Studio may create a handoff and show
+progress, while the Owner performs login, 2FA/CAPTCHA, review, and the final
+publish click in the platform's official UI. The control plane may ingest the
+resulting `marketing-ops` receipt; it never treats a generated package or an
+Owner handoff as publishing authority.
+
+See [product vision](docs/product-vision.md),
+[architecture](docs/architecture.md), [control-plane model](docs/control-plane.md),
+and [roadmap](docs/roadmap.md).
 
 ## Development
 
