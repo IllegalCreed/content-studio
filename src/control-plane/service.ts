@@ -1,4 +1,9 @@
 import type {
+  ProductionTaskDependencies,
+  ProductionTaskInput,
+  ProductionTaskResult,
+} from '../jobs/production'
+import type {
   ActivityArtifact,
   ActivityContentPack,
   ActivityRevisionInput,
@@ -25,6 +30,7 @@ import type {
   PublicationReceipt,
   PublishingActivity,
 } from '../types'
+import { runProductionTask as executeProductionTask } from '../jobs/production'
 import { InMemoryExecutionTaskStore } from '../jobs/task'
 
 export class ProjectScopeError extends Error {
@@ -574,6 +580,14 @@ export class ContentStudioApplicationService {
     if (task !== undefined && task.kind !== 'production')
       throw new Error('Only production tasks can be started by this operation')
     return this.taskStore.transitionTask(projectId, taskId, 'generating')
+  }
+
+  runProductionTask(
+    input: ProductionTaskInput,
+    dependencies: ProductionTaskDependencies,
+  ): Promise<ProductionTaskResult> {
+    this.requireProject(input.projectId)
+    return executeProductionTask(this.taskStore, input, dependencies)
   }
 
   listTaskEvents(projectId: string, taskId: string): ExecutionTaskEvent[] {

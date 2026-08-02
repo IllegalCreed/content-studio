@@ -5,6 +5,7 @@ import type {
   ProjectChannelBinding,
   ProjectRecord,
   ProjectSnapshot,
+  RecorderAttemptReceipt,
 } from '../types'
 import { describe, expect, it } from 'vitest'
 import {
@@ -224,6 +225,67 @@ describe('content studio application service', () => {
     })
     expect(service.listTaskEvents('project-a', taskId).map(event => event.kind))
       .toEqual(['task-created', 'status-changed', 'attempt-cancelled', 'attempt-retried'])
+  })
+
+  it('runs a production task through the application service boundary', async () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'project-a')
+    enableYouTube(service, 'project-a')
+    const activity = createActivity(service)
+    const taskId = `production-${activity.activityId}`
+    service.startProductionTask('project-a', taskId)
+
+    const receipt: RecorderAttemptReceipt = {
+      artifactDirectory: '/tmp/content-studio-service-test/attempt-1',
+      artifacts: [],
+      attempt: 1,
+      campaignId: activity.campaignId,
+      completedActions: 0,
+      completedScenes: 0,
+      jobId: taskId,
+      logs: {
+        consoleErrors: 0,
+        consoleWarnings: 0,
+        entries: [],
+        pageErrors: 0,
+      },
+      outcome: 'succeeded',
+      planSha256: 'test-plan',
+      projectId: 'project-a',
+      receiptVersion: 1,
+      totalActions: 0,
+      totalScenes: 0,
+    }
+    const result = await service.runProductionTask(
+      {
+        baseUrl: 'https://project-a.example.com',
+        outputDirectory: '/tmp/content-studio-service-test',
+        plan: {
+          campaignId: activity.campaignId,
+          durationMs: 100,
+          format: 'landscape',
+          scenes: [],
+          viewport: {
+            height: 1080,
+            width: 1920,
+          },
+        },
+        projectId: 'project-a',
+        projectOrigin: 'https://project-a.example.com',
+        taskId,
+      },
+      {
+        record: async () => ({
+          attempts: [receipt],
+          receipt,
+        }),
+      },
+    )
+
+    expect(result.task.status).toBe('composing')
+    expect(service.listTaskEvents('project-a', taskId).map(event => event.status))
+      .toEqual(['queued', 'generating', 'recording', 'composing'])
   })
 
   it('saves an activity content pack after preflighting all channel versions', () => {
