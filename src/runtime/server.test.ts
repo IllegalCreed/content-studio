@@ -203,6 +203,12 @@ describe('content studio local application server', () => {
       ).then(response => response.json())).events).toEqual([
         expect.objectContaining({ kind: 'task-created', sequence: 1 }),
       ])
+      const startResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/tasks/production-activity-a/start`,
+        { method: 'POST' },
+      )
+      expect(startResponse.status).toBe(200)
+      expect(await startResponse.json()).toMatchObject({ status: 'generating' })
       const cancelResponse = await fetch(
         `${running.baseUrl}/api/v1/projects/project-a/tasks/production-activity-a/cancel`,
         { method: 'POST' },

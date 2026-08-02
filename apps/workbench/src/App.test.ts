@@ -47,6 +47,7 @@ describe('content studio workbench', () => {
     expect(wrapper.get('[data-testid="runtime-status"]').text()).toContain(
       '运行时未连接',
     )
+    expect(wrapper.get('[data-testid="start-task"]').attributes()).toHaveProperty('disabled')
     expect(wrapper.text()).toContain('浏览器录制')
     expect(wrapper.text()).toContain('快速排序可视化指南')
     await wrapper.get('button[data-task-id="release-notes-publish-x"]').trigger('click')

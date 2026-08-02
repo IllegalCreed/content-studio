@@ -136,7 +136,7 @@ const contentSaving = ref(false)
 const contentSaveError = ref<string | null>(null)
 const runtimeTaskIds = ref<Set<string>>(new Set())
 const taskActionError = ref<string | null>(null)
-const taskActionPending = ref<'cancel' | 'retry' | null>(null)
+const taskActionPending = ref<'cancel' | 'retry' | 'start' | null>(null)
 const activityForm = reactive<{
   channel: ChannelId
   topic: string
@@ -184,6 +184,13 @@ const canCancelSelectedTask = computed(() =>
   selectedTaskIsRuntime.value
   && snapshot.runtimeConnected
   && ['awaiting-owner', 'composing', 'generating', 'queued', 'recording'].includes(selectedTask.value.status),
+)
+
+const canStartSelectedTask = computed(() =>
+  selectedTaskIsRuntime.value
+  && snapshot.runtimeConnected
+  && selectedTask.value.kind === '制作'
+  && selectedTask.value.status === 'queued',
 )
 
 const canRetrySelectedTask = computed(() =>
@@ -309,11 +316,15 @@ async function cancelSelectedTask(): Promise<void> {
   await changeSelectedTask('cancel')
 }
 
+async function startSelectedTask(): Promise<void> {
+  await changeSelectedTask('start')
+}
+
 async function retrySelectedTask(): Promise<void> {
   await changeSelectedTask('retry')
 }
 
-async function changeSelectedTask(action: 'cancel' | 'retry'): Promise<void> {
+async function changeSelectedTask(action: 'cancel' | 'retry' | 'start'): Promise<void> {
   if (taskActionPending.value !== null || !selectedTaskIsRuntime.value)
     return
   taskActionPending.value = action
@@ -321,8 +332,10 @@ async function changeSelectedTask(action: 'cancel' | 'retry'): Promise<void> {
   try {
     if (action === 'cancel')
       await workbenchRuntime.cancelTask(snapshot.project.projectId, selectedTask.value.taskId)
-    else
+    else if (action === 'retry')
       await workbenchRuntime.retryTask(snapshot.project.projectId, selectedTask.value.taskId)
+    else
+      await workbenchRuntime.startTask(snapshot.project.projectId, selectedTask.value.taskId)
     await refreshProjectView()
   }
   catch (error: unknown) {
@@ -1201,6 +1214,15 @@ async function refreshProjectView(): Promise<void> {
                   <span v-else>操作会写入本地任务事件，不会触发渠道发布</span>
                 </p>
                 <div>
+                  <button
+                    type="button"
+                    class="primary-button"
+                    data-testid="start-task"
+                    :disabled="!canStartSelectedTask || taskActionPending !== null"
+                    @click="startSelectedTask"
+                  >
+                    {{ taskActionPending === 'start' ? '启动中…' : '开始制作' }}
+                  </button>
                   <button
                     type="button"
                     :disabled="!canCancelSelectedTask || taskActionPending !== null"

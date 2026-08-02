@@ -24,6 +24,7 @@ export interface WorkbenchRuntime {
   health: () => Promise<RuntimeHealth>
   project: (projectId: string) => Promise<ContentStudioProjectView>
   retryTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
+  startTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
   taskEvents: (projectId: string, taskId: string) => Promise<ExecutionTaskEvent[]>
 }
 
@@ -75,6 +76,10 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
     ),
     retryTask: (projectId, taskId) => request<ExecutionTask>(
       `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/retry`,
+      { method: 'POST' },
+    ),
+    startTask: (projectId, taskId) => request<ExecutionTask>(
+      `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/start`,
       { method: 'POST' },
     ),
     taskEvents: (projectId, taskId) => request<{ events: ExecutionTaskEvent[] }>(

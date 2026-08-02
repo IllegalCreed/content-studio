@@ -232,13 +232,19 @@ async function handleRequest(
       && segments[1] === 'v1'
       && segments[2] === 'projects'
       && segments[4] === 'tasks'
-      && (segments[6] === 'cancel' || segments[6] === 'retry')
+      && (
+        segments[6] === 'cancel'
+        || segments[6] === 'retry'
+        || segments[6] === 'start'
+      )
     ) {
       const projectId = decodeSegment(segments[3]!)
       const taskId = decodeSegment(segments[5]!)
       const task = segments[6] === 'cancel'
         ? service.cancelTask(projectId, taskId)
-        : service.retryTask(projectId, taskId)
+        : segments[6] === 'retry'
+          ? service.retryTask(projectId, taskId)
+          : service.startProductionTask(projectId, taskId)
       sendJson(response, 200, task)
       return
     }
