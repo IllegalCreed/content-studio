@@ -222,17 +222,38 @@ main {
 }
 
 .project-switcher-chevron {
-  display: inline-flex;
+  position: relative;
+  display: inline-block;
   width: 1rem;
   height: 1rem;
-  align-items: center;
-  justify-content: center;
   align-self: center;
   flex: 0 0 1rem;
   margin-left: 0.35rem;
   color: var(--acid);
-  font-size: 0.9rem;
-  line-height: 1;
+  font-size: 0;
+}
+
+.project-switcher-chevron::before,
+.project-switcher-chevron::after {
+  position: absolute;
+  top: calc(50% - 0.06rem);
+  width: 0.45rem;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  content: '';
+}
+
+.project-switcher-chevron::before {
+  left: calc(50% - 0.32rem);
+  transform: rotate(-45deg);
+  transform-origin: right center;
+}
+
+.project-switcher-chevron::after {
+  left: 50%;
+  transform: rotate(45deg);
+  transform-origin: left center;
 }
 
 .project-menu {
