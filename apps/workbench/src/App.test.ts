@@ -11,6 +11,7 @@ describe('content studio workbench', () => {
     expect(wrapper.get('h1').text()).toContain('总览')
     expect(wrapper.find('.hero').exists()).toBe(false)
     expect(wrapper.find('.workspace-tabs').exists()).toBe(false)
+    expect(wrapper.findAll('select')).toHaveLength(0)
     expect(wrapper.text()).toContain('Algorithm Visualizer')
     expect(wrapper.text()).toContain('待处理任务')
 
@@ -91,8 +92,8 @@ describe('content studio workbench', () => {
     expect(wrapper.get('[data-testid="project-channel-config"] [data-testid="save-channel-binding"]').attributes()).toHaveProperty('disabled')
     await wrapper.get('button[data-project-channel-id="github"]').trigger('click')
     const accountSelect = wrapper.get('[data-testid="project-channel-account"]')
-    expect(accountSelect.find('option[value=""]').text()).toContain('不使用该渠道')
     expect(accountSelect.text()).toContain('IllegalCreed')
+    expect(accountSelect.find('[role="listbox"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="project-channel-account-alias"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="project-view-channels"]').classes()).toContain('primary-button')
     expect(wrapper.get('[data-testid="project-view-activities"]').classes()).toContain('primary-button')

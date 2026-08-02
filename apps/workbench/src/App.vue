@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import StatusRail from './components/StatusRail.vue'
+import SelectMenu from './components/SelectMenu.vue'
 import VideoJobPanel from './components/VideoJobPanel.vue'
 import type {
   AssetProjection,
@@ -201,6 +202,16 @@ const deliveryOptions: Array<{
   { label: '仅生成内容', value: 'content-only' },
 ]
 
+const contentFormatOptions = [
+  { label: '文章', value: 'article' },
+  { label: '视频', value: 'video' },
+]
+
+const contentLocaleOptions = [
+  { label: '中文', value: 'zh-CN' },
+  { label: 'English', value: 'en' },
+]
+
 const currentModule = computed(() =>
   moduleDefinitions.find(module => module.id === activeModule.value)
   ?? moduleDefinitions[0]!,
@@ -332,6 +343,18 @@ const projectAccounts = computed(() =>
     const account = projectAccountFor(channel)
     return channel.enabled && account !== null ? [account] : []
   }),
+)
+
+const projectAccountOptions = computed(() => [
+  { label: '不使用该渠道', value: '' },
+  ...selectedChannel.value.accounts.map(account => ({
+    label: `${account.alias} · 已被 ${account.assignedProjects.length} 个项目引用`,
+    value: account.accountId,
+  })),
+])
+
+const selectedCampaignChannelOptions = computed(() =>
+  selectedCampaign.value.channels.map(channel => ({ label: channel, value: channel })),
 )
 
 const selectedCampaignContentCounts = computed(() => {
@@ -1338,18 +1361,22 @@ async function refreshProjectView(): Promise<void> {
                 <div class="channel-binding-fields">
                   <label>
                     <span>项目账号</span>
-                    <select data-testid="project-channel-account" v-model="channelBindingForm.accountRef" :disabled="!snapshot.runtimeConnected || channelBindingSaving">
-                      <option value="">不使用该渠道</option>
-                      <option v-for="account in selectedChannel.accounts" :key="account.accountId" :value="account.accountId">
-                        {{ account.alias }} · 已被 {{ account.assignedProjects.length }} 个项目引用
-                      </option>
-                    </select>
+                    <SelectMenu
+                      v-model="channelBindingForm.accountRef"
+                      data-testid="project-channel-account"
+                      aria-label="项目账号"
+                      :disabled="!snapshot.runtimeConnected || channelBindingSaving"
+                      :options="projectAccountOptions"
+                    />
                   </label>
                   <label>
                     <span>交付方式</span>
-                    <select v-model="channelBindingForm.delivery" :disabled="!snapshot.runtimeConnected || channelBindingSaving">
-                      <option v-for="option in deliveryOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                    </select>
+                    <SelectMenu
+                      v-model="channelBindingForm.delivery"
+                      aria-label="交付方式"
+                      :disabled="!snapshot.runtimeConnected || channelBindingSaving"
+                      :options="deliveryOptions"
+                    />
                   </label>
                 </div>
                 <p v-if="channelBindingSaveError" class="form-error">{{ channelBindingSaveError }}</p>
@@ -1416,25 +1443,15 @@ async function refreshProjectView(): Promise<void> {
               </label>
               <label>
                 目标渠道
-                <select v-model="contentForm.channel">
-                  <option v-for="channel in selectedCampaign.channels" :key="channel" :value="channel">
-                    {{ channel }}
-                  </option>
-                </select>
+                <SelectMenu v-model="contentForm.channel" aria-label="目标渠道" :options="selectedCampaignChannelOptions" />
               </label>
               <label>
                 内容形式
-                <select v-model="contentForm.format">
-                  <option value="article">文章</option>
-                  <option value="video">视频</option>
-                </select>
+                <SelectMenu v-model="contentForm.format" aria-label="内容形式" :options="contentFormatOptions" />
               </label>
               <label>
                 语言
-                <select v-model="contentForm.locale">
-                  <option value="zh-CN">中文</option>
-                  <option value="en">English</option>
-                </select>
+                <SelectMenu v-model="contentForm.locale" aria-label="语言" :options="contentLocaleOptions" />
               </label>
               <label class="field-wide">
                 内容组核心信息
