@@ -140,6 +140,8 @@ export interface ProjectSnapshot {
 
 export interface ContentStudioProjectView {
   activities: PublishingActivity[]
+  channelContents: ChannelContent[]
+  contentGroups: ContentGroup[]
   project: ProjectRecord
   projectAssets: ProjectAsset[]
   projectChannelBindings: ProjectChannelBinding[]

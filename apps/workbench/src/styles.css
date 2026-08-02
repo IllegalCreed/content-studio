@@ -1228,6 +1228,21 @@ footer {
   margin-top: 1.25rem;
 }
 
+.activity-composer-grid .field-wide {
+  grid-column: 1 / -1;
+}
+
+.activity-composer-grid textarea {
+  resize: vertical;
+}
+
+.empty-state {
+  margin: 0.8rem 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
 .activity-composer label {
   display: flex;
   flex-direction: column;

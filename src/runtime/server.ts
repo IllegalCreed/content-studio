@@ -3,6 +3,9 @@
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { ContentStudioRepository } from '../control-plane/service'
 import type {
+  ChannelContentFormat,
+  CreateChannelContentInput,
+  CreateContentGroupInput,
   CreatePublishingActivityInput,
   ExecutionTaskStore,
   Locale,
@@ -40,6 +43,7 @@ const ACTIVITY_STATUSES = new Set([
   'draft',
   'planned',
 ])
+const CONTENT_FORMATS = new Set<ChannelContentFormat>(['article', 'video'])
 
 export interface ContentStudioServerOptions {
   databasePath?: string
@@ -137,6 +141,49 @@ async function handleRequest(
       const projectId = decodeSegment(segments[3]!)
       const input = parseCreateActivityInput(await readJsonBody(request), projectId)
       sendJson(response, 201, service.createActivity(input))
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'activities'
+      && segments[6] === 'content-groups'
+    ) {
+      const projectId = decodeSegment(segments[3]!)
+      const activityId = decodeSegment(segments[5]!)
+      const input = parseCreateContentGroupInput(
+        await readJsonBody(request),
+        projectId,
+        activityId,
+      )
+      sendJson(response, 201, service.createContentGroup(input))
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 9
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'activities'
+      && segments[6] === 'content-groups'
+      && segments[8] === 'contents'
+    ) {
+      const projectId = decodeSegment(segments[3]!)
+      const activityId = decodeSegment(segments[5]!)
+      const contentGroupId = decodeSegment(segments[7]!)
+      const input = parseCreateChannelContentInput(
+        await readJsonBody(request),
+        projectId,
+        activityId,
+        contentGroupId,
+      )
+      sendJson(response, 201, service.createChannelContent(input))
       return
     }
 
@@ -260,6 +307,67 @@ function parseCreateActivityInput(
     status: statusField(value.status),
     targetUrl,
     topic: localizedTextField(value.topic, 'topic'),
+  }
+}
+
+function parseCreateContentGroupInput(
+  input: unknown,
+  projectId: string,
+  activityId: string,
+): CreateContentGroupInput {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'contentGroup')
+  const inputProjectId = stringField(value.projectId, 'projectId')
+  if (inputProjectId !== projectId)
+    throw new RequestError(400, 'projectId must match the URL')
+  const inputActivityId = identifierField(value.activityId, 'activityId')
+  if (inputActivityId !== activityId)
+    throw new RequestError(400, 'activityId must match the URL')
+  return {
+    activityId,
+    contentGroupId: identifierField(value.contentGroupId, 'contentGroupId'),
+    coreMessage: stringField(value.coreMessage, 'coreMessage'),
+    projectId,
+    title: stringField(value.title, 'title'),
+  }
+}
+
+function parseCreateChannelContentInput(
+  input: unknown,
+  projectId: string,
+  activityId: string,
+  contentGroupId: string,
+): CreateChannelContentInput {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'channelContent')
+  const inputProjectId = stringField(value.projectId, 'projectId')
+  if (inputProjectId !== projectId)
+    throw new RequestError(400, 'projectId must match the URL')
+  const inputActivityId = identifierField(value.activityId, 'activityId')
+  if (inputActivityId !== activityId)
+    throw new RequestError(400, 'activityId must match the URL')
+  const inputContentGroupId = identifierField(value.contentGroupId, 'contentGroupId')
+  if (inputContentGroupId !== contentGroupId)
+    throw new RequestError(400, 'contentGroupId must match the URL')
+  const format = stringField(value.format, 'format')
+  if (!CONTENT_FORMATS.has(format as ChannelContentFormat))
+    throw new RequestError(400, `Unsupported content format: ${format}`)
+  const locale = stringField(value.locale, 'locale')
+  if (!LOCALES.has(locale as Locale))
+    throw new RequestError(400, `Unsupported locale: ${locale}`)
+  const channel = stringField(value.channel, 'channel')
+  if (!(channel in CHANNEL_BLUEPRINTS))
+    throw new RequestError(400, `Unsupported channel: ${channel}`)
+  return {
+    activityId,
+    body: stringField(value.body, 'body'),
+    channel: channel as CreateChannelContentInput['channel'],
+    contentGroupId,
+    contentId: identifierField(value.contentId, 'contentId'),
+    format: format as ChannelContentFormat,
+    locale: locale as Locale,
+    projectId,
+    title: stringField(value.title, 'title'),
   }
 }
 

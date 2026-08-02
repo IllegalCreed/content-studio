@@ -117,6 +117,8 @@ export interface ContentStudioRepository {
   ) => MonitoringObservation | undefined
   getReport: (projectId: string, reportId: string) => ContentStudioReport | undefined
   listActivityArtifacts: (projectId: string, activityId: string) => ActivityArtifact[]
+  listChannelContents: (projectId: string) => ChannelContent[]
+  listContentGroups: (projectId: string) => ContentGroup[]
   listProjectAssets: (projectId: string) => ProjectAsset[]
   listProjectChannelBindings: (projectId: string) => ProjectChannelBinding[]
   listActivities: (projectId: string) => PublishingActivity[]
@@ -370,6 +372,20 @@ implements ContentStudioRepository {
       .map(artifact => clone(artifact))
   }
 
+  listContentGroups(projectId: string): ContentGroup[] {
+    return [...this.contentGroups.values()]
+      .filter(group => group.projectId === projectId)
+      .sort((left, right) => left.version - right.version)
+      .map(group => clone(group))
+  }
+
+  listChannelContents(projectId: string): ChannelContent[] {
+    return [...this.channelContents.values()]
+      .filter(content => content.projectId === projectId)
+      .sort((left, right) => left.version - right.version)
+      .map(content => clone(content))
+  }
+
   listProjectAssets(projectId: string): ProjectAsset[] {
     return [...this.projectAssets.values()]
       .filter(asset => asset.projectId === projectId)
@@ -480,6 +496,14 @@ export class ContentStudioApplicationService {
     const tasks = this.taskStore.listTasks(projectId)
     return {
       activities,
+      channelContents: latestById(
+        this.repository.listChannelContents(projectId),
+        content => content.contentId,
+      ),
+      contentGroups: latestById(
+        this.repository.listContentGroups(projectId),
+        group => group.contentGroupId,
+      ),
       project,
       projectAssets: this.repository.listProjectAssets(projectId),
       projectChannelBindings: this.repository.listProjectChannelBindings(projectId),

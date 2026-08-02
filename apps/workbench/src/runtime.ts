@@ -1,5 +1,9 @@
 import type {
+  ChannelContent,
+  ContentGroup,
   ContentStudioProjectView,
+  CreateChannelContentInput,
+  CreateContentGroupInput,
   CreatePublishingActivityInput,
   ExecutionTask,
   ExecutionTaskEvent,
@@ -14,6 +18,8 @@ export interface RuntimeHealth {
 
 export interface WorkbenchRuntime {
   cancelTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
+  createChannelContent: (input: CreateChannelContentInput) => Promise<ChannelContent>
+  createContentGroup: (input: CreateContentGroupInput) => Promise<ContentGroup>
   createActivity: (input: CreatePublishingActivityInput) => Promise<PublishingActivity>
   health: () => Promise<RuntimeHealth>
   project: (projectId: string) => Promise<ContentStudioProjectView>
@@ -41,6 +47,20 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
     cancelTask: (projectId, taskId) => request<ExecutionTask>(
       `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/cancel`,
       { method: 'POST' },
+    ),
+    createChannelContent: input => request<ChannelContent>(
+      `/projects/${encodeURIComponent(input.projectId)}/activities/${encodeURIComponent(input.activityId)}/content-groups/${encodeURIComponent(input.contentGroupId)}/contents`,
+      {
+        body: JSON.stringify(input),
+        method: 'POST',
+      },
+    ),
+    createContentGroup: input => request<ContentGroup>(
+      `/projects/${encodeURIComponent(input.projectId)}/activities/${encodeURIComponent(input.activityId)}/content-groups`,
+      {
+        body: JSON.stringify(input),
+        method: 'POST',
+      },
     ),
     createActivity: input => request<PublishingActivity>(
       `/projects/${encodeURIComponent(input.projectId)}/activities`,

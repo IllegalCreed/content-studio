@@ -143,6 +143,50 @@ describe('content studio local application server', () => {
         version: 1,
       })
 
+      const groupResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/activities/activity-a/content-groups`,
+        {
+          body: JSON.stringify({
+            activityId: 'activity-a',
+            contentGroupId: 'group-a',
+            coreMessage: 'Explain the algorithm with a concrete example.',
+            projectId: 'project-a',
+            title: 'Algorithm explanation',
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(groupResponse.status).toBe(201)
+      expect(await groupResponse.json()).toMatchObject({ contentGroupId: 'group-a', version: 1 })
+
+      const contentResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/activities/activity-a/content-groups/group-a/contents`,
+        {
+          body: JSON.stringify({
+            activityId: 'activity-a',
+            body: 'A short explanation of partitioning.',
+            channel: 'github',
+            contentGroupId: 'group-a',
+            contentId: 'content-a',
+            format: 'article',
+            locale: 'en',
+            projectId: 'project-a',
+            title: 'Partitioning explained',
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(contentResponse.status).toBe(201)
+      expect(await contentResponse.json()).toMatchObject({ contentId: 'content-a', version: 1 })
+
+      const contentView = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a`,
+      ).then(response => response.json())
+      expect(contentView.contentGroups).toMatchObject([{ contentGroupId: 'group-a' }])
+      expect(contentView.channelContents).toMatchObject([{ contentId: 'content-a' }])
+
       const taskResponse = await fetch(
         `${running.baseUrl}/api/v1/projects/project-a`,
       )

@@ -58,4 +58,41 @@ describe('workbench runtime client', () => {
       expect.objectContaining({ method: 'POST' }),
     )
   })
+
+  it('saves a content group and channel content through scoped routes', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ contentGroupId: 'group-a' }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ contentId: 'content-a' }), { status: 201 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const runtime = createWorkbenchRuntime('/api/v1')
+    await runtime.createContentGroup({
+      activityId: 'activity-a',
+      contentGroupId: 'group-a',
+      coreMessage: 'Explain partitioning.',
+      projectId: 'project-a',
+      title: 'Algorithm explanation',
+    })
+    await runtime.createChannelContent({
+      activityId: 'activity-a',
+      body: 'A short article.',
+      channel: 'github',
+      contentGroupId: 'group-a',
+      contentId: 'content-a',
+      format: 'article',
+      locale: 'en',
+      projectId: 'project-a',
+      title: 'Partitioning explained',
+    })
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/v1/projects/project-a/activities/activity-a/content-groups',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/projects/project-a/activities/activity-a/content-groups/group-a/contents',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
 })

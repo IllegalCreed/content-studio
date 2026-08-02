@@ -160,6 +160,8 @@ describe('content studio application service', () => {
 
     expect(service.getProjectView('project-a')).toEqual({
       activities: [activity],
+      channelContents: [],
+      contentGroups: [],
       project,
       projectAssets: [],
       projectChannelBindings: [

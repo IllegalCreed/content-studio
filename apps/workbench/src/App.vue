@@ -5,11 +5,17 @@ import VideoJobPanel from './components/VideoJobPanel.vue'
 import type {
   AssetProjection,
   CampaignProjection,
+  ChannelContentProjection,
+  ContentGroupProjection,
   WorkbenchSnapshot,
 } from './model'
 import type {
+  ChannelContent,
   ChannelId,
+  ContentGroup,
   CreatePublishingActivityInput,
+  CreateChannelContentInput,
+  CreateContentGroupInput,
   ExecutionTask,
   ExecutionTaskEvent,
   PublishingActivity,
@@ -125,6 +131,9 @@ const currentSnapshotId = ref(`${snapshot.project.projectId}-snapshot-1`)
 const activityComposerOpen = ref(false)
 const activitySaving = ref(false)
 const activitySaveError = ref<string | null>(null)
+const contentComposerOpen = ref(false)
+const contentSaving = ref(false)
+const contentSaveError = ref<string | null>(null)
 const runtimeTaskIds = ref<Set<string>>(new Set())
 const taskActionError = ref<string | null>(null)
 const taskActionPending = ref<'cancel' | 'retry' | null>(null)
@@ -134,6 +143,21 @@ const activityForm = reactive<{
 }>({
   channel: 'github',
   topic: '',
+})
+const contentForm = reactive<{
+  body: string
+  channel: ChannelId
+  coreMessage: string
+  format: 'article' | 'video'
+  locale: 'en' | 'zh-CN'
+  title: string
+}>({
+  body: '',
+  channel: 'github',
+  coreMessage: '',
+  format: 'article',
+  locale: 'zh-CN',
+  title: '',
 })
 
 const currentModule = computed(() =>
@@ -330,6 +354,60 @@ function closeActivityComposer(): void {
     activityComposerOpen.value = false
 }
 
+function openContentComposer(): void {
+  contentForm.body = ''
+  contentForm.channel = selectedCampaign.value.channels[0] ?? enabledChannels.value[0]?.channel ?? 'github'
+  contentForm.coreMessage = selectedCampaign.value.topic
+  contentForm.format = 'article'
+  contentForm.locale = 'zh-CN'
+  contentForm.title = ''
+  contentSaveError.value = null
+  contentComposerOpen.value = true
+}
+
+function closeContentComposer(): void {
+  if (!contentSaving.value)
+    contentComposerOpen.value = false
+}
+
+async function saveChannelContent(): Promise<void> {
+  if (!snapshot.runtimeConnected || contentForm.title.trim() === '' || contentForm.body.trim() === '')
+    return
+  contentSaving.value = true
+  contentSaveError.value = null
+  const suffix = Date.now()
+  const groupInput: CreateContentGroupInput = {
+    activityId: selectedCampaign.value.campaignId,
+    contentGroupId: `group-${suffix}`,
+    coreMessage: contentForm.coreMessage,
+    projectId: snapshot.project.projectId,
+    title: `${contentForm.title} · 内容组`,
+  }
+  const contentInput: CreateChannelContentInput = {
+    activityId: selectedCampaign.value.campaignId,
+    body: contentForm.body,
+    channel: contentForm.channel,
+    contentGroupId: groupInput.contentGroupId,
+    contentId: `content-${suffix}`,
+    format: contentForm.format,
+    locale: contentForm.locale,
+    projectId: snapshot.project.projectId,
+    title: contentForm.title,
+  }
+  try {
+    await workbenchRuntime.createContentGroup(groupInput)
+    await workbenchRuntime.createChannelContent(contentInput)
+    await refreshProjectView()
+    contentComposerOpen.value = false
+  }
+  catch (error: unknown) {
+    contentSaveError.value = error instanceof Error ? error.message : '渠道内容保存失败'
+  }
+  finally {
+    contentSaving.value = false
+  }
+}
+
 async function saveActivity(): Promise<void> {
   if (!snapshot.runtimeConnected || activityForm.topic.trim() === '')
     return
@@ -369,8 +447,30 @@ async function saveActivity(): Promise<void> {
   }
 }
 
-function activityToCampaign(activity: PublishingActivity): CampaignProjection {
+function activityToCampaign(
+  activity: PublishingActivity,
+  contentGroups: ContentGroup[] = [],
+  channelContents: ChannelContent[] = [],
+): CampaignProjection {
   const topic = activity.topic['zh-CN'] ?? activity.topic.en
+  const groups = contentGroups
+    .filter(group => group.activityId === activity.activityId)
+    .map<ContentGroupProjection>(group => ({
+      contentGroupId: group.contentGroupId,
+      contents: channelContents
+        .filter(content => content.contentGroupId === group.contentGroupId)
+        .map<ChannelContentProjection>(content => ({
+          accountAlias: snapshot.channels.find(channel => channel.channel === content.channel)?.alias ?? undefined,
+          channel: content.channel,
+          contentId: content.contentId,
+          format: content.format === 'article' ? '文章' : '视频',
+          locale: content.locale,
+          status: '已生成',
+          title: content.title,
+        })),
+      coreMessage: group.coreMessage,
+      title: group.title,
+    }))
   return {
     activityArtifacts: [],
     activityStatus: activity.status === 'active'
@@ -385,10 +485,12 @@ function activityToCampaign(activity: PublishingActivity): CampaignProjection {
     assets: 0,
     campaignId: activity.activityId,
     channels: activity.channels.map(channel => channel.id),
-    contentGroups: [],
+    contentGroups: groups,
     executionStatus: 'queued',
     handoffs: [],
-    nextAction: '等待 AI 生成内容和拍摄大纲。',
+    nextAction: groups.length > 0
+      ? '渠道内容已保存，下一步进入制作任务。'
+      : '等待 AI 生成内容和拍摄大纲。',
     referencedAssets: [],
     title: topic,
     topic,
@@ -493,7 +595,13 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
     snapshot.channels.forEach((channel) => {
       channel.enabled = enabledChannels.has(channel.channel)
     })
-    const runtimeCampaigns = projectView.activities.map(activityToCampaign)
+    const runtimeCampaigns = projectView.activities.map(activity =>
+      activityToCampaign(
+        activity,
+        projectView.contentGroups,
+        projectView.channelContents,
+      ),
+    )
     snapshot.campaigns = [
       ...runtimeCampaigns,
       ...snapshot.campaigns.filter(campaign =>
@@ -876,6 +984,56 @@ async function refreshProjectView(): Promise<void> {
             </div>
           </form>
 
+          <form v-if="contentComposerOpen" class="activity-composer content-composer" @submit.prevent="saveChannelContent">
+            <div class="section-heading">
+              <div><p class="eyebrow">当前活动 / 渠道内容</p><h3>保存一条内容版本</h3></div>
+              <span>手动测试入口 · AI/MCP 接入后复用同一接口</span>
+            </div>
+            <div class="activity-composer-grid">
+              <label>
+                内容标题
+                <input v-model="contentForm.title" required placeholder="例如：理解分区操作" />
+              </label>
+              <label>
+                目标渠道
+                <select v-model="contentForm.channel">
+                  <option v-for="channel in selectedCampaign.channels" :key="channel" :value="channel">
+                    {{ channel }}
+                  </option>
+                </select>
+              </label>
+              <label>
+                内容形式
+                <select v-model="contentForm.format">
+                  <option value="article">文章</option>
+                  <option value="video">视频</option>
+                </select>
+              </label>
+              <label>
+                语言
+                <select v-model="contentForm.locale">
+                  <option value="zh-CN">中文</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+              <label class="field-wide">
+                内容组核心信息
+                <input v-model="contentForm.coreMessage" required placeholder="这一组内容要让用户记住什么？" />
+              </label>
+              <label class="field-wide">
+                正文或视频脚本摘要
+                <textarea v-model="contentForm.body" required rows="5" placeholder="先写入一版可审核内容，后续 AI 会生成正式版本。" />
+              </label>
+            </div>
+            <p v-if="contentSaveError" class="form-error">{{ contentSaveError }}</p>
+            <div class="form-actions">
+              <button type="button" @click="closeContentComposer">取消</button>
+              <button type="submit" class="primary-button" :disabled="contentSaving">
+                {{ contentSaving ? '保存中…' : '保存渠道内容' }}
+              </button>
+            </div>
+          </form>
+
           <div class="campaign-board">
             <div class="campaign-list" role="list" aria-label="发布活动">
               <button
@@ -919,7 +1077,13 @@ async function refreshProjectView(): Promise<void> {
               </div>
               <div class="activity-detail-grid">
                 <div>
-                  <p class="eyebrow">内容组与渠道内容</p>
+                  <div class="module-card-heading">
+                    <p class="eyebrow">内容组与渠道内容</p>
+                    <button type="button" :disabled="!snapshot.runtimeConnected" @click="openContentComposer">
+                      {{ snapshot.runtimeConnected ? '新增渠道内容' : '等待运行时' }}
+                    </button>
+                  </div>
+                  <p v-if="selectedCampaign.contentGroups.length === 0" class="empty-state">当前活动还没有内容版本。可以先保存一条手动测试内容，之后由 AI/MCP 复用同一个内容接口。</p>
                   <div class="content-group-list">
                     <article v-for="group in selectedCampaign.contentGroups" :key="group.contentGroupId" class="content-group-card">
                       <strong>{{ group.title }}</strong>
