@@ -162,7 +162,10 @@ Studio 只接收结构化的文章/视频版本，做项目范围、活动渠道
 校验，然后保存到本地应用服务。这样不会把某个模型供应商或 API 密钥写进 core。
 
 `start_production_task` 目前只推进本地制作任务的 `queued → generating`，作为 Worker
-消费任务的明确入口；浏览器录制、FFmpeg 和外部渠道操作仍由后续受控执行器负责。
+消费任务的明确入口。核心层随后提供了 `runProductionTask` 执行器：它只接受匹配的项目
+origin、窄范围输出目录和受控录制器依赖，并根据真实录制回执推进 `recording → composing`
+或结束当前尝试；实际 Worker 仍需把它绑定到 `recordWithPlaywright`、项目预览适配器和后续
+FFmpeg 组合步骤。外部渠道操作仍保持在独立的 `marketing-ops` 信任边界内。
 
 MCP Tasks 没有 `tasks/list`。全局和项目任务面板必须继续使用经过业务授权的领域
 查询，例如：

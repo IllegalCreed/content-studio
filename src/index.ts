@@ -11,6 +11,12 @@ export {
 } from './control-plane/service'
 export { SqliteContentStudioRepository } from './control-plane/sqlite'
 export {
+  type ProductionTaskDependencies,
+  type ProductionTaskInput,
+  type ProductionTaskResult,
+  runProductionTask,
+} from './jobs/production'
+export {
   SqliteExecutionTaskStore,
 } from './jobs/sqlite'
 export {

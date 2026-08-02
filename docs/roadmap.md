@@ -215,6 +215,11 @@ MCP 不启动浏览器、不执行渠道写入，不接收凭据、任意路径�
 推进到 `generating`，不会接受任意状态值、启动浏览器或伪造录制回执。后续 Worker 将消费
 这个状态，接入已有 Playwright 录制器。
 
+同日制作执行器切片已验证：`runProductionTask` 会先检查任务类型、任务状态、项目 origin、
+输出目录和重试次数，再把任务推进到 `recording`，调用受控录制器，并根据真实录制回执推进到
+`composing`、`cancelled` 或 `failed`。录制器通过依赖注入传入，因此测试不需要启动浏览器；
+实际 Worker 仍需在后续切片中把它绑定到 `recordWithPlaywright` 和项目预览适配器。
+
 第一个 AI 垂直切片：读取 Algorithm Visualizer 项目事实，创建一个发布活动，生成
 不同渠道的文章和视频脚本，启动录制任务并返回可观察回执。
 
