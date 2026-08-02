@@ -112,9 +112,17 @@ export interface CampaignChannel {
   locale: Locale
 }
 
+export interface VideoOutlineScene {
+  flowId: string
+  objective: LocalizedText
+  title: LocalizedText
+}
+
 export interface CampaignVideo {
   flowIds: string[]
   format: VideoFormat
+  outline?: VideoOutlineScene[]
+  planVersion?: number
 }
 
 export interface CampaignSpec {
@@ -398,6 +406,8 @@ export interface VideoPlan {
   campaignId: string
   durationMs: number
   format: VideoFormat
+  outline?: VideoOutlineScene[]
+  planVersion?: number
   scenes: CompiledScene[]
   viewport: {
     height: number

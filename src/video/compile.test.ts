@@ -127,6 +127,33 @@ describe('video plan compiler', () => {
     expect(plan.scenes[0]!.title).toBe('快速排序演示')
   })
 
+  it('carries a versioned shooting outline into the compiled recording plan', () => {
+    const plan = compileVideoPlan(project, {
+      ...campaign,
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        planVersion: 4,
+        outline: [{
+          flowId: 'quick-sort',
+          objective: {
+            'en': 'Show the partition step',
+            'zh-CN': '展示分区步骤',
+          },
+          title: {
+            'en': 'Partition the array',
+            'zh-CN': '数组分区',
+          },
+        }],
+      },
+    })
+
+    expect(plan).toMatchObject({
+      outline: [{ flowId: 'quick-sort' }],
+      planVersion: 4,
+    })
+  })
+
   it('fails when compilation is requested without a video section', () => {
     expect(() =>
       compileVideoPlan(project, {

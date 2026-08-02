@@ -13,6 +13,7 @@ import type {
   ProjectManifest,
   ProjectRepeatability,
   SemanticLocator,
+  VideoOutlineScene,
 } from './types'
 import { CHANNEL_BLUEPRINTS } from './constants'
 
@@ -439,10 +440,62 @@ function parseCampaignVideo(
   const format = parseNonEmptyString(value.format, 'video.format')
   if (!VIDEO_FORMATS.has(format))
     throw new Error(`Unsupported video format: ${format}`)
+  const planVersion = value.planVersion === undefined
+    ? undefined
+    : parsePositiveInteger(value.planVersion, 'video.planVersion')
+  const outline = value.outline === undefined
+    ? undefined
+    : parseVideoOutline(value.outline, flowIds, captureFlows)
   return {
     flowIds,
     format: format as NonNullable<CampaignSpec['video']>['format'],
+    ...(outline === undefined ? {} : { outline }),
+    ...(planVersion === undefined ? {} : { planVersion }),
   }
+}
+
+function parseVideoOutline(
+  input: unknown,
+  flowIds: string[],
+  captureFlows: CaptureFlow[],
+): VideoOutlineScene[] {
+  if (!Array.isArray(input) || input.length === 0)
+    throw new TypeError('video.outline must be a non-empty array')
+  const availableFlows = new Set(captureFlows.map(flow => flow.id))
+  const selectedFlows = new Set(flowIds)
+  const outline = input.map((item, index) => {
+    const value = asRecord(item, `video.outline[${index}]`)
+    const flowId = parseIdentifier(
+      value.flowId,
+      `video.outline[${index}].flowId`,
+    )
+    if (!availableFlows.has(flowId) || !selectedFlows.has(flowId))
+      throw new Error(`video.outline references unknown flow: ${flowId}`)
+    return {
+      flowId,
+      objective: parseLocalizedText(
+        value.objective,
+        ['en', 'zh-CN'],
+        `video.outline[${index}].objective`,
+      ),
+      title: parseLocalizedText(
+        value.title,
+        ['en', 'zh-CN'],
+        `video.outline[${index}].title`,
+      ),
+    }
+  })
+  assertUnique(
+    outline.map(scene => scene.flowId),
+    'video outline flow id',
+  )
+  return outline
+}
+
+function parsePositiveInteger(input: unknown, name: string): number {
+  if (!Number.isInteger(input) || (input as number) < 1)
+    throw new Error(`${name} must be a positive integer`)
+  return input as number
 }
 
 function parseProjectSourceAccess(input: unknown): ProjectAccessMode {

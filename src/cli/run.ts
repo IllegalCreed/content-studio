@@ -146,7 +146,7 @@ export async function runCli(
         recordingContext: {
           captureMode: projectRecord.captureMode,
           humanIntervention: false,
-          planVersion: 1,
+          planVersion: campaign.video.planVersion ?? 1,
           repeatability: projectRecord.repeatability,
           sourceAccess: projectRecord.sourceAccess,
         },

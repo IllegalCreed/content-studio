@@ -44,6 +44,12 @@ export function compileVideoPlan(
     campaignId: campaign.campaignId,
     durationMs: timelineOffset,
     format: campaign.video.format,
+    ...(campaign.video.outline === undefined
+      ? {}
+      : { outline: campaign.video.outline }),
+    ...(campaign.video.planVersion === undefined
+      ? {}
+      : { planVersion: campaign.video.planVersion }),
     scenes,
     viewport: VIDEO_VIEWPORTS[campaign.video.format],
   }

@@ -620,7 +620,7 @@ export class ContentStudioApplicationService {
       recordingContext: {
         captureMode: project.captureMode,
         humanIntervention: false,
-        planVersion: activity.version,
+        planVersion: activity.video?.planVersion ?? activity.version,
         repeatability: project.repeatability,
         sourceAccess: project.sourceAccess,
       },
@@ -990,10 +990,26 @@ export class ContentStudioApplicationService {
       throw new Error('Activity video flow ids must be unique')
     if (!['landscape', 'portrait', 'square'].includes(video.format))
       throw new Error(`Unsupported activity video format: ${video.format}`)
+    if (video.planVersion !== undefined
+      && (!Number.isInteger(video.planVersion) || video.planVersion < 1)) {
+      throw new Error('Activity video planVersion must be a positive integer')
+    }
     const flowIds = new Set(snapshot.manifest.captureFlows.map(flow => flow.id))
     for (const flowId of video.flowIds) {
       if (!flowIds.has(flowId))
         throw new Error(`Activity video references unknown capture flow: ${flowId}`)
+    }
+    if (video.outline !== undefined) {
+      if (video.outline.length === 0)
+        throw new Error('Activity video outline must not be empty')
+      const outlinedFlows = new Set<string>()
+      for (const scene of video.outline) {
+        if (!flowIds.has(scene.flowId))
+          throw new Error(`Activity video outline references unknown capture flow: ${scene.flowId}`)
+        if (outlinedFlows.has(scene.flowId))
+          throw new Error(`Activity video outline flow ids must be unique: ${scene.flowId}`)
+        outlinedFlows.add(scene.flowId)
+      }
     }
   }
 }

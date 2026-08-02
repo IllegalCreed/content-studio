@@ -88,11 +88,25 @@ describe('content studio local application server', () => {
       video: {
         flowIds: ['quick-sort'],
         format: 'landscape',
+        planVersion: 2,
+        outline: [{
+          flowId: 'quick-sort',
+          objective: {
+            'en': 'Show the partition step',
+            'zh-CN': '展示分区步骤',
+          },
+          title: {
+            'en': 'Partition the array',
+            'zh-CN': '数组分区',
+          },
+        }],
       },
     }, 'project-a')).toMatchObject({
       video: {
         flowIds: ['quick-sort'],
         format: 'landscape',
+        planVersion: 2,
+        outline: [{ flowId: 'quick-sort' }],
       },
     })
 

@@ -332,18 +332,44 @@ describe('content studio application service', () => {
       video: {
         flowIds: ['quick-sort'],
         format: 'landscape',
+        planVersion: 2,
+        outline: [{
+          flowId: 'quick-sort',
+          objective: {
+            'en': 'Show the partition step',
+            'zh-CN': '展示分区步骤',
+          },
+          title: {
+            'en': 'Partition the array',
+            'zh-CN': '数组分区',
+          },
+        }],
       },
     })
 
     expect(activity.video).toEqual({
       flowIds: ['quick-sort'],
       format: 'landscape',
+      planVersion: 2,
+      outline: [{
+        flowId: 'quick-sort',
+        objective: {
+          'en': 'Show the partition step',
+          'zh-CN': '展示分区步骤',
+        },
+        title: {
+          'en': 'Partition the array',
+          'zh-CN': '数组分区',
+        },
+      }],
     })
     expect(service.getActivityVideoPlan('video-project', activity.activityId))
       .toMatchObject({
         campaignId: 'video-campaign',
         durationMs: 100,
         format: 'landscape',
+        outline: [{ flowId: 'quick-sort' }],
+        planVersion: 2,
         scenes: [{ id: 'quick-sort', startPath: '/quick-sort' }],
       })
 
@@ -396,7 +422,7 @@ describe('content studio application service', () => {
     expect(recorderInputs[0]?.recordingContext).toEqual({
       captureMode: 'deterministic',
       humanIntervention: false,
-      planVersion: 1,
+      planVersion: 2,
       repeatability: 'high',
       sourceAccess: 'source-owned',
     })

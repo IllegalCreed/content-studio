@@ -14,6 +14,7 @@ import type {
   ProjectRecord,
   ProjectSnapshot,
   VideoFormat,
+  VideoOutlineScene,
 } from '../types'
 import { Buffer } from 'node:buffer'
 import { createServer } from 'node:http'
@@ -525,10 +526,44 @@ function videoField(input: unknown): NonNullable<CreatePublishingActivityInput['
   const format = stringField(value.format, 'video.format')
   if (!VIDEO_FORMATS.has(format as VideoFormat))
     throw new RequestError(400, `Unsupported video format: ${format}`)
+  const planVersion = value.planVersion === undefined
+    ? undefined
+    : positiveIntegerField(value.planVersion, 'video.planVersion')
+  const outline = value.outline === undefined
+    ? undefined
+    : videoOutlineField(value.outline)
   return {
     flowIds,
     format: format as VideoFormat,
+    ...(outline === undefined ? {} : { outline }),
+    ...(planVersion === undefined ? {} : { planVersion }),
   }
+}
+
+function videoOutlineField(input: unknown): VideoOutlineScene[] {
+  if (!Array.isArray(input) || input.length === 0)
+    throw new RequestError(400, 'video.outline must be a non-empty array')
+  const scenes = input.map((item, index) => {
+    const value = asRecord(item, `video.outline[${index}]`)
+    return {
+      flowId: identifierField(value.flowId, `video.outline[${index}].flowId`),
+      objective: localizedTextField(
+        value.objective,
+        `video.outline[${index}].objective`,
+      ),
+      title: localizedTextField(
+        value.title,
+        `video.outline[${index}].title`,
+      ),
+    }
+  })
+  const flowIds = new Set<string>()
+  for (const scene of scenes) {
+    if (flowIds.has(scene.flowId))
+      throw new RequestError(400, `Duplicate video outline flowId: ${scene.flowId}`)
+    flowIds.add(scene.flowId)
+  }
+  return scenes
 }
 
 function httpsUrlField(input: unknown, name: string): string {
@@ -590,6 +625,12 @@ function stringField(input: unknown, name: string): string {
   if (typeof input !== 'string' || input.trim() === '')
     throw new RequestError(400, `${name} must be a non-empty string`)
   return input.trim()
+}
+
+function positiveIntegerField(input: unknown, name: string): number {
+  if (!Number.isInteger(input) || (input as number) < 1)
+    throw new RequestError(400, `${name} must be a positive integer`)
+  return input as number
 }
 
 function asRecord(input: unknown, name: string): Record<string, unknown> {

@@ -159,6 +159,53 @@ describe('manifest validation', () => {
     })).toThrow(/test-id.*kebab-case/i)
   })
 
+  it('accepts a versioned AI shooting outline only for declared capture flows', () => {
+    const validated = validateCampaign({
+      ...campaign,
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        planVersion: 2,
+        outline: [{
+          flowId: 'quick-sort',
+          objective: {
+            'en': 'Show the partition step',
+            'zh-CN': '展示分区步骤',
+          },
+          title: {
+            'en': 'Partition the array',
+            'zh-CN': '数组分区',
+          },
+        }],
+      },
+    }, project)
+
+    expect(validated.video).toMatchObject({
+      planVersion: 2,
+      outline: [{ flowId: 'quick-sort' }],
+    })
+
+    expect(() => validateCampaign({
+      ...campaign,
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        planVersion: 2,
+        outline: [{
+          flowId: 'missing-flow',
+          objective: {
+            'en': 'Missing',
+            'zh-CN': '缺失',
+          },
+          title: {
+            'en': 'Missing',
+            'zh-CN': '缺失',
+          },
+        }],
+      },
+    }, project)).toThrow(/outline.*missing-flow/i)
+  })
+
   it('fails closed for non-HTTPS public URLs and unknown capture flows', () => {
     expect(() =>
       validateProjectManifest({
