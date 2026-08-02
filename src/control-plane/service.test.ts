@@ -241,6 +241,7 @@ describe('content studio application service', () => {
       activities: [activity],
       channelContents: [],
       contentGroups: [],
+      ownerHandoffs: [],
       project,
       projectAssets: [],
       projectChannelBindings: [
@@ -1095,6 +1096,20 @@ describe('content studio application service', () => {
     }
 
     expect(service.createOwnerHandoff(handoff)).toEqual(handoff)
+    expect(service.getProjectView('project-a')).toMatchObject({
+      ownerHandoffs: [handoff],
+      tasks: [
+        expect.objectContaining({
+          kind: 'production',
+          status: 'queued',
+        }),
+        expect.objectContaining({
+          kind: 'publication',
+          status: 'awaiting-owner',
+          taskId: `publication-${publication.publicationId}`,
+        }),
+      ],
+    })
     expect(() => service.createOwnerHandoff({
       ...handoff,
       handoffId: 'handoff-wrong-activity',

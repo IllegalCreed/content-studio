@@ -145,10 +145,14 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
     const isPublicationReceipt = task.kind === 'publication'
       && (nextStatus === 'failed' || nextStatus === 'published')
       && options.hasMatchingPublicationReceipt === true
+    const isOwnerHandoff = task.kind === 'publication'
+      && task.status === 'queued'
+      && nextStatus === 'awaiting-owner'
+      && options.hasMatchingOwnerHandoff === true
     const isMonitoringStart = task.kind === 'monitoring'
       && task.status === 'queued'
       && nextStatus === 'monitoring'
-    if (!allowedStatuses.includes(nextStatus) && !isPublicationReceipt && !isMonitoringStart) {
+    if (!allowedStatuses.includes(nextStatus) && !isPublicationReceipt && !isOwnerHandoff && !isMonitoringStart) {
       throw new TaskStateError(
         `Task cannot transition from ${task.status} to ${nextStatus}`,
       )

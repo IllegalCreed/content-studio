@@ -163,6 +163,7 @@ export interface ContentStudioProjectView {
   activities: PublishingActivity[]
   channelContents: ChannelContent[]
   contentGroups: ContentGroup[]
+  ownerHandoffs: OwnerHandoff[]
   project: ProjectRecord
   projectAssets: ProjectAsset[]
   projectChannelBindings: ProjectChannelBinding[]
@@ -488,6 +489,7 @@ export interface CreateExecutionTaskInput {
 }
 
 export interface ExecutionTaskTransitionOptions {
+  hasMatchingOwnerHandoff?: boolean
   hasMatchingPublicationReceipt?: boolean
 }
 

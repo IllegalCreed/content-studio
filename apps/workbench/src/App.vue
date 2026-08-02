@@ -20,6 +20,7 @@ import type {
   CreateContentGroupInput,
   ExecutionTask,
   ExecutionTaskEvent,
+  OwnerHandoff,
   PublicationPlan,
   PublishingActivity,
 } from '@content-studio/core-types'
@@ -583,6 +584,7 @@ function activityToCampaign(
   contentGroups: ContentGroup[] = [],
   channelContents: ChannelContent[] = [],
   captureFlows: CaptureFlow[] = [],
+  ownerHandoffs: OwnerHandoff[] = [],
 ): CampaignProjection {
   const topic = activity.topic['zh-CN'] ?? activity.topic.en
   const groups = contentGroups
@@ -623,7 +625,19 @@ function activityToCampaign(
     channels: activity.channels.map(channel => channel.id),
     contentGroups: groups,
     executionStatus: 'queued',
-    handoffs: [],
+    handoffs: ownerHandoffs
+      .filter(handoff => handoff.activityId === activity.activityId)
+      .map(handoff => ({
+        accountAlias: snapshot.channels.find(channel => channel.channel === handoff.channel)?.alias
+          ?? '项目账号待绑定',
+        checklist: handoff.checklist,
+        channel: handoff.channel,
+        expiresAt: handoff.expiresAt,
+        handoffId: handoff.handoffId,
+        officialTargetUrl: handoff.officialTargetUrl,
+        reason: '等待渠道授权人完成登录、审核和最终点击',
+        status: handoff.status === 'pending' ? 'waiting' : 'ready',
+      })),
     nextAction: groups.length > 0
       ? '渠道内容已保存，下一步进入制作任务。'
       : '等待 AI 生成内容和拍摄大纲。',
@@ -808,6 +822,7 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
         projectView.contentGroups,
         projectView.channelContents,
         projectView.snapshot.manifest.captureFlows,
+        projectView.ownerHandoffs,
       ),
     )
     snapshot.campaigns = [

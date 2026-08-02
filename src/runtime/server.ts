@@ -10,6 +10,7 @@ import type {
   CreatePublishingActivityInput,
   ExecutionTaskStore,
   Locale,
+  OwnerHandoff,
   ProjectChannelBinding,
   ProjectRecord,
   ProjectSnapshot,
@@ -310,6 +311,26 @@ async function handleRequest(
     }
 
     if (
+      request.method === 'POST'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'activities'
+      && segments[6] === 'owner-handoffs'
+    ) {
+      const projectId = decodeSegment(segments[3]!)
+      const activityId = decodeSegment(segments[5]!)
+      const input = parseCreateOwnerHandoffInput(
+        await readJsonBody(request),
+        projectId,
+        activityId,
+      )
+      sendJson(response, 201, service.createOwnerHandoff(input))
+      return
+    }
+
+    if (
       request.method === 'GET'
       && segments.length === 7
       && segments[0] === 'api'
@@ -567,6 +588,55 @@ export function parseCreatePublicationPlanInput(
   }
 }
 
+export function parseCreateOwnerHandoffInput(
+  input: unknown,
+  projectId: string,
+  activityId: string,
+): OwnerHandoff {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'ownerHandoff')
+  const supportedKeys = new Set([
+    'activityId',
+    'artifactChecksums',
+    'channel',
+    'checklist',
+    'expiresAt',
+    'handoffId',
+    'officialTargetUrl',
+    'projectId',
+    'publicationId',
+    'status',
+  ])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key))
+      throw new RequestError(400, `ownerHandoff contains unsupported field: ${key}`)
+  }
+  const inputProjectId = stringField(value.projectId, 'projectId')
+  if (inputProjectId !== projectId)
+    throw new RequestError(400, 'projectId must match the URL')
+  const inputActivityId = identifierField(value.activityId, 'activityId')
+  if (inputActivityId !== activityId)
+    throw new RequestError(400, 'activityId must match the URL')
+  const channel = stringField(value.channel, 'channel')
+  if (!(channel in CHANNEL_BLUEPRINTS))
+    throw new RequestError(400, `Unsupported channel: ${channel}`)
+  const status = stringField(value.status, 'status')
+  if (status !== 'pending')
+    throw new RequestError(400, 'New owner handoff status must be pending')
+  return {
+    activityId,
+    artifactChecksums: stringListField(value.artifactChecksums, 'artifactChecksums'),
+    channel: channel as OwnerHandoff['channel'],
+    checklist: stringListField(value.checklist, 'checklist'),
+    expiresAt: dateTimeField(value.expiresAt, 'expiresAt'),
+    handoffId: identifierField(value.handoffId, 'handoffId'),
+    officialTargetUrl: httpsUrlField(value.officialTargetUrl, 'officialTargetUrl'),
+    projectId,
+    publicationId: identifierField(value.publicationId, 'publicationId'),
+    status: 'pending',
+  }
+}
+
 function channelsField(input: unknown): CreatePublishingActivityInput['channels'] {
   if (!Array.isArray(input) || input.length === 0)
     throw new RequestError(400, 'channels must be a non-empty array')
@@ -716,6 +786,22 @@ function artifactIdsField(input: unknown): string[] {
     ids.add(id)
   }
   return [...ids]
+}
+
+function stringListField(input: unknown, name: string): string[] {
+  if (!Array.isArray(input) || input.length === 0)
+    throw new RequestError(400, `${name} must be a non-empty array`)
+  const values = input.map((item, index) => stringField(item, `${name}[${index}]`))
+  if (new Set(values).size !== values.length)
+    throw new RequestError(400, `${name} must not contain duplicates`)
+  return values
+}
+
+function dateTimeField(input: unknown, name: string): string {
+  const value = stringField(input, name)
+  if (Number.isNaN(Date.parse(value)))
+    throw new RequestError(400, `${name} must be an ISO date-time`)
+  return value
 }
 
 function stringField(input: unknown, name: string): string {

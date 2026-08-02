@@ -130,6 +130,7 @@ export interface ContentStudioRepository {
   listActivityArtifacts: (projectId: string, activityId: string) => ActivityArtifact[]
   listChannelContents: (projectId: string) => ChannelContent[]
   listContentGroups: (projectId: string) => ContentGroup[]
+  listOwnerHandoffs: (projectId: string) => OwnerHandoff[]
   listProjectAssets: (projectId: string) => ProjectAsset[]
   listProjectChannelBindings: (projectId: string) => ProjectChannelBinding[]
   listActivities: (projectId: string) => PublishingActivity[]
@@ -390,6 +391,13 @@ implements ContentStudioRepository {
       .map(group => clone(group))
   }
 
+  listOwnerHandoffs(projectId: string): OwnerHandoff[] {
+    return [...this.ownerHandoffs.values()]
+      .filter(handoff => handoff.projectId === projectId)
+      .sort((left, right) => left.handoffId.localeCompare(right.handoffId))
+      .map(clone)
+  }
+
   listChannelContents(projectId: string): ChannelContent[] {
     return [...this.channelContents.values()]
       .filter(content => content.projectId === projectId)
@@ -515,6 +523,7 @@ export class ContentStudioApplicationService {
         this.repository.listContentGroups(projectId),
         group => group.contentGroupId,
       ),
+      ownerHandoffs: this.repository.listOwnerHandoffs(projectId),
       project,
       projectAssets: this.repository.listProjectAssets(projectId),
       projectChannelBindings: this.repository.listProjectChannelBindings(projectId),
@@ -890,7 +899,18 @@ export class ContentStudioApplicationService {
     if (handoff.checklist.length === 0) {
       throw new Error('Owner handoff requires a review checklist')
     }
-    return this.repository.saveOwnerHandoff(handoff)
+    const savedHandoff = this.repository.saveOwnerHandoff(handoff)
+    const publicationTaskId = `publication-${handoff.publicationId}`
+    const publicationTask = this.taskStore.getTask(handoff.projectId, publicationTaskId)
+    if (publicationTask?.status === 'queued') {
+      this.taskStore.transitionTask(
+        handoff.projectId,
+        publicationTaskId,
+        'awaiting-owner',
+        { hasMatchingOwnerHandoff: true },
+      )
+    }
+    return savedHandoff
   }
 
   recordMonitoringObservation(

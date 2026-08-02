@@ -22,6 +22,7 @@ import {
   parseCreateActivityInput,
   parseCreateChannelContentInput,
   parseCreateContentGroupInput,
+  parseCreateOwnerHandoffInput,
   parseCreatePublicationPlanInput,
 } from '../runtime/server'
 import { assertNoSensitiveKeys } from '../validation'
@@ -355,6 +356,17 @@ function toolDefinitions(): Array<Record<string, unknown>> {
       annotations: {
         destructiveHint: false,
         openWorldHint: false,
+        readOnlyHint: false,
+      },
+      description: '为发布安排准备人工确认包，只保存校验和、清单和官方页面地址，不保存凭据。',
+      inputSchema: ownerHandoffSchema(),
+      name: 'create_owner_handoff',
+      title: '准备人工确认包',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
         readOnlyHint: true,
       },
       description: '读取活动编译后的版本化视频拍摄计划，不会启动浏览器或发布内容。',
@@ -520,6 +532,36 @@ function publicationPlanSchema(): Record<string, unknown> {
   }
 }
 
+function ownerHandoffSchema(): Record<string, unknown> {
+  return {
+    properties: {
+      activityId: { type: 'string' },
+      artifactChecksums: { items: { type: 'string' }, type: 'array' },
+      channel: { type: 'string' },
+      checklist: { items: { type: 'string' }, type: 'array' },
+      expiresAt: { format: 'date-time', type: 'string' },
+      handoffId: { type: 'string' },
+      officialTargetUrl: { format: 'uri', type: 'string' },
+      projectId: { type: 'string' },
+      publicationId: { type: 'string' },
+      status: { enum: ['pending'], type: 'string' },
+    },
+    required: [
+      'activityId',
+      'artifactChecksums',
+      'channel',
+      'checklist',
+      'expiresAt',
+      'handoffId',
+      'officialTargetUrl',
+      'projectId',
+      'publicationId',
+      'status',
+    ],
+    type: 'object',
+  }
+}
+
 function channelContentSchema(): Record<string, unknown> {
   return {
     properties: {
@@ -671,6 +713,26 @@ function executeTool(
       const activityId = identifierField(value.activityId, 'activityId')
       return options.service.createPublicationPlan(
         parseCreatePublicationPlanInput(value, projectId, activityId),
+      )
+    }
+    case 'create_owner_handoff': {
+      const value = asRecord(input, 'ownerHandoff')
+      assertKeys(value, [
+        'activityId',
+        'artifactChecksums',
+        'channel',
+        'checklist',
+        'expiresAt',
+        'handoffId',
+        'officialTargetUrl',
+        'projectId',
+        'publicationId',
+        'status',
+      ], 'ownerHandoff')
+      const projectId = scopedId(value.projectId, options.projectId, 'projectId')
+      const activityId = identifierField(value.activityId, 'activityId')
+      return options.service.createOwnerHandoff(
+        parseCreateOwnerHandoffInput(value, projectId, activityId),
       )
     }
     case 'get_activity_video_plan': {

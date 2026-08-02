@@ -170,6 +170,7 @@ describe('content Studio local MCP server', () => {
       tools: Array<{ inputSchema: unknown, name: string }>
     }).tools
     expect(listedTools.map(tool => tool.name)).toEqual(expect.arrayContaining([
+      'create_owner_handoff',
       'create_publication_plan',
       'create_publishing_activity',
       'get_activity_video_plan',
@@ -774,6 +775,37 @@ describe('content Studio local MCP server', () => {
     await expect(server.handleMessage({
       jsonrpc: '2.0',
       id: 41,
+      method: 'tools/call',
+      params: {
+        name: 'create_owner_handoff',
+        arguments: {
+          activityId: 'content-pack-demo',
+          artifactChecksums: ['a'.repeat(64)],
+          channel: 'github',
+          checklist: ['确认标题', '确认封面', '完成最终点击'],
+          expiresAt: '2026-08-03T00:00:00.000Z',
+          handoffId: 'content-pack-handoff',
+          officialTargetUrl: 'https://github.com/example/project/releases/new',
+          projectId,
+          publicationId: 'content-pack-publication',
+          status: 'pending',
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          activityId: 'content-pack-demo',
+          handoffId: 'content-pack-handoff',
+          publicationId: 'content-pack-publication',
+          status: 'pending',
+        },
+      },
+    })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 42,
       method: 'tools/call',
       params: {
         name: 'start_production_task',

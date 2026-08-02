@@ -15,6 +15,7 @@ import {
   createContentStudioServer,
   parseCreateActivityInput,
   parseCreateChannelContentInput,
+  parseCreateOwnerHandoffInput,
 } from './server'
 
 function createProject(projectId = 'project-a'): {
@@ -172,6 +173,36 @@ describe('content studio local application server', () => {
     )).toThrow(/Duplicate artifactId/i)
   })
 
+  it('parses a pending owner handoff without accepting unsafe or completed state', () => {
+    const baseHandoff = {
+      activityId: 'activity-a',
+      artifactChecksums: ['a'.repeat(64)],
+      channel: 'github',
+      checklist: ['确认标题', '完成最终点击'],
+      expiresAt: '2026-08-03T00:00:00.000Z',
+      handoffId: 'handoff-a',
+      officialTargetUrl: 'https://github.com/example/project/releases/new',
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+      status: 'pending',
+    }
+
+    expect(parseCreateOwnerHandoffInput(baseHandoff, 'project-a', 'activity-a'))
+      .toMatchObject({ handoffId: 'handoff-a', status: 'pending' })
+    expect(() => parseCreateOwnerHandoffInput({
+      ...baseHandoff,
+      artifactChecksums: ['duplicate', 'duplicate'],
+    }, 'project-a', 'activity-a')).toThrow(/duplicates/i)
+    expect(() => parseCreateOwnerHandoffInput({
+      ...baseHandoff,
+      status: 'completed',
+    }, 'project-a', 'activity-a')).toThrow(/pending/i)
+    expect(() => parseCreateOwnerHandoffInput({
+      ...baseHandoff,
+      officialTargetUrl: 'ftp://example.com/upload',
+    }, 'project-a', 'activity-a')).toThrow(/URL/i)
+  })
+
   it('serves a project-scoped view and creates an activity through the application service', async () => {
     const { project, snapshot } = createProject()
     const binding: ProjectChannelBinding = {
@@ -308,6 +339,34 @@ describe('content studio local application server', () => {
         publicationId: 'publication-a',
       })
 
+      const handoffResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/activities/activity-a/owner-handoffs`,
+        {
+          body: JSON.stringify({
+            activityId: 'activity-a',
+            artifactChecksums: ['a'.repeat(64)],
+            channel: 'github',
+            checklist: ['确认标题', '确认封面', '完成最终点击'],
+            expiresAt: '2026-08-03T00:00:00.000Z',
+            handoffId: 'handoff-a',
+            officialTargetUrl: 'https://github.com/example/project/releases/new',
+            projectId: 'project-a',
+            publicationId: 'publication-a',
+            status: 'pending',
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(handoffResponse.status).toBe(201)
+      expect(await handoffResponse.json()).toMatchObject({
+        activityId: 'activity-a',
+        channel: 'github',
+        handoffId: 'handoff-a',
+        publicationId: 'publication-a',
+        status: 'pending',
+      })
+
       const contentView = await fetch(
         `${running.baseUrl}/api/v1/projects/project-a`,
       ).then(response => response.json())
@@ -334,7 +393,7 @@ describe('content studio local application server', () => {
           channel: 'github',
           contentId: 'content-a',
           kind: 'publication',
-          status: 'queued',
+          status: 'awaiting-owner',
           taskId: 'publication-publication-a',
         }),
       ])
