@@ -161,16 +161,29 @@ describe('content Studio local MCP server', () => {
   it('describes the available tools and reports protocol errors', async () => {
     const server = createFixture()
 
-    await expect(server.handleMessage({
+    const toolsResponse = await server.handleMessage({
       jsonrpc: '2.0',
       id: 12,
       method: 'tools/list',
-    })).resolves.toMatchObject({
-      result: {
-        tools: expect.arrayContaining([
-          expect.objectContaining({ name: 'create_publishing_activity' }),
-          expect.objectContaining({ name: 'retry_task' }),
-        ]),
+    })
+    const listedTools = (toolsResponse?.result as {
+      tools: Array<{ inputSchema: unknown, name: string }>
+    }).tools
+    expect(listedTools.map(tool => tool.name)).toEqual(expect.arrayContaining([
+      'create_publishing_activity',
+      'get_activity_video_plan',
+      'retry_task',
+    ]))
+    const createActivityTool = listedTools.find(tool => tool.name === 'create_publishing_activity')
+    expect(createActivityTool).toBeDefined()
+    expect(createActivityTool?.inputSchema).toMatchObject({
+      properties: {
+        video: {
+          properties: {
+            outline: { type: 'array' },
+            planVersion: { type: 'integer' },
+          },
+        },
       },
     })
     await expect(server.handleMessage({
@@ -252,6 +265,18 @@ describe('content Studio local MCP server', () => {
           video: {
             flowIds: ['quick-sort'],
             format: 'landscape',
+            planVersion: 3,
+            outline: [{
+              flowId: 'quick-sort',
+              objective: {
+                'en': 'Show the partition step',
+                'zh-CN': '展示分区步骤',
+              },
+              title: {
+                'en': 'Partition the array',
+                'zh-CN': '数组分区',
+              },
+            }],
           },
         },
       },
@@ -264,7 +289,33 @@ describe('content Studio local MCP server', () => {
           video: {
             flowIds: ['quick-sort'],
             format: 'landscape',
+            planVersion: 3,
+            outline: [{ flowId: 'quick-sort' }],
           },
+        },
+      },
+    })
+
+    const planResponse = await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 51,
+      method: 'tools/call',
+      params: {
+        name: 'get_activity_video_plan',
+        arguments: {
+          activityId: 'quick-sort-launch',
+          projectId,
+        },
+      },
+    })
+    expect(planResponse).toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          campaignId: 'quick-sort-launch',
+          outline: [{ flowId: 'quick-sort' }],
+          planVersion: 3,
+          scenes: [{ id: 'quick-sort', startPath: '/quick-sort' }],
         },
       },
     })

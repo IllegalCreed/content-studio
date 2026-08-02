@@ -211,6 +211,11 @@ MCP 不启动浏览器、不执行渠道写入，不接收凭据、任意路径�
 启用渠道、语言和重复版本，之后才保存内容组与渠道内容。Content Studio 不在这一步读取
 模型密钥，也不声称自己已经完成模型生成。
 
+同日拍摄计划 MCP 接入已验证：`create_publishing_activity` 的视频参数现在明确描述
+`planVersion` 和双语 `outline`，AI 宿主可以提交版本化拍摄大纲；新增只读工具
+`get_activity_video_plan` 可读取应用服务编译后的场景、画幅和计划版本。该工具只读本地
+项目事实，不启动浏览器、不接收凭据，也不执行发布。
+
 同日制作启动切片已验证：`start_production_task` 只能把匹配的项目制作任务从 `queued`
 推进到 `generating`，不会接受任意状态值、启动浏览器或伪造录制回执。后续 Worker 将消费
 这个状态，接入已有 Playwright 录制器。

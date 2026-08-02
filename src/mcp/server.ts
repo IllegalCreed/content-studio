@@ -304,6 +304,20 @@ function toolDefinitions(): Array<Record<string, unknown>> {
                 type: 'array',
               },
               format: { enum: ['landscape', 'portrait', 'square'], type: 'string' },
+              outline: {
+                items: {
+                  properties: {
+                    flowId: { type: 'string' },
+                    objective: localizedTextSchema(),
+                    title: localizedTextSchema(),
+                  },
+                  required: ['flowId', 'objective', 'title'],
+                  type: 'object',
+                },
+                minItems: 1,
+                type: 'array',
+              },
+              planVersion: { minimum: 1, type: 'integer' },
             },
             required: ['flowIds', 'format'],
             type: 'object',
@@ -324,6 +338,17 @@ function toolDefinitions(): Array<Record<string, unknown>> {
       },
       name: 'create_publishing_activity',
       title: '创建发布活动',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: true,
+      },
+      description: '读取活动编译后的版本化视频拍摄计划，不会启动浏览器或发布内容。',
+      inputSchema: activityVideoPlanSchema(),
+      name: 'get_activity_video_plan',
+      title: '读取活动视频计划',
     },
     {
       annotations: {
@@ -429,6 +454,28 @@ function projectIdSchema(): Record<string, unknown> {
       projectId: { type: 'string' },
     },
     required: ['projectId'],
+    type: 'object',
+  }
+}
+
+function activityVideoPlanSchema(): Record<string, unknown> {
+  return {
+    properties: {
+      activityId: { type: 'string' },
+      projectId: { type: 'string' },
+    },
+    required: ['activityId', 'projectId'],
+    type: 'object',
+  }
+}
+
+function localizedTextSchema(): Record<string, unknown> {
+  return {
+    properties: {
+      'en': { type: 'string' },
+      'zh-CN': { type: 'string' },
+    },
+    required: ['en', 'zh-CN'],
     type: 'object',
   }
 }
@@ -584,6 +631,11 @@ function executeTool(
       ], 'activity')
       const activity = parseCreateActivityInput(input, options.projectId)
       return options.service.createActivity(activity)
+    }
+    case 'get_activity_video_plan': {
+      const value = scopedRecord(input, options.projectId, ['activityId', 'projectId'])
+      const activityId = identifierField(value.activityId, 'activityId')
+      return options.service.getActivityVideoPlan(value.projectId, activityId)
     }
     case 'create_content_group': {
       const value = asRecord(input, 'contentGroup')
