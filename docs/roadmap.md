@@ -191,8 +191,9 @@ V0.3.1 的第一条内存任务切片已落地：视频、文章和导入素材�
       元数据和远程适配器仍待实现。
 - [x] 将长调用映射到 MCP Tasks 的 `tasks/get`、`tasks/update`、`tasks/cancel`，并保留
       领域级任务查询和轮询回退。
-- [ ] MCP 工具不接收任意路径、脚本、选择器、凭据或模型 API Key。
-- [ ] AI 由 MCP 宿主负责创作，Content Studio 只保存版本、事实引用和安全摘要。
+- [x] MCP 工具不接收任意路径、脚本、选择器、凭据或模型 API Key。
+- [x] AI 由 MCP 宿主负责创作，Content Studio 只保存版本、事实引用和安全摘要；本地
+      `save_activity_content_pack` 将一次生成的内容组和渠道版本作为一个高层调用保存。
 
 2026-08-02 本地 MCP 第一条切片已验证：`content-studio mcp --stdio` 只加载一个显式
 项目，使用逐行 JSON-RPC 暴露 `server/discover`、资源列表/读取和项目范围工具；活动、
@@ -204,6 +205,11 @@ MCP 不启动浏览器、不执行渠道写入，不接收凭据、任意路径�
 `working`，`awaiting-owner` 映射为 `input_required`，取消、失败和已完成状态分别映射
 为 `cancelled`、`failed`、`completed`。`tasks/update` 可以按事件序号游标轮询新增事件；
 它不会接受任意状态值，也不会绕过发布回执把任务标成已发布。
+
+同日内容创作切片已验证：AI 宿主可以先创建发布活动，再用
+`save_activity_content_pack` 一次提交文章或视频渠道版本；应用服务会预检项目、活动、
+启用渠道、语言和重复版本，之后才保存内容组与渠道内容。Content Studio 不在这一步读取
+模型密钥，也不声称自己已经完成模型生成。
 
 第一个 AI 垂直切片：读取 Algorithm Visualizer 项目事实，创建一个发布活动，生成
 不同渠道的文章和视频脚本，启动录制任务并返回可观察回执。

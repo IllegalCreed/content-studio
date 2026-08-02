@@ -215,6 +215,20 @@ export interface ChannelContent {
 
 export type CreateChannelContentInput = Omit<ChannelContent, 'version'>
 
+export interface CreateActivityContentPackInput {
+  activityId: string
+  contentGroupId: string
+  contents: Array<Omit<ChannelContent, 'activityId' | 'contentGroupId' | 'projectId' | 'version'>>
+  coreMessage: string
+  projectId: string
+  title: string
+}
+
+export interface ActivityContentPack {
+  contentGroup: ContentGroup
+  contents: ChannelContent[]
+}
+
 export type ActivityArtifactKind
   = | 'article-version'
     | 'audio'

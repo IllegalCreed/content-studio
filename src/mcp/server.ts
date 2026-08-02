@@ -2,6 +2,7 @@
 
 import type { ContentStudioApplicationService } from '../control-plane/service'
 import type {
+  CreateActivityContentPackInput,
   ExecutionTask,
   ExecutionTaskEvent,
   ExecutionTaskStatus,
@@ -329,6 +330,17 @@ function toolDefinitions(): Array<Record<string, unknown>> {
         openWorldHint: false,
         readOnlyHint: false,
       },
+      description: '一次保存 AI 宿主生成的内容组和多个渠道版本，不会发布到渠道。',
+      inputSchema: activityContentPackSchema(),
+      name: 'save_activity_content_pack',
+      title: '保存活动内容包',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: false,
+      },
       description: '保存某个渠道的文章或视频内容版本，不会发布到渠道。',
       inputSchema: channelContentSchema(),
       name: 'save_channel_content',
@@ -440,6 +452,43 @@ function channelContentSchema(): Record<string, unknown> {
   }
 }
 
+function activityContentPackSchema(): Record<string, unknown> {
+  return {
+    properties: {
+      activityId: { type: 'string' },
+      contentGroupId: { type: 'string' },
+      contents: {
+        items: {
+          properties: {
+            body: { type: 'string' },
+            channel: { type: 'string' },
+            contentId: { type: 'string' },
+            format: { enum: ['article', 'video'], type: 'string' },
+            locale: { enum: ['en', 'zh-CN'], type: 'string' },
+            title: { type: 'string' },
+          },
+          required: ['body', 'channel', 'contentId', 'format', 'locale', 'title'],
+          type: 'object',
+        },
+        minItems: 1,
+        type: 'array',
+      },
+      coreMessage: { type: 'string' },
+      projectId: { type: 'string' },
+      title: { type: 'string' },
+    },
+    required: [
+      'activityId',
+      'contentGroupId',
+      'contents',
+      'coreMessage',
+      'projectId',
+      'title',
+    ],
+    type: 'object',
+  }
+}
+
 function taskSchema(): Record<string, unknown> {
   return {
     properties: {
@@ -516,6 +565,59 @@ function executeTool(
       return options.service.createContentGroup(
         parseCreateContentGroupInput(value, projectId, activityId),
       )
+    }
+    case 'save_activity_content_pack': {
+      const value = asRecord(input, 'contentPack')
+      assertKeys(value, [
+        'activityId',
+        'contentGroupId',
+        'contents',
+        'coreMessage',
+        'projectId',
+        'title',
+      ], 'contentPack')
+      const projectId = scopedId(value.projectId, options.projectId, 'projectId')
+      const activityId = identifierField(value.activityId, 'activityId')
+      const contentGroupId = identifierField(value.contentGroupId, 'contentGroupId')
+      const group = parseCreateContentGroupInput({
+        activityId,
+        contentGroupId,
+        coreMessage: value.coreMessage,
+        projectId,
+        title: value.title,
+      }, projectId, activityId)
+      if (!Array.isArray(value.contents))
+        throw new McpToolError('contents must be a non-empty array')
+      const contents = value.contents.map((inputContent, index) => {
+        const content = asRecord(inputContent, `contents[${index}]`)
+        assertKeys(content, [
+          'body',
+          'channel',
+          'contentId',
+          'format',
+          'locale',
+          'title',
+        ], `contents[${index}]`)
+        const parsed = parseCreateChannelContentInput({
+          ...content,
+          activityId,
+          contentGroupId,
+          projectId,
+        }, projectId, activityId, contentGroupId)
+        return {
+          body: parsed.body,
+          channel: parsed.channel,
+          contentId: parsed.contentId,
+          format: parsed.format,
+          locale: parsed.locale,
+          title: parsed.title,
+        }
+      })
+      const pack: CreateActivityContentPackInput = {
+        ...group,
+        contents,
+      }
+      return options.service.saveActivityContentPack(pack)
     }
     case 'save_channel_content': {
       const value = asRecord(input, 'channelContent')

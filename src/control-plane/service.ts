@@ -1,11 +1,13 @@
 import type {
   ActivityArtifact,
+  ActivityContentPack,
   ActivityRevisionInput,
   ChannelContent,
   ContentGroup,
   ContentStudioProjectView,
   ContentStudioReport,
   CreateActivityArtifactInput,
+  CreateActivityContentPackInput,
   CreateChannelContentInput,
   CreateContentGroupInput,
   CreatePublishingActivityInput,
@@ -615,6 +617,52 @@ export class ContentStudioApplicationService {
       ...input,
       version: 1,
     })
+  }
+
+  saveActivityContentPack(
+    input: CreateActivityContentPackInput,
+  ): ActivityContentPack {
+    const activity = this.requireActivity(input.projectId, input.activityId)
+    if (input.contents.length === 0)
+      throw new Error('Content pack must contain at least one channel content')
+    const contentIds = new Set<string>()
+    if (this.repository.getContentGroup(input.projectId, input.contentGroupId) !== undefined)
+      throw new RecordConflictError(input.contentGroupId, 1)
+    for (const content of input.contents) {
+      if (contentIds.has(content.contentId))
+        throw new Error(`Duplicate content id: ${content.contentId}`)
+      contentIds.add(content.contentId)
+      if (this.repository.getChannelContent(input.projectId, content.contentId) !== undefined)
+        throw new RecordConflictError(content.contentId, 1)
+      if (!activity.channels.some(channel =>
+        channel.id === content.channel && channel.locale === content.locale,
+      )) {
+        throw new Error('Content pack channel and locale must match the activity')
+      }
+    }
+    this.assertEnabledChannels(
+      input.projectId,
+      input.contents.map(content => ({
+        id: content.channel,
+        locale: content.locale,
+      })),
+    )
+    const contentGroup = this.repository.saveContentGroup({
+      activityId: input.activityId,
+      contentGroupId: input.contentGroupId,
+      coreMessage: input.coreMessage,
+      projectId: input.projectId,
+      title: input.title,
+      version: 1,
+    })
+    const contents = input.contents.map(content => this.repository.saveChannelContent({
+      ...content,
+      activityId: input.activityId,
+      contentGroupId: input.contentGroupId,
+      projectId: input.projectId,
+      version: 1,
+    }))
+    return { contentGroup, contents }
   }
 
   createActivityArtifact(

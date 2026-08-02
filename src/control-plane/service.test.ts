@@ -222,6 +222,56 @@ describe('content studio application service', () => {
       .toEqual(['task-created', 'attempt-cancelled', 'attempt-retried'])
   })
 
+  it('saves an activity content pack after preflighting all channel versions', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'project-a')
+    enableYouTube(service, 'project-a')
+    const activity = createActivity(service)
+    const input = {
+      activityId: activity.activityId,
+      contentGroupId: 'pack-group',
+      contents: [{
+        body: 'A reviewable video draft',
+        channel: 'youtube' as const,
+        contentId: 'pack-content',
+        format: 'video' as const,
+        locale: 'en' as const,
+        title: 'A video draft',
+      }],
+      coreMessage: 'Explain the idea clearly',
+      projectId: 'project-a',
+      title: 'Core message',
+    }
+
+    expect(service.saveActivityContentPack(input)).toMatchObject({
+      contentGroup: { contentGroupId: 'pack-group', version: 1 },
+      contents: [{ contentId: 'pack-content', version: 1 }],
+    })
+    expect(repository.listContentGroups('project-a')).toHaveLength(1)
+    expect(repository.listChannelContents('project-a')).toHaveLength(1)
+
+    expect(() => service.saveActivityContentPack({
+      ...input,
+      contentGroupId: 'empty-pack',
+      contents: [],
+    })).toThrow(/at least one/i)
+    expect(() => service.saveActivityContentPack({
+      ...input,
+      contentGroupId: 'duplicate-pack',
+      contents: [
+        { ...input.contents[0]!, contentId: 'duplicate-new' },
+        { ...input.contents[0]!, contentId: 'duplicate-new' },
+      ],
+    })).toThrow(/duplicate content/i)
+    expect(() => service.saveActivityContentPack({
+      ...input,
+      contentGroupId: 'wrong-locale-pack',
+      contents: [{ ...input.contents[0]!, contentId: 'wrong-locale', locale: 'zh-CN' }],
+    })).toThrow(/channel and locale/i)
+    expect(() => service.saveActivityContentPack(input)).toThrow(/already exists/i)
+  })
+
   it('keeps activity artifacts out of the project asset library until explicit promotion', () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)

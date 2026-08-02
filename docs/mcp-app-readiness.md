@@ -157,6 +157,10 @@ Content Studio 保留更细的内部流水线状态，同时通过适配器映�
 按事件序号游标返回新增事件，`tasks/cancel` 只请求取消当前本地尝试。MCP Task 句柄仍
 必须同时携带匹配的 `projectId`，重试继续使用 Content Studio 的领域工具并保留旧尝试。
 
+内容创作第一版使用 `save_activity_content_pack`：模型由 MCP 宿主调用和托管，Content
+Studio 只接收结构化的文章/视频版本，做项目范围、活动渠道、语言、重复版本和敏感字段
+校验，然后保存到本地应用服务。这样不会把某个模型供应商或 API 密钥写进 core。
+
 MCP Tasks 没有 `tasks/list`。全局和项目任务面板必须继续使用经过业务授权的领域
 查询，例如：
 

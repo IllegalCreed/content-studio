@@ -576,6 +576,61 @@ describe('content Studio local MCP server', () => {
     })
   })
 
+  it('saves an AI-produced activity content pack in one project-scoped call', async () => {
+    const server = createFixture()
+    await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 38,
+      method: 'tools/call',
+      params: {
+        name: 'create_publishing_activity',
+        arguments: {
+          activityId: 'content-pack-demo',
+          campaignId: 'content-pack-demo',
+          channels: [{ id: 'github', locale: 'en' }],
+          goal: 'education',
+          projectId,
+          projectSnapshotId: snapshot.snapshotId,
+          status: 'draft',
+          targetUrl: 'https://example.com/content-pack-demo/',
+          topic: { 'en': 'Content pack', 'zh-CN': '内容包' },
+        },
+      },
+    })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 39,
+      method: 'tools/call',
+      params: {
+        name: 'save_activity_content_pack',
+        arguments: {
+          activityId: 'content-pack-demo',
+          contentGroupId: 'content-pack-core',
+          contents: [{
+            body: 'An AI-written, reviewable article draft.',
+            channel: 'github',
+            contentId: 'content-pack-github-en',
+            format: 'article',
+            locale: 'en',
+            title: 'Content pack draft',
+          }],
+          coreMessage: 'Explain the project clearly and invite review.',
+          projectId,
+          title: 'Content pack core message',
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          contentGroup: { contentGroupId: 'content-pack-core' },
+          contents: [{ contentId: 'content-pack-github-en' }],
+        },
+      },
+    })
+  })
+
   it('maps owner input, failure, and completion states without allowing MCP to invent them', async () => {
     const repository = new InMemoryContentStudioRepository()
     const taskStore = new InMemoryExecutionTaskStore()
