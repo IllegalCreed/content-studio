@@ -78,7 +78,7 @@ const moduleDefinitions: ModuleDefinition[] = [
     scope: '全局控制台',
   },
   {
-    description: '管理全局渠道定义，并查看当前项目是否启用。',
+    description: '管理全局渠道和账号目录，并查看当前项目是否启用。',
     group: 'global',
     id: 'channels',
     label: '渠道管理',
@@ -140,7 +140,7 @@ const activeTaskScope = ref<'全部项目' | '当前项目'>('全部项目')
 const selectedAssetId = ref(snapshot.projectAssets[0]!.assetId)
 const assetFilter = ref<'全部' | AssetProjection['kind']>('全部')
 const selectedChannelId = ref(snapshot.channels[0]!.channel)
-const selectedChannelAccountId = ref(snapshot.channels[0]!.defaultAccountId)
+const selectedChannelAccountId = ref(snapshot.channels[0]!.projectAccountId)
 const runtimeError = ref<string | null>(null)
 const workbenchRuntime = createWorkbenchRuntime()
 const currentSnapshotId = ref(`${snapshot.project.projectId}-snapshot-1`)
@@ -185,15 +185,11 @@ const contentForm = reactive<{
   title: '',
 })
 const channelBindingForm = reactive<{
-  accountAlias: string
   accountRef: string
   delivery: ProjectChannelBinding['delivery']
-  enabled: boolean
 }>({
-  accountAlias: snapshot.channels[0]?.alias ?? '',
-  accountRef: snapshot.channels[0]?.defaultAccountId ?? '',
+  accountRef: snapshot.channels[0]?.projectAccountId ?? '',
   delivery: 'owner-assisted',
-  enabled: snapshot.channels[0]?.enabled ?? false,
 })
 
 const deliveryOptions: Array<{
@@ -305,6 +301,25 @@ const selectedChannel = computed(() =>
   ?? snapshot.channels[0]!,
 )
 
+function projectAccountFor(channel: ChannelProjection): ChannelProjection['accounts'][number] | null {
+  if (channel.projectAccountId === null)
+    return null
+  return channel.accounts.find(account => account.accountId === channel.projectAccountId) ?? null
+}
+
+function projectAccountAlias(channel: ChannelProjection): string | undefined {
+  return projectAccountFor(channel)?.alias
+}
+
+function projectAccountAliasForChannel(channelId: ChannelId): string | undefined {
+  const channel = snapshot.channels.find(candidate => candidate.channel === channelId)
+  return channel === undefined ? undefined : projectAccountAlias(channel)
+}
+
+function accountReferenceCount(channel: ChannelProjection): number {
+  return channel.accounts.reduce((total, account) => total + account.assignedProjects.length, 0)
+}
+
 const selectedChannelAccount = computed(() =>
   selectedChannel.value.accounts.find(account => account.accountId === selectedChannelAccountId.value)
   ?? selectedChannel.value.accounts.find(account => account.isDefault)
@@ -313,7 +328,10 @@ const selectedChannelAccount = computed(() =>
 )
 
 const projectAccounts = computed(() =>
-  snapshot.channels.flatMap(channel => channel.accounts),
+  snapshot.channels.flatMap((channel) => {
+    const account = projectAccountFor(channel)
+    return channel.enabled && account !== null ? [account] : []
+  }),
 )
 
 const selectedCampaignContentCounts = computed(() => {
@@ -478,7 +496,7 @@ async function changeSelectedTask(action: 'cancel' | 'record' | 'retry' | 'start
 
 function selectChannel(channelId: ChannelId): void {
   selectedChannelId.value = channelId
-  selectedChannelAccountId.value = snapshot.channels.find(channel => channel.channel === channelId)?.defaultAccountId ?? null
+  selectedChannelAccountId.value = snapshot.channels.find(channel => channel.channel === channelId)?.projectAccountId ?? null
   syncChannelBindingForm()
 }
 
@@ -488,14 +506,12 @@ function selectChannelAccount(accountId: string): void {
 
 function syncChannelBindingForm(): void {
   const channel = selectedChannel.value
-  channelBindingForm.accountAlias = channel.alias ?? ''
-  channelBindingForm.accountRef = channel.defaultAccountId ?? ''
+  channelBindingForm.accountRef = channel.projectAccountId ?? ''
   channelBindingForm.delivery = channel.delivery === '全自动候选'
     ? 'automatic-candidate'
     : channel.delivery === '仅生成内容'
       ? 'content-only'
       : 'owner-assisted'
-  channelBindingForm.enabled = channel.enabled
 }
 
 async function saveChannelBinding(): Promise<void> {
@@ -503,14 +519,17 @@ async function saveChannelBinding(): Promise<void> {
     return
   channelBindingSaving.value = true
   channelBindingSaveError.value = null
+  const selectedAccount = channelBindingForm.accountRef === ''
+    ? null
+    : selectedChannel.value.accounts.find(account => account.accountId === channelBindingForm.accountRef) ?? null
   const input: ProjectChannelBinding = {
     channel: selectedChannel.value.channel,
     delivery: channelBindingForm.delivery,
-    enabled: channelBindingForm.enabled,
+    enabled: channelBindingForm.accountRef !== '',
     projectId: snapshot.project.projectId,
-    ...(channelBindingForm.accountAlias.trim() === ''
+    ...(selectedAccount === null
       ? {}
-      : { accountAlias: channelBindingForm.accountAlias.trim() }),
+      : { accountAlias: selectedAccount.alias }),
     ...(channelBindingForm.accountRef.trim() === ''
       ? {}
       : { accountRef: channelBindingForm.accountRef.trim() }),
@@ -737,7 +756,7 @@ function activityToCampaign(
       contents: channelContents
         .filter(content => content.contentGroupId === group.contentGroupId)
         .map<ChannelContentProjection>(content => ({
-          accountAlias: snapshot.channels.find(channel => channel.channel === content.channel)?.alias ?? undefined,
+          accountAlias: projectAccountAliasForChannel(content.channel),
           artifactIds: content.artifactIds,
           channel: content.channel,
           contentId: content.contentId,
@@ -781,7 +800,7 @@ function activityToCampaign(
     handoffs: ownerHandoffs
       .filter(handoff => handoff.activityId === activity.activityId)
       .map(handoff => ({
-        accountAlias: snapshot.channels.find(channel => channel.channel === handoff.channel)?.alias
+        accountAlias: projectAccountAliasForChannel(handoff.channel)
           ?? '项目账号待绑定',
         checklist: handoff.checklist,
         channel: handoff.channel,
@@ -833,8 +852,7 @@ function taskToProjection(
 ): WorkbenchSnapshot['tasks'][number] {
   const campaign = snapshot.campaigns.find(candidate => candidate.campaignId === task.activityId)
   const channel = task.channel ?? campaign?.channels[0] ?? 'github'
-  const account = snapshot.channels.find(candidate => candidate.channel === channel)?.alias
-    ?? '未绑定账号'
+  const account = projectAccountAliasForChannel(channel) ?? '未绑定账号'
   const activityTitle = campaign?.title ?? task.activityId
   const contentTitle = campaign?.contentGroups
     .flatMap(group => group.contents)
@@ -924,24 +942,7 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
     snapshot.channels.forEach((channel) => {
       channel.enabled = enabledChannels.has(channel.channel)
       const binding = bindingByChannel.get(channel.channel)
-      if (binding === undefined)
-        return
-      const accountId = binding.accountRef ?? null
-      channel.alias = binding.accountAlias ?? null
-      channel.defaultAccountId = accountId
-      channel.accounts = accountId === null && binding.accountAlias === undefined
-        ? []
-        : [{
-            accountId: accountId ?? `${projectView.project.projectId}:${channel.channel}`,
-            adapterReady: false,
-            alias: binding.accountAlias ?? '项目账号',
-            assignedProjects: [projectView.project.projectId],
-            channel: channel.channel,
-            health: '未配置',
-            isDefault: true,
-            nextAction: '由 marketing-ops 完成授权状态检查',
-            statusSource: '项目配置',
-          }]
+      channel.projectAccountId = binding?.accountRef ?? null
     })
     const runtimeCampaigns = projectView.activities.map(activity =>
       activityToCampaign(
@@ -1326,7 +1327,7 @@ async function refreshProjectView(): Promise<void> {
                 >
                   <span :class="channel.enabled ? 'ready' : 'muted-value'">{{ channel.enabled ? '已启用' : '未启用' }}</span>
                   <strong>{{ channel.channel }}</strong>
-                  <small>{{ channel.alias ?? '未绑定项目账号' }}</small>
+                  <small>{{ projectAccountAlias(channel) ?? '未选择账号' }} · {{ channel.accounts.length }} 个可选账号</small>
                 </button>
               </div>
               <div class="channel-binding-form">
@@ -1334,18 +1335,15 @@ async function refreshProjectView(): Promise<void> {
                   <div><p class="eyebrow">当前项目 · {{ selectedChannel.channel }}</p><strong>配置项目如何使用该渠道</strong></div>
                   <small>只保存不透明账号引用</small>
                 </div>
-                <label class="channel-binding-toggle">
-                  <input v-model="channelBindingForm.enabled" type="checkbox" :disabled="!snapshot.runtimeConnected || channelBindingSaving" />
-                  <span>项目启用这个渠道</span>
-                </label>
                 <div class="channel-binding-fields">
                   <label>
-                    <span>账号别名</span>
-                    <input v-model="channelBindingForm.accountAlias" type="text" maxlength="128" placeholder="例如：算法可视化视频账号" :disabled="!snapshot.runtimeConnected || channelBindingSaving" />
-                  </label>
-                  <label>
-                    <span>账号引用</span>
-                    <input v-model="channelBindingForm.accountRef" type="text" maxlength="128" placeholder="例如：account-youtube-main" :disabled="!snapshot.runtimeConnected || channelBindingSaving" />
+                    <span>项目账号</span>
+                    <select data-testid="project-channel-account" v-model="channelBindingForm.accountRef" :disabled="!snapshot.runtimeConnected || channelBindingSaving">
+                      <option value="">不使用该渠道</option>
+                      <option v-for="account in selectedChannel.accounts" :key="account.accountId" :value="account.accountId">
+                        {{ account.alias }} · 已被 {{ account.assignedProjects.length }} 个项目引用
+                      </option>
+                    </select>
                   </label>
                   <label>
                     <span>交付方式</span>
@@ -1392,7 +1390,7 @@ async function refreshProjectView(): Promise<void> {
                   <legend>目标渠道（可多选）</legend>
                   <label v-for="channel in enabledChannels" :key="channel.channel" class="channel-choice">
                     <input v-model="activityForm.channels" type="checkbox" :value="channel.channel" />
-                    <span><strong>{{ channel.channel }}</strong><small>{{ channel.alias ?? '项目账号待绑定' }}</small></span>
+                    <span><strong>{{ channel.channel }}</strong><small>{{ projectAccountAlias(channel) ?? '项目账号待绑定' }}</small></span>
                   </label>
                   <small v-if="enabledChannels.length === 0" class="form-hint">请先在渠道管理中启用项目渠道。</small>
                 </fieldset>
@@ -1750,7 +1748,7 @@ async function refreshProjectView(): Promise<void> {
             <div><p class="eyebrow">全局控制台 / 发布助手状态</p><h2>渠道管理</h2></div>
             <span>{{ snapshot.channelBlueprintCount }} 个全局规格 · {{ channelSnapshotCount }} 个状态快照</span>
           </div>
-          <p class="section-intro">全局目录定义平台能力；项目选择是否启用并绑定具体账号。右侧状态来自 marketing-ops 的只读渠道检查，健康不等于拥有发布权限。</p>
+          <p class="section-intro">全局目录定义平台能力和账号；项目选择是否启用并绑定其中一个账号。右侧状态来自 marketing-ops 的只读渠道检查，健康不等于拥有发布权限。</p>
           <div class="channel-overview-grid">
             <div class="channel-overview-card"><span>全局规格</span><strong>{{ snapshot.channelBlueprintCount }}</strong><small>文章、短帖和视频信息</small></div>
             <div class="channel-overview-card"><span>项目已启用</span><strong>{{ enabledChannels.length }}</strong><small>活动只能选择这些渠道</small></div>
@@ -1758,11 +1756,12 @@ async function refreshProjectView(): Promise<void> {
             <div class="channel-overview-card"><span>需要处理</span><strong>{{ snapshot.channels.filter(channel => channel.health !== '已就绪').length }}</strong><small>重新授权、阻塞或尚未查询</small></div>
           </div>
           <div class="channel-table" role="table" aria-label="渠道目录">
-            <div class="channel-row channel-row-heading" role="row"><span>渠道</span><span>项目状态</span><span>项目账号</span><span>交付和格式</span><span>发布助手状态</span><span>规格</span></div>
+            <div class="channel-row channel-row-heading" role="row"><span>渠道</span><span>项目状态</span><span>全局账号</span><span>账号引用项目数</span><span>交付和格式</span><span>发布助手状态</span><span>规格</span></div>
             <button v-for="channel in snapshot.channels" :key="channel.channel" type="button" class="channel-row" :data-channel-id="channel.channel" :class="{ selected: channel.channel === selectedChannel.channel }" role="row" @click="selectChannel(channel.channel)">
               <strong>{{ channel.channel }}</strong>
               <span :class="channel.enabled ? 'ready' : 'muted-value'">{{ channel.enabled ? '项目已启用' : '项目未启用' }}</span>
               <span>{{ channel.accounts.length > 0 ? channel.accounts.map(account => account.alias).join('、') : '未绑定账号' }}</span>
+              <span>{{ accountReferenceCount(channel) }} 个项目</span>
               <span>{{ channel.delivery }} · {{ channel.format }}</span>
               <span class="channel-health" :data-health="channel.health">{{ channel.health }}</span>
               <small>{{ channel.titleLimit }} 字标题 · {{ channel.bodyLimit }} 字正文</small>
@@ -1774,11 +1773,11 @@ async function refreshProjectView(): Promise<void> {
               <span class="channel-health" :data-health="selectedChannelAccount?.health ?? selectedChannel.health">{{ selectedChannelAccount?.health ?? selectedChannel.health }}</span>
             </div>
             <div class="channel-account-panel">
-              <div class="channel-account-panel-heading"><div><p class="eyebrow">项目账号</p><strong>{{ selectedChannel.accounts.length }} 个账号绑定</strong></div><small>活动只能使用这里的账号</small></div>
+              <div class="channel-account-panel-heading"><div><p class="eyebrow">全局账号</p><strong>{{ selectedChannel.accounts.length }} 个账号已配置</strong></div><small>{{ projectAccountFor(selectedChannel)?.alias ?? '当前项目未选择账号' }}</small></div>
               <div v-if="selectedChannel.accounts.length > 0" class="channel-account-list">
                 <button v-for="account in selectedChannel.accounts" :key="account.accountId" type="button" :data-channel-account-id="account.accountId" :class="{ selected: account.accountId === selectedChannelAccount?.accountId }" @click="selectChannelAccount(account.accountId)">
                   <strong>{{ account.alias }}</strong>
-                  <span>{{ account.isDefault ? '项目默认账号' : '项目可选账号' }} · {{ account.health }}</span>
+                  <span>{{ account.assignedProjects.length }} 个项目引用 · {{ account.health }}</span>
                 </button>
               </div>
               <p v-else class="empty-channel-accounts">当前项目还没有绑定账号。</p>
@@ -1793,7 +1792,7 @@ async function refreshProjectView(): Promise<void> {
                 <div><p class="eyebrow">项目级设置</p><strong>项目渠道配置不在全局目录中修改</strong></div>
                 <small>全局页只查看平台能力和状态</small>
               </div>
-              <p class="channel-boundary-note">每个项目的启用开关、账号引用和交付方式，请到当前项目的“项目概览”里配置。</p>
+              <p class="channel-boundary-note">每个项目选择哪个账号、是否使用该渠道和交付方式，请到当前项目的“项目概览”里配置。</p>
               <div class="form-actions">
                 <small class="form-hint">这里不会修改项目绑定。</small>
                 <button type="button" class="primary-button" @click="selectModule('project')">去项目配置</button>

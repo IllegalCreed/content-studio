@@ -554,7 +554,7 @@ export interface ChannelProjection {
   bodyLimit: number
   channel: ChannelId
   delivery: '全自动候选' | '人工辅助' | '仅生成内容'
-  defaultAccountId: string | null
+  projectAccountId: string | null
   enabled: boolean
   format: '文章' | '短帖' | '视频信息'
   health: '已就绪' | '需重新授权' | '已阻塞' | '未配置' | '未查询'
@@ -611,7 +611,7 @@ export interface WorkbenchSnapshot {
 
 function channelAccount(input: Omit<ChannelAccountProjection, 'assignedProjects'> & { assignedProjects?: string[] }): ChannelAccountProjection {
   return {
-    assignedProjects: ['algorithm-visualizer'],
+    assignedProjects: input.assignedProjects ?? (input.isDefault ? ['algorithm-visualizer'] : []),
     ...input,
   }
 }
@@ -891,7 +891,7 @@ export const snapshot: WorkbenchSnapshot = {
       nextAction: null,
       statusSource: 'marketing-ops',
       titleLimit: 128,
-      defaultAccountId: 'github-illegalcreed',
+      projectAccountId: 'github-illegalcreed',
     },
     {
       accounts: [
@@ -928,7 +928,7 @@ export const snapshot: WorkbenchSnapshot = {
       nextAction: '尚未读取该渠道的 marketing-ops 状态',
       statusSource: '项目配置',
       titleLimit: 80,
-      defaultAccountId: 'bilibili-algorithm-visualizer',
+      projectAccountId: 'bilibili-algorithm-visualizer',
     },
     {
       accounts: [
@@ -955,7 +955,7 @@ export const snapshot: WorkbenchSnapshot = {
       nextAction: null,
       statusSource: 'marketing-ops',
       titleLimit: 80,
-      defaultAccountId: 'bluesky-illegalscreed',
+      projectAccountId: 'bluesky-illegalscreed',
     },
     {
       accounts: [
@@ -982,7 +982,7 @@ export const snapshot: WorkbenchSnapshot = {
       nextAction: '运行 marketing-ops setup dev',
       statusSource: 'marketing-ops',
       titleLimit: 128,
-      defaultAccountId: 'dev-illegal',
+      projectAccountId: 'dev-illegal',
     },
     {
       accounts: [
@@ -1009,7 +1009,7 @@ export const snapshot: WorkbenchSnapshot = {
       nextAction: null,
       statusSource: 'marketing-ops',
       titleLimit: 80,
-      defaultAccountId: 'mastodon-illegals0001',
+      projectAccountId: 'mastodon-illegals0001',
     },
     {
       accounts: [
@@ -1036,7 +1036,7 @@ export const snapshot: WorkbenchSnapshot = {
       nextAction: '尚未读取该渠道的 marketing-ops 状态',
       statusSource: '项目配置',
       titleLimit: 100,
-      defaultAccountId: 'youtube-algorithm-visualizer',
+      projectAccountId: 'youtube-algorithm-visualizer',
     },
     {
       accounts: [
@@ -1063,7 +1063,7 @@ export const snapshot: WorkbenchSnapshot = {
       nextAction: '尚未读取该渠道的 marketing-ops 状态',
       statusSource: '项目配置',
       titleLimit: 100,
-      defaultAccountId: 'zhihu-algorithm-docs',
+      projectAccountId: 'zhihu-algorithm-docs',
     },
     {
       accounts: [],
@@ -1079,7 +1079,7 @@ export const snapshot: WorkbenchSnapshot = {
       nextAction: '在项目配置中启用渠道',
       statusSource: 'marketing-ops',
       titleLimit: 55,
-      defaultAccountId: null,
+      projectAccountId: null,
     },
     {
       accounts: [
@@ -1116,7 +1116,7 @@ export const snapshot: WorkbenchSnapshot = {
       nextAction: '尚未读取该渠道的 marketing-ops 状态',
       statusSource: '项目配置',
       titleLimit: 70,
-      defaultAccountId: 'x-algorithm-visualizer',
+      projectAccountId: 'x-algorithm-visualizer',
     },
   ],
   projectAssets: [
