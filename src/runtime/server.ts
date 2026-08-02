@@ -62,9 +62,33 @@ export interface ContentStudioServerHandle {
   taskStore: ExecutionTaskStore
 }
 
+export interface ContentStudioApplicationHandle {
+  close: () => void
+  repository: ContentStudioRepository
+  service: ContentStudioApplicationService
+  taskStore: ExecutionTaskStore
+}
+
 export function createContentStudioServer(
   options: ContentStudioServerOptions,
 ): ContentStudioServerHandle {
+  const application = createContentStudioApplication(options)
+  const server = createServer((request, response) => {
+    void handleRequest(request, response, application.service, options.project.projectId)
+  })
+
+  return {
+    close: () => closeServer(server, application.repository, application.taskStore),
+    repository: application.repository,
+    server,
+    service: application.service,
+    taskStore: application.taskStore,
+  }
+}
+
+export function createContentStudioApplication(
+  options: ContentStudioServerOptions,
+): ContentStudioApplicationHandle {
   const repository = options.repository
     ?? new SqliteContentStudioRepository(
       options.databasePath ?? '.content-studio/content-studio.sqlite',
@@ -77,14 +101,10 @@ export function createContentStudioServer(
       : new InMemoryExecutionTaskStore())
   const service = new ContentStudioApplicationService(repository, taskStore)
   registerInitialProject(service, repository, options)
-  const server = createServer((request, response) => {
-    void handleRequest(request, response, service, options.project.projectId)
-  })
 
   return {
-    close: () => closeServer(server, repository, taskStore),
+    close: () => closeApplication(repository, taskStore),
     repository,
-    server,
     service,
     taskStore,
   }
@@ -286,7 +306,7 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   }
 }
 
-function parseCreateActivityInput(
+export function parseCreateActivityInput(
   input: unknown,
   projectId: string,
 ): CreatePublishingActivityInput {
@@ -310,7 +330,7 @@ function parseCreateActivityInput(
   }
 }
 
-function parseCreateContentGroupInput(
+export function parseCreateContentGroupInput(
   input: unknown,
   projectId: string,
   activityId: string,
@@ -332,7 +352,7 @@ function parseCreateContentGroupInput(
   }
 }
 
-function parseCreateChannelContentInput(
+export function parseCreateChannelContentInput(
   input: unknown,
   projectId: string,
   activityId: string,
@@ -477,10 +497,7 @@ function closeServer(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const closeRepository = (): void => {
-      const close = (repository as ContentStudioRepository & { close?: () => void }).close
-      close?.call(repository)
-      const closeTaskStore = (taskStore as ExecutionTaskStore & { close?: () => void }).close
-      closeTaskStore?.call(taskStore)
+      closeApplication(repository, taskStore)
     }
     if (!server.listening) {
       closeRepository()
@@ -495,6 +512,16 @@ function closeServer(
         reject(error)
     })
   })
+}
+
+function closeApplication(
+  repository: ContentStudioRepository,
+  taskStore: ExecutionTaskStore,
+): void {
+  const close = (repository as ContentStudioRepository & { close?: () => void }).close
+  close?.call(repository)
+  const closeTaskStore = (taskStore as ExecutionTaskStore & { close?: () => void }).close
+  closeTaskStore?.call(taskStore)
 }
 
 class RequestError extends Error {

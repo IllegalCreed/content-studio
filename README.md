@@ -94,9 +94,13 @@ V0.2 通用 Playwright 录制器已经完成：
 活动详情还可以通过本地应用服务保存内容组和渠道内容版本，按渠道展示文章或视频内容。
 当前工作台里的保存表单是 AI/MCP 接入前的手动测试入口，不代表系统已经自动生成内容。
 
-AI 创作是目标产品的核心能力，目前的确定性编译器是安全基础，不代表完整的 AI
-创作链路已经接入。MCP 工具、文章/图片/视频方案生成和后台 AI 执行器按路线图
-继续实现。
+本地 MCP 的第一条切片已经接入。它使用 `stdio` 逐行传输 JSON-RPC，只加载命令行明确
+指定的一个项目，不监听端口，也不接收凭据、任意脚本、选择器或文件路径。AI 宿主可以
+读取项目事实、活动、内容和任务，并通过高层工具创建发布活动、保存内容组与渠道内容、
+读取任务以及取消/重试本地任务；这些工具不会执行真实渠道发布。
+
+AI 创作是目标产品的核心能力，目前的确定性编译器是安全基础，MCP 是 AI 宿主接入
+应用服务的第一步，文章/图片/视频方案生成和后台 AI 执行器按路线图继续实现。
 
 ## MCP App 与公开上架目标
 
@@ -186,6 +190,20 @@ node dist/cli.mjs serve \
   --campaign examples/algorithm-visualizer/campaign.json \
   --port 11001
 ```
+
+启动本地 MCP（由支持 MCP 的 AI 宿主启动或在终端中测试）：
+
+```bash
+pnpm build
+node dist/cli.mjs mcp --stdio \
+  --project examples/algorithm-visualizer/project.json \
+  --campaign examples/algorithm-visualizer/campaign.json \
+  --db .content-studio/content-studio.sqlite
+```
+
+`--campaign` 只用于把发布活动中使用的渠道绑定到这个项目；MCP 工具仍会再次校验
+项目范围和渠道是否启用。`stdio` 不占用端口，协议输出只写到标准输出，诊断信息不混入
+协议流。
 
 本地开发端口从 `11000` 开始分配：`11000` 是 Vue 工作台，后续应用服务使用
 `11001`、MCP HTTP 使用 `11002`，MCP `stdio` 不占用端口。工作台使用严格端口模式，

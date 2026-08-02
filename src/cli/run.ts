@@ -15,14 +15,17 @@ import { resolve } from 'node:path'
 import process from 'node:process'
 import { generateStudioBundle } from '../bundle/generate'
 import { CHANNEL_BLUEPRINTS } from '../constants'
+import { createContentStudioMcpServer, serveMcpStdio } from '../mcp/server'
 import { writeStudioBundle } from '../output/write'
 import { recordWithPlaywright } from '../recording/playwright'
-import { createContentStudioServer } from '../runtime/server'
+import { createContentStudioApplication, createContentStudioServer } from '../runtime/server'
 import { validateCampaign, validateProjectManifest } from '../validation'
 import { compileVideoPlan } from '../video/compile'
 
 export interface CliRuntime {
   cwd: string
+  input?: NodeJS.ReadableStream
+  output?: NodeJS.WritableStream
   signal?: AbortSignal
   write: (message: string) => void
 }
@@ -59,21 +62,28 @@ export async function runCli(
     command !== 'generate'
     && command !== 'record'
     && command !== 'serve'
+    && command !== 'mcp'
     && command !== 'validate'
   ) {
     throw new Error(`Unknown command: ${command}`)
   }
 
+  const isMcp = command === 'mcp'
   const options = parseOptions(
     arguments_.slice(1),
     command === 'serve'
       ? new Set(['campaign', 'db', 'port', 'project'])
-      : command === 'record'
-        ? new Set(['attempts', 'base-url', 'campaign', 'out', 'project'])
-        : new Set(['campaign', 'out', 'project']),
+      : isMcp
+        ? new Set(['campaign', 'db', 'project', 'stdio'])
+        : command === 'record'
+          ? new Set(['attempts', 'base-url', 'campaign', 'out', 'project'])
+          : new Set(['campaign', 'out', 'project']),
+    isMcp ? new Set(['stdio']) : new Set(),
   )
+  if (isMcp && !options.has('stdio'))
+    throw new Error('content-studio mcp requires --stdio')
   const projectPath = requireOption(options, 'project')
-  const serveCampaignPath = command === 'serve'
+  const serveCampaignPath = command === 'serve' || isMcp
     ? options.get('campaign')
     : requireOption(options, 'campaign')
   const project = validateProjectManifest(
@@ -87,6 +97,15 @@ export async function runCli(
           project,
         )
     return runServe(project, campaign, options, runtime)
+  }
+  if (isMcp) {
+    const campaign = serveCampaignPath === undefined
+      ? undefined
+      : validateCampaign(
+          await readJsonFile(serveCampaignPath, runtime.cwd),
+          project,
+        )
+    return runMcp(project, campaign, options, runtime)
   }
 
   const campaignPath = requireOption(options, 'campaign')
@@ -158,21 +177,33 @@ export async function runCli(
 function parseOptions(
   arguments_: string[],
   allowedOptions: ReadonlySet<string>,
+  booleanOptions: ReadonlySet<string> = new Set(),
 ): Map<string, string> {
   const options = new Map<string, string>()
-  for (let index = 0; index < arguments_.length; index += 2) {
+  for (let index = 0; index < arguments_.length;) {
     const flag = arguments_[index]
-    const value = arguments_[index + 1]
     if (flag === undefined || !flag.startsWith('--'))
       throw new Error(`Expected an option at argument ${index + 1}`)
     const name = flag.slice(2)
     if (!allowedOptions.has(name))
       throw new Error(`Unknown option: ${flag}`)
+    if (booleanOptions.has(name)) {
+      if (options.has(name))
+        throw new Error(`Duplicate option: ${flag}`)
+      const next = arguments_[index + 1]
+      if (next !== undefined && !next.startsWith('--'))
+        throw new Error(`Option does not accept a value: ${flag}`)
+      options.set(name, 'true')
+      index += 1
+      continue
+    }
+    const value = arguments_[index + 1]
     if (value === undefined || value.startsWith('--'))
       throw new Error(`Missing value for option: ${flag}`)
     if (options.has(name))
       throw new Error(`Duplicate option: ${flag}`)
     options.set(name, value)
+    index += 2
   }
   return options
 }
@@ -212,6 +243,7 @@ function renderHelp(): string {
     'content-studio generate --project <project.json> --campaign <campaign.json> --out <directory>',
     'content-studio record --project <project.json> --campaign <campaign.json> --base-url <url> --out <directory> [--attempts <1-3>]',
     'content-studio serve --project <project.json> [--campaign <campaign.json>] [--db <path>] [--port <11001>]',
+    'content-studio mcp --stdio --project <project.json> [--campaign <campaign.json>] [--db <path>]',
     'content-studio validate --project <project.json> --campaign <campaign.json>',
   ].join('\n')
 }
@@ -222,6 +254,64 @@ async function runServe(
   options: Map<string, string>,
   runtime: CliRuntime,
 ): Promise<number> {
+  const handle = createContentStudioServer(createApplicationOptions(project, campaign, options, runtime))
+  const port = parsePort(options.get('port'))
+  try {
+    await listenServer(handle.server, port)
+    const address = handle.server.address()
+    if (address === null || typeof address === 'string')
+      throw new Error('Content Studio runtime did not expose a TCP address')
+    runtime.write(
+      `Content Studio runtime listening at http://127.0.0.1:${address.port}`,
+    )
+    if (runtime.signal === undefined)
+      return 0
+    if (!runtime.signal.aborted) {
+      await new Promise<void>(resolveSignal =>
+        runtime.signal?.addEventListener('abort', () => resolveSignal(), { once: true }),
+      )
+    }
+    return 130
+  }
+  finally {
+    await handle.close()
+  }
+}
+
+async function runMcp(
+  project: ProjectManifest,
+  campaign: CampaignSpec | undefined,
+  options: Map<string, string>,
+  runtime: CliRuntime,
+): Promise<number> {
+  const handle = createContentStudioApplication(
+    createApplicationOptions(project, campaign, options, runtime),
+  )
+  try {
+    await serveMcpStdio(
+      createContentStudioMcpServer({
+        projectId: project.projectId,
+        service: handle.service,
+      }),
+      {
+        input: runtime.input ?? process.stdin,
+        output: runtime.output ?? process.stdout,
+        ...(runtime.signal === undefined ? {} : { signal: runtime.signal }),
+      },
+    )
+    return runtime.signal?.aborted === true ? 130 : 0
+  }
+  finally {
+    handle.close()
+  }
+}
+
+function createApplicationOptions(
+  project: ProjectManifest,
+  campaign: CampaignSpec | undefined,
+  options: Map<string, string>,
+  runtime: CliRuntime,
+): Parameters<typeof createContentStudioServer>[0] {
   const snapshot: ProjectSnapshot = {
     manifest: project,
     projectId: project.projectId,
@@ -244,7 +334,7 @@ async function runServe(
         enabled: true,
         projectId: project.projectId,
       }))
-  const handle = createContentStudioServer({
+  return {
     databasePath: resolve(
       runtime.cwd,
       options.get('db') ?? '.content-studio/content-studio.sqlite',
@@ -252,27 +342,6 @@ async function runServe(
     project: projectRecord,
     projectChannelBindings,
     snapshot,
-  })
-  const port = parsePort(options.get('port'))
-  try {
-    await listenServer(handle.server, port)
-    const address = handle.server.address()
-    if (address === null || typeof address === 'string')
-      throw new Error('Content Studio runtime did not expose a TCP address')
-    runtime.write(
-      `Content Studio runtime listening at http://127.0.0.1:${address.port}`,
-    )
-    if (runtime.signal === undefined)
-      return 0
-    if (!runtime.signal.aborted) {
-      await new Promise<void>(resolveSignal =>
-        runtime.signal?.addEventListener('abort', () => resolveSignal(), { once: true }),
-      )
-    }
-    return 130
-  }
-  finally {
-    await handle.close()
   }
 }
 

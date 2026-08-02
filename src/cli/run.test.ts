@@ -2,6 +2,7 @@ import { access, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
+import { Readable, Writable } from 'node:stream'
 import { describe, expect, it } from 'vitest'
 import { runCli } from './run'
 
@@ -178,6 +179,60 @@ describe('content-studio CLI', () => {
         ),
       ).resolves.toBe(130)
       expect(messages[0]).toMatch(/Content Studio runtime listening at http:\/\/127\.0\.0\.1:\d+/)
+    }
+    finally {
+      await rm(temporaryDirectory, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
+
+  it('starts the local MCP stdio runtime with an explicit project scope', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
+    const projectPath = join(temporaryDirectory, 'project.json')
+    const campaignPath = join(temporaryDirectory, 'campaign.json')
+    const output: string[] = []
+    const controller = new AbortController()
+    const outputStream = new Writable({
+      write(chunk, _encoding, callback) {
+        output.push(String(chunk))
+        callback()
+      },
+    })
+
+    try {
+      await writeFile(projectPath, JSON.stringify(project), 'utf8')
+      await writeFile(campaignPath, JSON.stringify(campaign), 'utf8')
+      await expect(
+        runCli(
+          [
+            'mcp',
+            '--stdio',
+            '--project',
+            projectPath,
+            '--campaign',
+            campaignPath,
+            '--db',
+            join(temporaryDirectory, 'state.sqlite'),
+          ],
+          {
+            cwd: temporaryDirectory,
+            input: Readable.from([
+              `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'server/discover' })}\n`,
+            ]),
+            output: outputStream,
+            signal: controller.signal,
+            write: () => undefined,
+          },
+        ),
+      ).resolves.toBe(0)
+      expect(JSON.parse(output[0]!)).toMatchObject({
+        result: {
+          projectId: 'algorithm-visualizer',
+          protocolVersion: '2026-07-28',
+        },
+      })
     }
     finally {
       await rm(temporaryDirectory, {

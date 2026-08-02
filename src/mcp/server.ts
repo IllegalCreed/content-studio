@@ -1,0 +1,704 @@
+// @env node
+
+import type { ContentStudioApplicationService } from '../control-plane/service'
+import type {
+  ExecutionTask,
+} from '../types'
+import { createInterface } from 'node:readline'
+import {
+  ProjectScopeError,
+  RecordConflictError,
+  RecordNotFoundError,
+} from '../control-plane/service'
+import {
+  parseCreateActivityInput,
+  parseCreateChannelContentInput,
+  parseCreateContentGroupInput,
+} from '../runtime/server'
+import { assertNoSensitiveKeys } from '../validation'
+
+const PROTOCOL_VERSION = '2026-07-28'
+const IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+const PROJECT_URI_PATTERN = /^content-studio:\/\/projects\/([^/]+)\/(view|activities|content|tasks)$/
+
+export interface McpJsonRpcRequest {
+  jsonrpc: '2.0'
+  id?: string | number | null
+  method: string
+  params?: unknown
+}
+
+export interface McpJsonRpcResponse {
+  jsonrpc: '2.0'
+  id: string | number | null
+  result?: unknown
+  error?: {
+    code: number
+    message: string
+    data?: unknown
+  }
+}
+
+export interface ContentStudioMcpServerOptions {
+  projectId: string
+  service: ContentStudioApplicationService
+}
+
+export interface ContentStudioMcpServer {
+  handleMessage: (
+    message: unknown,
+  ) => Promise<McpJsonRpcResponse | undefined>
+}
+
+export interface McpStdioStreams {
+  input: NodeJS.ReadableStream
+  output: NodeJS.WritableStream
+  signal?: AbortSignal
+}
+
+export function createContentStudioMcpServer(
+  options: ContentStudioMcpServerOptions,
+): ContentStudioMcpServer {
+  return {
+    handleMessage: async (message) => {
+      const request = parseRequest(message)
+      if (request === undefined)
+        return protocolError(null, -32600, 'Invalid Request')
+      if (request.id === undefined)
+        return undefined
+
+      try {
+        return await dispatchRequest(request, options)
+      }
+      catch (error: unknown) {
+        return protocolError(
+          request.id,
+          errorCode(error),
+          error instanceof Error ? error.message : 'Request failed',
+        )
+      }
+    },
+  }
+}
+
+export async function serveMcpStdio(
+  server: ContentStudioMcpServer,
+  streams: McpStdioStreams,
+): Promise<void> {
+  const readline = createInterface({
+    crlfDelay: Infinity,
+    input: streams.input,
+  })
+  const onAbort = (): void => readline.close()
+  streams.signal?.addEventListener('abort', onAbort, { once: true })
+  try {
+    if (streams.signal?.aborted)
+      return
+    for await (const line of readline) {
+      if (streams.signal?.aborted)
+        break
+      if (line.trim() === '')
+        continue
+      let message: unknown
+      try {
+        message = JSON.parse(line) as unknown
+      }
+      catch {
+        await writeLine(streams.output, JSON.stringify(protocolError(null, -32700, 'Parse error')))
+        continue
+      }
+      const response = await server.handleMessage(message)
+      if (response !== undefined)
+        await writeLine(streams.output, JSON.stringify(response))
+    }
+  }
+  finally {
+    streams.signal?.removeEventListener('abort', onAbort)
+    readline.close()
+  }
+}
+
+async function dispatchRequest(
+  request: McpJsonRpcRequest,
+  options: ContentStudioMcpServerOptions,
+): Promise<McpJsonRpcResponse> {
+  switch (request.method) {
+    case 'server/discover':
+      return success(request.id!, {
+        capabilities: {
+          resources: {},
+          tools: {},
+        },
+        projectId: options.projectId,
+        protocolVersion: PROTOCOL_VERSION,
+        serverInfo: {
+          name: 'content-studio',
+          version: '0.1.0',
+        },
+        state: {
+          mode: 'local',
+          scope: 'project',
+        },
+      })
+    case 'resources/list':
+      return success(request.id!, {
+        resources: projectResources(options.projectId),
+      })
+    case 'resources/read':
+      return success(request.id!, readResource(request.params, options))
+    case 'tools/list':
+      return success(request.id!, { tools: toolDefinitions() })
+    case 'tools/call':
+      return toolCall(request.id!, request.params, options)
+    default:
+      return protocolError(request.id!, -32601, `Method not found: ${request.method}`)
+  }
+}
+
+function projectResources(projectId: string): Array<Record<string, string>> {
+  return [
+    resource(
+      `content-studio://projects/${projectId}/view`,
+      '项目工作视图',
+      '项目事实、活动、渠道内容、素材和任务的只读快照。',
+    ),
+    resource(
+      `content-studio://projects/${projectId}/activities`,
+      '发布活动',
+      '项目下发布活动的只读列表。',
+    ),
+    resource(
+      `content-studio://projects/${projectId}/content`,
+      '活动内容',
+      '项目下内容组和渠道内容的只读列表。',
+    ),
+    resource(
+      `content-studio://projects/${projectId}/tasks`,
+      '执行任务',
+      '项目下制作、发布和监测任务的只读列表。',
+    ),
+  ]
+}
+
+function resource(
+  uri: string,
+  name: string,
+  description: string,
+): Record<string, string> {
+  return {
+    description,
+    mimeType: 'application/json',
+    name,
+    uri,
+  }
+}
+
+function readResource(
+  params: unknown,
+  options: ContentStudioMcpServerOptions,
+): { contents: Array<Record<string, string>> } {
+  const value = asRecord(params, 'resources/read params')
+  assertKeys(value, ['uri'], 'resources/read params')
+  const uri = stringField(value.uri, 'uri')
+  const match = PROJECT_URI_PATTERN.exec(uri)
+  if (match === null || decodeURIComponent(match[1]!) !== options.projectId)
+    throw new McpResourceError(`Resource is outside project ${options.projectId}`)
+  const view = options.service.getProjectView(options.projectId)
+  const kind = match[2]
+  const payload = kind === 'view'
+    ? view
+    : kind === 'activities'
+      ? view.activities
+      : kind === 'content'
+        ? {
+            channelContents: view.channelContents,
+            contentGroups: view.contentGroups,
+          }
+        : {
+            taskEvents: view.taskEvents,
+            tasks: view.tasks,
+          }
+  return {
+    contents: [{
+      mimeType: 'application/json',
+      text: JSON.stringify(payload),
+      uri,
+    }],
+  }
+}
+
+function toolDefinitions(): Array<Record<string, unknown>> {
+  return [
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: true,
+      },
+      description: '读取当前项目的事实、活动、内容、素材和任务快照。不会执行外部发布。',
+      inputSchema: projectIdSchema(),
+      name: 'get_project_view',
+      title: '读取项目工作视图',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: false,
+      },
+      description: '在指定项目中创建发布活动，并创建一条可观察的制作任务。',
+      inputSchema: {
+        properties: {
+          activityId: { type: 'string' },
+          campaignId: { type: 'string' },
+          channels: {
+            items: {
+              properties: {
+                id: { type: 'string' },
+                locale: { enum: ['en', 'zh-CN'], type: 'string' },
+              },
+              required: ['id', 'locale'],
+              type: 'object',
+            },
+            minItems: 1,
+            type: 'array',
+          },
+          goal: { enum: ['education', 'feedback', 'launch'], type: 'string' },
+          projectId: { type: 'string' },
+          projectSnapshotId: { type: 'string' },
+          status: {
+            enum: ['active', 'archived', 'completed', 'draft', 'planned'],
+            type: 'string',
+          },
+          targetUrl: { format: 'uri', type: 'string' },
+          topic: {
+            properties: {
+              'en': { type: 'string' },
+              'zh-CN': { type: 'string' },
+            },
+            required: ['en', 'zh-CN'],
+            type: 'object',
+          },
+        },
+        required: [
+          'activityId',
+          'campaignId',
+          'channels',
+          'goal',
+          'projectId',
+          'projectSnapshotId',
+          'status',
+          'targetUrl',
+          'topic',
+        ],
+        type: 'object',
+      },
+      name: 'create_publishing_activity',
+      title: '创建发布活动',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: false,
+      },
+      description: '在发布活动中保存一次主题内容组。',
+      inputSchema: contentGroupSchema(),
+      name: 'create_content_group',
+      title: '创建内容组',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: false,
+      },
+      description: '保存某个渠道的文章或视频内容版本，不会发布到渠道。',
+      inputSchema: channelContentSchema(),
+      name: 'save_channel_content',
+      title: '保存渠道内容',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: true,
+      },
+      description: '列出项目下的制作、发布和监测任务。',
+      inputSchema: projectIdSchema(),
+      name: 'list_project_tasks',
+      title: '列出项目任务',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: true,
+      },
+      description: '读取项目中一条任务及其追加式事件。',
+      inputSchema: {
+        properties: {
+          projectId: { type: 'string' },
+          taskId: { type: 'string' },
+        },
+        required: ['projectId', 'taskId'],
+        type: 'object',
+      },
+      name: 'get_task',
+      title: '读取任务',
+    },
+    {
+      annotations: {
+        destructiveHint: true,
+        openWorldHint: false,
+        readOnlyHint: false,
+      },
+      description: '请求取消项目中的当前任务尝试。不会删除任务或外部渠道内容。',
+      inputSchema: taskSchema(),
+      name: 'cancel_task',
+      title: '取消任务',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: false,
+      },
+      description: '为失败或已取消的任务创建新的尝试并保留旧事件。',
+      inputSchema: taskSchema(),
+      name: 'retry_task',
+      title: '重试任务',
+    },
+  ]
+}
+
+function projectIdSchema(): Record<string, unknown> {
+  return {
+    properties: {
+      projectId: { type: 'string' },
+    },
+    required: ['projectId'],
+    type: 'object',
+  }
+}
+
+function contentGroupSchema(): Record<string, unknown> {
+  return {
+    properties: {
+      activityId: { type: 'string' },
+      contentGroupId: { type: 'string' },
+      coreMessage: { type: 'string' },
+      projectId: { type: 'string' },
+      title: { type: 'string' },
+    },
+    required: ['activityId', 'contentGroupId', 'coreMessage', 'projectId', 'title'],
+    type: 'object',
+  }
+}
+
+function channelContentSchema(): Record<string, unknown> {
+  return {
+    properties: {
+      activityId: { type: 'string' },
+      body: { type: 'string' },
+      channel: { type: 'string' },
+      contentGroupId: { type: 'string' },
+      contentId: { type: 'string' },
+      format: { enum: ['article', 'video'], type: 'string' },
+      locale: { enum: ['en', 'zh-CN'], type: 'string' },
+      projectId: { type: 'string' },
+      title: { type: 'string' },
+    },
+    required: [
+      'activityId',
+      'body',
+      'channel',
+      'contentGroupId',
+      'contentId',
+      'format',
+      'locale',
+      'projectId',
+      'title',
+    ],
+    type: 'object',
+  }
+}
+
+function taskSchema(): Record<string, unknown> {
+  return {
+    properties: {
+      projectId: { type: 'string' },
+      taskId: { type: 'string' },
+    },
+    required: ['projectId', 'taskId'],
+    type: 'object',
+  }
+}
+
+function toolCall(
+  id: string | number,
+  params: unknown,
+  options: ContentStudioMcpServerOptions,
+): McpJsonRpcResponse {
+  try {
+    const value = asRecord(params, 'tools/call params')
+    assertKeys(value, ['arguments', 'name'], 'tools/call params')
+    const name = stringField(value.name, 'name')
+    const input = value.arguments ?? {}
+    assertNoSensitiveKeys(input)
+    const result = executeTool(name, input, options)
+    return success(id, toolResult(result))
+  }
+  catch (error: unknown) {
+    return success(id, {
+      content: [{
+        text: error instanceof Error ? error.message : 'Tool execution failed',
+        type: 'text',
+      }],
+      isError: true,
+    })
+  }
+}
+
+function executeTool(
+  name: string,
+  input: unknown,
+  options: ContentStudioMcpServerOptions,
+): unknown {
+  switch (name) {
+    case 'get_project_view': {
+      const value = scopedRecord(input, options.projectId, ['projectId'])
+      return options.service.getProjectView(value.projectId)
+    }
+    case 'create_publishing_activity': {
+      const value = asRecord(input, 'activity')
+      assertKeys(value, [
+        'activityId',
+        'campaignId',
+        'channels',
+        'goal',
+        'projectId',
+        'projectSnapshotId',
+        'status',
+        'targetUrl',
+        'topic',
+      ], 'activity')
+      const activity = parseCreateActivityInput(input, options.projectId)
+      return options.service.createActivity(activity)
+    }
+    case 'create_content_group': {
+      const value = asRecord(input, 'contentGroup')
+      assertKeys(value, [
+        'activityId',
+        'contentGroupId',
+        'coreMessage',
+        'projectId',
+        'title',
+      ], 'contentGroup')
+      const projectId = scopedId(value.projectId, options.projectId, 'projectId')
+      const activityId = identifierField(value.activityId, 'activityId')
+      return options.service.createContentGroup(
+        parseCreateContentGroupInput(value, projectId, activityId),
+      )
+    }
+    case 'save_channel_content': {
+      const value = asRecord(input, 'channelContent')
+      assertKeys(value, [
+        'activityId',
+        'body',
+        'channel',
+        'contentGroupId',
+        'contentId',
+        'format',
+        'locale',
+        'projectId',
+        'title',
+      ], 'channelContent')
+      const projectId = scopedId(value.projectId, options.projectId, 'projectId')
+      const activityId = identifierField(value.activityId, 'activityId')
+      const contentGroupId = identifierField(value.contentGroupId, 'contentGroupId')
+      return options.service.createChannelContent(
+        parseCreateChannelContentInput(value, projectId, activityId, contentGroupId),
+      )
+    }
+    case 'list_project_tasks': {
+      const value = scopedRecord(input, options.projectId, ['projectId'])
+      return options.service.getProjectView(value.projectId).tasks
+    }
+    case 'get_task':
+      return getTask(input, options)
+    case 'cancel_task':
+      return changeTask(input, options, 'cancel')
+    case 'retry_task':
+      return changeTask(input, options, 'retry')
+    default:
+      throw new McpToolError(`Unknown tool: ${name}`)
+  }
+}
+
+function getTask(
+  input: unknown,
+  options: ContentStudioMcpServerOptions,
+): { events: ReturnType<ContentStudioApplicationService['listTaskEvents']>, task: ExecutionTask } {
+  const value = scopedRecord(input, options.projectId, ['projectId', 'taskId'])
+  const taskId = identifierField(value.taskId, 'taskId')
+  const view = options.service.getProjectView(value.projectId)
+  const task = view.tasks.find(candidate => candidate.taskId === taskId)
+  if (task === undefined)
+    throw new RecordNotFoundError('Task', taskId)
+  return {
+    events: options.service.listTaskEvents(value.projectId, taskId),
+    task,
+  }
+}
+
+function changeTask(
+  input: unknown,
+  options: ContentStudioMcpServerOptions,
+  operation: 'cancel' | 'retry',
+): ExecutionTask {
+  const value = scopedRecord(input, options.projectId, ['projectId', 'taskId'])
+  const taskId = identifierField(value.taskId, 'taskId')
+  return operation === 'cancel'
+    ? options.service.cancelTask(value.projectId, taskId)
+    : options.service.retryTask(value.projectId, taskId)
+}
+
+function toolResult(value: unknown): Record<string, unknown> {
+  return {
+    content: [{
+      text: JSON.stringify(value),
+      type: 'text',
+    }],
+    isError: false,
+    structuredContent: value,
+  }
+}
+
+function scopedRecord(
+  input: unknown,
+  projectId: string,
+  keys: string[],
+): Record<string, any> {
+  const value = asRecord(input, 'tool arguments')
+  assertKeys(value, keys, 'tool arguments')
+  for (const key of keys) {
+    if (key === 'projectId')
+      scopedId(value[key], projectId, key)
+    else
+      identifierField(value[key], key)
+  }
+  return value
+}
+
+function assertKeys(
+  value: Record<string, unknown>,
+  allowedKeys: readonly string[],
+  name: string,
+): void {
+  const allowed = new Set(allowedKeys)
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key))
+      throw new McpToolError(`${name} contains unsupported field: ${key}`)
+  }
+}
+
+function scopedId(input: unknown, expected: string, name: string): string {
+  const value = identifierField(input, name)
+  if (value !== expected)
+    throw new ProjectScopeError(expected, value)
+  return value
+}
+
+function parseRequest(input: unknown): McpJsonRpcRequest | undefined {
+  if (typeof input !== 'object' || input === null || Array.isArray(input))
+    return undefined
+  const value = input as Record<string, unknown>
+  if (value.jsonrpc !== '2.0' || typeof value.method !== 'string')
+    return undefined
+  if (
+    value.id !== undefined
+    && value.id !== null
+    && typeof value.id !== 'string'
+    && typeof value.id !== 'number'
+  ) {
+    return undefined
+  }
+  return value as unknown as McpJsonRpcRequest
+}
+
+function asRecord(input: unknown, name: string): Record<string, any> {
+  if (typeof input !== 'object' || input === null || Array.isArray(input))
+    throw new McpToolError(`${name} must be an object`)
+  return input as Record<string, any>
+}
+
+function stringField(input: unknown, name: string): string {
+  if (typeof input !== 'string' || input.trim() === '')
+    throw new McpToolError(`${name} must be a non-empty string`)
+  return input.trim()
+}
+
+function identifierField(input: unknown, name: string): string {
+  const value = stringField(input, name)
+  if (!IDENTIFIER_PATTERN.test(value))
+    throw new McpToolError(`${name} must use lowercase kebab-case`)
+  return value
+}
+
+function success(id: string | number, result: unknown): McpJsonRpcResponse {
+  return {
+    id,
+    jsonrpc: '2.0',
+    result,
+  }
+}
+
+function protocolError(
+  id: string | number | null,
+  code: number,
+  message: string,
+  data?: unknown,
+): McpJsonRpcResponse {
+  return {
+    error: {
+      ...(data === undefined ? {} : { data }),
+      code,
+      message,
+    },
+    id,
+    jsonrpc: '2.0',
+  }
+}
+
+function errorCode(error: unknown): number {
+  if (error instanceof McpResourceError)
+    return -32003
+  if (error instanceof ProjectScopeError)
+    return -32003
+  if (error instanceof RecordNotFoundError)
+    return -32002
+  if (error instanceof RecordConflictError)
+    return -32009
+  return -32602
+}
+
+function writeLine(output: NodeJS.WritableStream, line: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    output.write(`${line}\n`, error => error == null ? resolve() : reject(error))
+  })
+}
+
+class McpToolError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'McpToolError'
+  }
+}
+
+class McpResourceError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'McpResourceError'
+  }
+}

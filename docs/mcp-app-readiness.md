@@ -191,7 +191,8 @@ get_content_studio_task(taskId)
 
 - [ ] 部署公网生产 MCP URL，不使用本地或测试 endpoint 提交。
 - [ ] 完成域名验证、TLS、健康检查、限流和审计。
-- [ ] 实现 `server/discover` 和 `2026-07-28` 无状态请求路径。
+- [ ] 实现公共服务的 `server/discover` 和 `2026-07-28` 无状态请求路径。
+      本地 `content-studio mcp --stdio` 已完成第一条项目范围切片，公共入口仍待实现。
 - [ ] 工具名、描述、输入/输出 schema 和实际行为一致。
 - [ ] 为每个工具准确标注 `readOnlyHint`、`openWorldHint` 和
       `destructiveHint`。
@@ -203,7 +204,7 @@ get_content_studio_task(taskId)
 
 - [ ] 发布可验证、版本化、默认不要求 root 的安装器。
 - [ ] 提供下载后检查再执行的替代安装路径。
-- [ ] 本地 MCP 只使用 `stdio` 或绑定 `127.0.0.1`。
+- [x] 本地 MCP 只使用 `stdio` 或绑定 `127.0.0.1`；当前实现为 `stdio`。
 - [ ] `content-studio doctor` 检查 core、工作台、Worker 和
       `marketing-ops` 的版本与健康。
 - [ ] `marketing-ops` 随安装器交付但保持独立存储和授权边界。

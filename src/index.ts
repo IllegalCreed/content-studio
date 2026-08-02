@@ -24,6 +24,15 @@ export {
   TaskScopeError,
   TaskStateError,
 } from './jobs/task'
+export {
+  type ContentStudioMcpServer,
+  type ContentStudioMcpServerOptions,
+  createContentStudioMcpServer,
+  type McpJsonRpcRequest,
+  type McpJsonRpcResponse,
+  type McpStdioStreams,
+  serveMcpStdio,
+} from './mcp/server'
 export { writeStudioBundle } from './output/write'
 export {
   createRecorderArtifact,
@@ -48,6 +57,7 @@ export {
 export {
   type ContentStudioServerHandle,
   type ContentStudioServerOptions,
+  createContentStudioApplication,
   createContentStudioServer,
 } from './runtime/server'
 export type * from './types'
