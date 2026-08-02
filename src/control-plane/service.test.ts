@@ -170,6 +170,21 @@ describe('content studio application service', () => {
           projectId: 'project-a',
         },
       ],
+      taskEvents: {
+        [`production-${activity.activityId}`]: [
+          {
+            attempt: 1,
+            eventId: `production-${activity.activityId}:1`,
+            kind: 'task-created',
+            message: 'Task created',
+            projectId: 'project-a',
+            sequence: 1,
+            status: 'queued',
+            taskId: `production-${activity.activityId}`,
+            schemaVersion: 1,
+          },
+        ],
+      },
       snapshot,
       tasks: [
         {
@@ -183,6 +198,26 @@ describe('content studio application service', () => {
         },
       ],
     })
+  })
+
+  it('cancels and retries only the project task through the application service', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'project-a')
+    enableYouTube(service, 'project-a')
+    const activity = createActivity(service)
+    const taskId = `production-${activity.activityId}`
+
+    expect(service.cancelTask('project-a', taskId)).toMatchObject({
+      attempt: 1,
+      status: 'cancelled',
+    })
+    expect(service.retryTask('project-a', taskId)).toMatchObject({
+      attempt: 2,
+      status: 'queued',
+    })
+    expect(service.listTaskEvents('project-a', taskId).map(event => event.kind))
+      .toEqual(['task-created', 'attempt-cancelled', 'attempt-retried'])
   })
 
   it('keeps activity artifacts out of the project asset library until explicit promotion', () => {

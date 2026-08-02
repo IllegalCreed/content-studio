@@ -978,6 +978,36 @@ button:disabled {
   line-height: 1.6;
 }
 
+.task-events {
+  margin-top: 1.25rem;
+  padding: 0.8rem;
+  border: 1px dashed var(--stroke);
+  background: rgb(0 0 0 / 12%);
+}
+
+.task-events ol {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.6rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.task-events li {
+  display: grid;
+  gap: 0.15rem;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+}
+
+.task-events li span {
+  color: var(--acid);
+}
+
+.task-action-error {
+  color: #ffad9c;
+}
+
 .task-detail-meta {
   display: flex;
   flex-wrap: wrap;

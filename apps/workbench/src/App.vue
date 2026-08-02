@@ -11,6 +11,7 @@ import type {
   ChannelId,
   CreatePublishingActivityInput,
   ExecutionTask,
+  ExecutionTaskEvent,
   PublishingActivity,
 } from '@content-studio/core-types'
 import {
@@ -124,6 +125,9 @@ const currentSnapshotId = ref(`${snapshot.project.projectId}-snapshot-1`)
 const activityComposerOpen = ref(false)
 const activitySaving = ref(false)
 const activitySaveError = ref<string | null>(null)
+const runtimeTaskIds = ref<Set<string>>(new Set())
+const taskActionError = ref<string | null>(null)
+const taskActionPending = ref<'cancel' | 'retry' | null>(null)
 const activityForm = reactive<{
   channel: ChannelId
   topic: string
@@ -146,6 +150,22 @@ const selectedCampaign = computed(() =>
 const selectedTask = computed(() =>
   snapshot.tasks.find(task => task.taskId === selectedTaskId.value)
   ?? snapshot.tasks[0]!,
+)
+
+const selectedTaskIsRuntime = computed(() =>
+  runtimeTaskIds.value.has(selectedTask.value.taskId),
+)
+
+const canCancelSelectedTask = computed(() =>
+  selectedTaskIsRuntime.value
+  && snapshot.runtimeConnected
+  && ['awaiting-owner', 'composing', 'generating', 'queued', 'recording'].includes(selectedTask.value.status),
+)
+
+const canRetrySelectedTask = computed(() =>
+  selectedTaskIsRuntime.value
+  && snapshot.runtimeConnected
+  && ['cancelled', 'failed'].includes(selectedTask.value.status),
 )
 
 const selectedAsset = computed(() =>
@@ -261,6 +281,34 @@ function setTaskScope(scope: '全部项目' | '当前项目'): void {
   activeTaskScope.value = scope
 }
 
+async function cancelSelectedTask(): Promise<void> {
+  await changeSelectedTask('cancel')
+}
+
+async function retrySelectedTask(): Promise<void> {
+  await changeSelectedTask('retry')
+}
+
+async function changeSelectedTask(action: 'cancel' | 'retry'): Promise<void> {
+  if (taskActionPending.value !== null || !selectedTaskIsRuntime.value)
+    return
+  taskActionPending.value = action
+  taskActionError.value = null
+  try {
+    if (action === 'cancel')
+      await workbenchRuntime.cancelTask(snapshot.project.projectId, selectedTask.value.taskId)
+    else
+      await workbenchRuntime.retryTask(snapshot.project.projectId, selectedTask.value.taskId)
+    await refreshProjectView()
+  }
+  catch (error: unknown) {
+    taskActionError.value = error instanceof Error ? error.message : '任务操作失败'
+  }
+  finally {
+    taskActionPending.value = null
+  }
+}
+
 function selectChannel(channelId: ChannelId): void {
   selectedChannelId.value = channelId
   selectedChannelAccountId.value = snapshot.channels.find(channel => channel.channel === channelId)?.defaultAccountId ?? null
@@ -348,7 +396,10 @@ function activityToCampaign(activity: PublishingActivity): CampaignProjection {
   }
 }
 
-function taskToProjection(task: ExecutionTask): WorkbenchSnapshot['tasks'][number] {
+function taskToProjection(
+  task: ExecutionTask,
+  events: ExecutionTaskEvent[] = [],
+): WorkbenchSnapshot['tasks'][number] {
   const campaign = snapshot.campaigns.find(candidate => candidate.campaignId === task.activityId)
   const channel = campaign?.channels[0] ?? 'github'
   const account = snapshot.channels.find(candidate => candidate.channel === channel)?.alias
@@ -366,6 +417,11 @@ function taskToProjection(task: ExecutionTask): WorkbenchSnapshot['tasks'][numbe
     detail: task.status === 'queued'
       ? '任务已创建，等待 AI 生成内容和拍摄大纲。'
       : `当前阶段：${statusLabel}`,
+    events: events.map(event => ({
+      kind: event.kind,
+      message: event.message,
+      sequence: event.sequence,
+    })),
     kind: task.kind === 'production'
       ? '制作'
       : task.kind === 'publication'
@@ -446,13 +502,20 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
         ),
       ),
     ]
-    const runtimeTasks = projectView.tasks.map(taskToProjection)
+    runtimeTaskIds.value = new Set(projectView.tasks.map(task => task.taskId))
+    const runtimeTasks = projectView.tasks.map(task =>
+      taskToProjection(task, projectView.taskEvents[task.taskId] ?? []),
+    )
     snapshot.tasks = [
       ...runtimeTasks,
       ...snapshot.tasks.filter(task =>
         !runtimeTasks.some(runtimeTask => runtimeTask.taskId === task.taskId),
       ),
     ]
+}
+
+async function refreshProjectView(): Promise<void> {
+  applyProjectView(await workbenchRuntime.project(snapshot.project.projectId))
 }
 </script>
 
@@ -954,13 +1017,42 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
                 <span>任务编号 <code>{{ selectedTask.taskId }}</code></span>
                 <span>所属活动 <code>{{ selectedTask.activityId }}</code></span>
               </div>
+              <div v-if="selectedTask.events.length > 0" class="task-events">
+                <p class="eyebrow">运行事件</p>
+                <ol>
+                  <li v-for="event in selectedTask.events" :key="`${selectedTask.taskId}-${event.sequence}`">
+                    <span>第 {{ event.sequence }} 条 · {{ event.kind }}</span>
+                    <small>{{ event.message }}</small>
+                  </li>
+                </ol>
+              </div>
               <div v-if="selectedTask.status === 'awaiting-owner'" class="task-handoff-inline">
                 <div><p class="eyebrow">需要人工介入</p><strong>{{ selectedTaskCampaign.handoffs[0]?.reason ?? '请完成官方页面确认' }}</strong></div>
                 <span>不会保存凭据</span>
               </div>
               <div class="job-actions">
-                <p class="runtime-status">当前只读展示，操作需等本地运行时连接</p>
-                <div><button type="button" disabled>取消</button><button type="button" class="primary-button" disabled>重试</button></div>
+                <p class="runtime-status">
+                  <span v-if="taskActionError" class="task-action-error">{{ taskActionError }}</span>
+                  <span v-else-if="!selectedTaskIsRuntime">演示任务不可操作</span>
+                  <span v-else>操作会写入本地任务事件，不会触发渠道发布</span>
+                </p>
+                <div>
+                  <button
+                    type="button"
+                    :disabled="!canCancelSelectedTask || taskActionPending !== null"
+                    @click="cancelSelectedTask"
+                  >
+                    {{ taskActionPending === 'cancel' ? '取消中…' : '取消当前尝试' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="primary-button"
+                    :disabled="!canRetrySelectedTask || taskActionPending !== null"
+                    @click="retrySelectedTask"
+                  >
+                    {{ taskActionPending === 'retry' ? '重试中…' : '新建重试尝试' }}
+                  </button>
+                </div>
               </div>
             </article>
           </div>

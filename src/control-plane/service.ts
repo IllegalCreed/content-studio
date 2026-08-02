@@ -9,6 +9,8 @@ import type {
   CreateChannelContentInput,
   CreateContentGroupInput,
   CreatePublishingActivityInput,
+  ExecutionTask,
+  ExecutionTaskEvent,
   ExecutionTaskStore,
   MonitoringObservation,
   OwnerHandoff,
@@ -475,13 +477,18 @@ export class ContentStudioApplicationService {
       this.repository.listActivities(projectId),
       activity => activity.activityId,
     )
+    const tasks = this.taskStore.listTasks(projectId)
     return {
       activities,
       project,
       projectAssets: this.repository.listProjectAssets(projectId),
       projectChannelBindings: this.repository.listProjectChannelBindings(projectId),
       snapshot,
-      tasks: this.taskStore.listTasks(projectId),
+      taskEvents: Object.fromEntries(tasks.map(task => [
+        task.taskId,
+        this.taskStore.listEvents(projectId, task.taskId),
+      ])),
+      tasks,
     }
   }
 
@@ -523,6 +530,21 @@ export class ContentStudioApplicationService {
       taskId: `production-${activity.activityId}`,
     })
     return activity
+  }
+
+  cancelTask(projectId: string, taskId: string): ExecutionTask {
+    this.requireProject(projectId)
+    return this.taskStore.cancelTask(projectId, taskId)
+  }
+
+  retryTask(projectId: string, taskId: string): ExecutionTask {
+    this.requireProject(projectId)
+    return this.taskStore.retryTask(projectId, taskId)
+  }
+
+  listTaskEvents(projectId: string, taskId: string): ExecutionTaskEvent[] {
+    this.requireProject(projectId)
+    return this.taskStore.listEvents(projectId, taskId)
   }
 
   reviseActivity(input: ActivityRevisionInput): PublishingActivity {

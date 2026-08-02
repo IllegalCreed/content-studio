@@ -145,6 +145,7 @@ export interface ContentStudioProjectView {
   projectChannelBindings: ProjectChannelBinding[]
   snapshot: ProjectSnapshot
   tasks: ExecutionTask[]
+  taskEvents: Record<string, ExecutionTaskEvent[]>
 }
 
 export interface ProjectChannelBinding {

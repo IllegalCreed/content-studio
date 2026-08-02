@@ -106,6 +106,11 @@ export interface TaskProjection {
   channel: ChannelId
   contentTitle: string
   detail: string
+  events: Array<{
+    kind: string
+    message: string
+    sequence: number
+  }>
   kind: '制作' | '发布' | '监测'
   progress?: number
   status: CampaignJobStatus
@@ -787,6 +792,7 @@ export const snapshot: WorkbenchSnapshot = {
       channel: 'bilibili',
       contentTitle: '快速排序演示视频',
       detail: '7 / 12 个动作已完成 · 预览帧已生成',
+      events: [],
       kind: '制作',
       progress: 58,
       status: 'recording',
@@ -808,6 +814,7 @@ export const snapshot: WorkbenchSnapshot = {
       channel: 'x',
       contentTitle: 'Version update overview',
       detail: '等待渠道授权人登录、审核和最终点击',
+      events: [],
       kind: '发布',
       status: 'awaiting-owner',
       steps: [
@@ -826,6 +833,7 @@ export const snapshot: WorkbenchSnapshot = {
       channel: 'bilibili',
       contentTitle: '快速排序演示视频',
       detail: '发布后 1 小时采集播放量、点赞和评论',
+      events: [],
       kind: '监测',
       status: 'monitoring',
       steps: [

@@ -1,6 +1,8 @@
 import type {
   ContentStudioProjectView,
   CreatePublishingActivityInput,
+  ExecutionTask,
+  ExecutionTaskEvent,
   PublishingActivity,
 } from '@content-studio/core-types'
 
@@ -11,9 +13,12 @@ export interface RuntimeHealth {
 }
 
 export interface WorkbenchRuntime {
+  cancelTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
   createActivity: (input: CreatePublishingActivityInput) => Promise<PublishingActivity>
   health: () => Promise<RuntimeHealth>
   project: (projectId: string) => Promise<ContentStudioProjectView>
+  retryTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
+  taskEvents: (projectId: string, taskId: string) => Promise<ExecutionTaskEvent[]>
 }
 
 export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
@@ -33,6 +38,10 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
   }
 
   return {
+    cancelTask: (projectId, taskId) => request<ExecutionTask>(
+      `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/cancel`,
+      { method: 'POST' },
+    ),
     createActivity: input => request<PublishingActivity>(
       `/projects/${encodeURIComponent(input.projectId)}/activities`,
       {
@@ -44,6 +53,13 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
     project: projectId => request<ContentStudioProjectView>(
       `/projects/${encodeURIComponent(projectId)}`,
     ),
+    retryTask: (projectId, taskId) => request<ExecutionTask>(
+      `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/retry`,
+      { method: 'POST' },
+    ),
+    taskEvents: (projectId, taskId) => request<{ events: ExecutionTaskEvent[] }>(
+      `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/events`,
+    ).then(result => result.events),
   }
 }
 

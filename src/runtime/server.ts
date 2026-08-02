@@ -21,7 +21,12 @@ import {
 } from '../control-plane/service'
 import { SqliteContentStudioRepository } from '../control-plane/sqlite'
 import { SqliteExecutionTaskStore } from '../jobs/sqlite'
-import { InMemoryExecutionTaskStore } from '../jobs/task'
+import {
+  InMemoryExecutionTaskStore,
+  TaskNotFoundError,
+  TaskScopeError,
+  TaskStateError,
+} from '../jobs/task'
 import { assertNoSensitiveKeys } from '../validation'
 
 const MAX_BODY_BYTES = 256 * 1024
@@ -135,16 +140,52 @@ async function handleRequest(
       return
     }
 
+    if (
+      request.method === 'GET'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'tasks'
+      && segments[6] === 'events'
+    ) {
+      const projectId = decodeSegment(segments[3]!)
+      const taskId = decodeSegment(segments[5]!)
+      sendJson(response, 200, {
+        events: service.listTaskEvents(projectId, taskId),
+        taskId,
+      })
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'tasks'
+      && (segments[6] === 'cancel' || segments[6] === 'retry')
+    ) {
+      const projectId = decodeSegment(segments[3]!)
+      const taskId = decodeSegment(segments[5]!)
+      const task = segments[6] === 'cancel'
+        ? service.cancelTask(projectId, taskId)
+        : service.retryTask(projectId, taskId)
+      sendJson(response, 200, task)
+      return
+    }
+
     sendJson(response, 404, { error: 'Not found' })
   }
   catch (error: unknown) {
     const status = error instanceof RequestError
       ? error.status
-      : error instanceof RecordNotFoundError
+      : error instanceof RecordNotFoundError || error instanceof TaskNotFoundError
         ? 404
-        : error instanceof ProjectScopeError
+        : error instanceof ProjectScopeError || error instanceof TaskScopeError
           ? 403
-          : error instanceof RecordConflictError
+          : error instanceof RecordConflictError || error instanceof TaskStateError
             ? 409
             : 400
     sendJson(response, status, {

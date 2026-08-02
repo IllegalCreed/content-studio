@@ -154,6 +154,23 @@ describe('content studio local application server', () => {
           taskId: 'production-activity-a',
         }),
       ])
+      expect((await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/tasks/production-activity-a/events`,
+      ).then(response => response.json())).events).toEqual([
+        expect.objectContaining({ kind: 'task-created', sequence: 1 }),
+      ])
+      const cancelResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/tasks/production-activity-a/cancel`,
+        { method: 'POST' },
+      )
+      expect(cancelResponse.status).toBe(200)
+      expect(await cancelResponse.json()).toMatchObject({ status: 'cancelled' })
+      const retryResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/tasks/production-activity-a/retry`,
+        { method: 'POST' },
+      )
+      expect(retryResponse.status).toBe(200)
+      expect(await retryResponse.json()).toMatchObject({ attempt: 2, status: 'queued' })
 
       const conflictResponse = await fetch(
         `${running.baseUrl}/api/v1/projects/project-a/activities`,
