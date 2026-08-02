@@ -174,6 +174,8 @@ describe('content Studio local MCP server', () => {
       'create_publication_plan',
       'create_publishing_activity',
       'get_activity_video_plan',
+      'promote_activity_artifact',
+      'register_activity_artifact',
       'retry_task',
     ]))
     const createActivityTool = listedTools.find(tool => tool.name === 'create_publishing_activity')
@@ -716,6 +718,31 @@ describe('content Studio local MCP server', () => {
 
     await expect(server.handleMessage({
       jsonrpc: '2.0',
+      id: 38.1,
+      method: 'tools/call',
+      params: {
+        name: 'register_activity_artifact',
+        arguments: {
+          activityId: 'content-pack-demo',
+          artifactId: 'content-pack-cover',
+          kind: 'image',
+          projectId,
+          relativePath: '.content-studio/content-pack-demo/cover.png',
+          sha256: 'a'.repeat(64),
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          activityId: 'content-pack-demo',
+          artifactId: 'content-pack-cover',
+        },
+      },
+    })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
       id: 39,
       method: 'tools/call',
       params: {
@@ -724,6 +751,7 @@ describe('content Studio local MCP server', () => {
           activityId: 'content-pack-demo',
           contentGroupId: 'content-pack-core',
           contents: [{
+            artifactIds: ['content-pack-cover'],
             body: 'An AI-written, reviewable article draft.',
             channel: 'github',
             contentId: 'content-pack-github-en',
@@ -742,6 +770,29 @@ describe('content Studio local MCP server', () => {
         structuredContent: {
           contentGroup: { contentGroupId: 'content-pack-core' },
           contents: [{ contentId: 'content-pack-github-en' }],
+        },
+      },
+    })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 39.1,
+      method: 'tools/call',
+      params: {
+        name: 'promote_activity_artifact',
+        arguments: {
+          artifactId: 'content-pack-cover',
+          assetId: 'content-pack-cover-asset',
+          kind: 'image',
+          projectId,
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          assetId: 'content-pack-cover-asset',
+          sourceArtifactId: 'content-pack-cover',
         },
       },
     })

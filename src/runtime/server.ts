@@ -4,7 +4,9 @@ import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { ContentStudioRepository } from '../control-plane/service'
 import type { ProductionTaskDependencies } from '../jobs/production'
 import type {
+  ActivityArtifact,
   ChannelContentFormat,
+  CreateActivityArtifactInput,
   CreateChannelContentInput,
   CreateContentGroupInput,
   CreatePublishingActivityInput,
@@ -14,9 +16,11 @@ import type {
   ObservationMetric,
   ObservationSource,
   OwnerHandoff,
+  ProjectAssetKind,
   ProjectChannelBinding,
   ProjectRecord,
   ProjectSnapshot,
+  PromoteActivityArtifactInput,
   PublicationPlan,
   PublicationReceipt,
   VideoFormat,
@@ -70,6 +74,22 @@ const OBSERVATION_SOURCES = new Set<ObservationSource>([
   'authorized-adapter',
   'owner-entered',
   'public',
+])
+const ACTIVITY_ARTIFACT_KINDS = new Set<ActivityArtifact['kind']>([
+  'article-version',
+  'audio',
+  'image',
+  'preview-frame',
+  'video-clip',
+  'video',
+])
+const PROJECT_ASSET_KINDS = new Set<ProjectAssetKind>([
+  'audio',
+  'font',
+  'image',
+  'logo',
+  'template',
+  'video',
 ])
 
 export interface ContentStudioServerOptions {
@@ -306,6 +326,58 @@ async function handleRequest(
         contentGroupId,
       )
       sendJson(response, 201, service.createChannelContent(input))
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'activities'
+      && segments[6] === 'artifacts'
+    ) {
+      const projectId = identifierField(
+        decodeSegment(segments[3]!),
+        'projectId',
+      )
+      const activityId = identifierField(
+        decodeSegment(segments[5]!),
+        'activityId',
+      )
+      const input = parseCreateActivityArtifactInput(
+        await readJsonBody(request),
+        projectId,
+        activityId,
+      )
+      sendJson(response, 201, service.createActivityArtifact(input))
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'activity-artifacts'
+      && segments[6] === 'promote'
+    ) {
+      const projectId = identifierField(
+        decodeSegment(segments[3]!),
+        'projectId',
+      )
+      const artifactId = identifierField(
+        decodeSegment(segments[5]!),
+        'artifactId',
+      )
+      const input = parsePromoteActivityArtifactInput(
+        await readJsonBody(request),
+        projectId,
+        artifactId,
+      )
+      sendJson(response, 201, service.promoteActivityArtifact(input))
       return
     }
 
@@ -612,6 +684,73 @@ export function parseCreateChannelContentInput(
     locale: locale as Locale,
     projectId,
     title: stringField(value.title, 'title'),
+  }
+}
+
+export function parseCreateActivityArtifactInput(
+  input: unknown,
+  projectId: string,
+  activityId: string,
+): CreateActivityArtifactInput {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'activityArtifact')
+  const supportedKeys = new Set([
+    'activityId',
+    'artifactId',
+    'kind',
+    'projectId',
+    'relativePath',
+    'sha256',
+  ])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key))
+      throw new RequestError(400, `activityArtifact contains unsupported field: ${key}`)
+  }
+  const inputProjectId = stringField(value.projectId, 'projectId')
+  if (inputProjectId !== projectId)
+    throw new RequestError(400, 'projectId must match the URL')
+  const inputActivityId = identifierField(value.activityId, 'activityId')
+  if (inputActivityId !== activityId)
+    throw new RequestError(400, 'activityId must match the URL')
+  const kind = stringField(value.kind, 'kind')
+  if (!ACTIVITY_ARTIFACT_KINDS.has(kind as ActivityArtifact['kind']))
+    throw new RequestError(400, `Unsupported activity artifact kind: ${kind}`)
+  return {
+    activityId,
+    artifactId: identifierField(value.artifactId, 'artifactId'),
+    kind: kind as ActivityArtifact['kind'],
+    projectId,
+    relativePath: relativePathField(value.relativePath),
+    sha256: sha256Field(value.sha256),
+  }
+}
+
+export function parsePromoteActivityArtifactInput(
+  input: unknown,
+  projectId: string,
+  artifactId: string,
+): PromoteActivityArtifactInput {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'promoteActivityArtifact')
+  const supportedKeys = new Set(['artifactId', 'assetId', 'kind', 'projectId'])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key))
+      throw new RequestError(400, `promoteActivityArtifact contains unsupported field: ${key}`)
+  }
+  const inputProjectId = stringField(value.projectId, 'projectId')
+  if (inputProjectId !== projectId)
+    throw new RequestError(400, 'projectId must match the URL')
+  const inputArtifactId = identifierField(value.artifactId, 'artifactId')
+  if (inputArtifactId !== artifactId)
+    throw new RequestError(400, 'artifactId must match the URL')
+  const kind = stringField(value.kind, 'kind')
+  if (!PROJECT_ASSET_KINDS.has(kind as ProjectAssetKind))
+    throw new RequestError(400, `Unsupported project asset kind: ${kind}`)
+  return {
+    artifactId,
+    assetId: identifierField(value.assetId, 'assetId'),
+    kind: kind as ProjectAssetKind,
+    projectId,
   }
 }
 
@@ -973,6 +1112,27 @@ function stringListField(input: unknown, name: string): string[] {
   if (new Set(values).size !== values.length)
     throw new RequestError(400, `${name} must not contain duplicates`)
   return values
+}
+
+function relativePathField(input: unknown): string {
+  const value = stringField(input, 'relativePath')
+  const segments = value.split(/[\\/]/u)
+  if (
+    value.startsWith('/')
+    || /^[a-zA-Z]:[\\/]/u.test(value)
+    || segments.includes('..')
+    || value.includes('\u0000')
+  ) {
+    throw new RequestError(400, 'relativePath must stay inside the project output directory')
+  }
+  return value
+}
+
+function sha256Field(input: unknown): string {
+  const value = stringField(input, 'sha256')
+  if (!/^[a-f0-9]{64}$/u.test(value))
+    throw new RequestError(400, 'sha256 must be a lowercase 64-character hexadecimal digest')
+  return value
 }
 
 function dateTimeField(input: unknown, name: string): string {

@@ -1,12 +1,16 @@
 import type {
+  ActivityArtifact,
   ChannelContent,
   ContentGroup,
   ContentStudioProjectView,
+  CreateActivityArtifactInput,
   CreateChannelContentInput,
   CreateContentGroupInput,
   CreatePublishingActivityInput,
   ExecutionTask,
   ExecutionTaskEvent,
+  ProjectAsset,
+  PromoteActivityArtifactInput,
   PublicationPlan,
   PublishingActivity,
   RecorderAttemptReceipt,
@@ -38,9 +42,11 @@ export interface WorkbenchRuntime {
   createChannelContent: (input: CreateChannelContentInput) => Promise<ChannelContent>
   createContentGroup: (input: CreateContentGroupInput) => Promise<ContentGroup>
   createActivity: (input: CreatePublishingActivityInput) => Promise<PublishingActivity>
+  createActivityArtifact: (input: CreateActivityArtifactInput) => Promise<ActivityArtifact>
   createPublicationPlan: (input: PublicationPlan) => Promise<PublicationPlan>
   health: () => Promise<RuntimeHealth>
   project: (projectId: string) => Promise<ContentStudioProjectView>
+  promoteActivityArtifact: (input: PromoteActivityArtifactInput) => Promise<ProjectAsset>
   recordTask: (
     projectId: string,
     taskId: string,
@@ -100,6 +106,13 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
         method: 'POST',
       },
     ),
+    createActivityArtifact: input => request<ActivityArtifact>(
+      `/projects/${encodeURIComponent(input.projectId)}/activities/${encodeURIComponent(input.activityId)}/artifacts`,
+      {
+        body: JSON.stringify(input),
+        method: 'POST',
+      },
+    ),
     createPublicationPlan: input => request<PublicationPlan>(
       `/projects/${encodeURIComponent(input.projectId)}/activities/${encodeURIComponent(input.activityId)}/publication-plans`,
       {
@@ -110,6 +123,13 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
     health: () => request<RuntimeHealth>('/health'),
     project: projectId => request<ContentStudioProjectView>(
       `/projects/${encodeURIComponent(projectId)}`,
+    ),
+    promoteActivityArtifact: input => request<ProjectAsset>(
+      `/projects/${encodeURIComponent(input.projectId)}/activity-artifacts/${encodeURIComponent(input.artifactId)}/promote`,
+      {
+        body: JSON.stringify(input),
+        method: 'POST',
+      },
     ),
     recordTask: (projectId, taskId, input) => request<RecordTaskResult>(
       `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/record`,

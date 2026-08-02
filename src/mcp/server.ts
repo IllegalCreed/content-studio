@@ -19,11 +19,13 @@ import {
   TaskStateError,
 } from '../jobs/task'
 import {
+  parseCreateActivityArtifactInput,
   parseCreateActivityInput,
   parseCreateChannelContentInput,
   parseCreateContentGroupInput,
   parseCreateOwnerHandoffInput,
   parseCreatePublicationPlanInput,
+  parsePromoteActivityArtifactInput,
 } from '../runtime/server'
 import { assertNoSensitiveKeys } from '../validation'
 
@@ -347,6 +349,28 @@ function toolDefinitions(): Array<Record<string, unknown>> {
         openWorldHint: false,
         readOnlyHint: false,
       },
+      description: '登记活动生成的本地文件摘要，不读取文件、不接受任意路径或凭据。',
+      inputSchema: activityArtifactSchema(),
+      name: 'register_activity_artifact',
+      title: '登记活动产物',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: false,
+      },
+      description: '在用户明确选择后，把已登记的活动产物晋升为项目素材，不删除原产物。',
+      inputSchema: promoteActivityArtifactSchema(),
+      name: 'promote_activity_artifact',
+      title: '晋升为项目素材',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: false,
+      },
       description: '为活动中的一个渠道成品建立本地发布安排和发布任务，不会执行渠道发布。',
       inputSchema: publicationPlanSchema(),
       name: 'create_publication_plan',
@@ -514,6 +538,40 @@ function contentGroupSchema(): Record<string, unknown> {
       title: { type: 'string' },
     },
     required: ['activityId', 'contentGroupId', 'coreMessage', 'projectId', 'title'],
+    type: 'object',
+  }
+}
+
+function activityArtifactSchema(): Record<string, unknown> {
+  return {
+    properties: {
+      activityId: { type: 'string' },
+      artifactId: { type: 'string' },
+      kind: {
+        enum: ['article-version', 'audio', 'image', 'preview-frame', 'video-clip', 'video'],
+        type: 'string',
+      },
+      projectId: { type: 'string' },
+      relativePath: { type: 'string' },
+      sha256: { pattern: '^[a-f0-9]{64}$', type: 'string' },
+    },
+    required: ['activityId', 'artifactId', 'kind', 'projectId', 'relativePath', 'sha256'],
+    type: 'object',
+  }
+}
+
+function promoteActivityArtifactSchema(): Record<string, unknown> {
+  return {
+    properties: {
+      artifactId: { type: 'string' },
+      assetId: { type: 'string' },
+      kind: {
+        enum: ['audio', 'font', 'image', 'logo', 'template', 'video'],
+        type: 'string',
+      },
+      projectId: { type: 'string' },
+    },
+    required: ['artifactId', 'assetId', 'kind', 'projectId'],
     type: 'object',
   }
 }
@@ -699,6 +757,31 @@ function executeTool(
       ], 'activity')
       const activity = parseCreateActivityInput(input, options.projectId)
       return options.service.createActivity(activity)
+    }
+    case 'register_activity_artifact': {
+      const value = asRecord(input, 'activityArtifact')
+      assertKeys(value, [
+        'activityId',
+        'artifactId',
+        'kind',
+        'projectId',
+        'relativePath',
+        'sha256',
+      ], 'activityArtifact')
+      const projectId = scopedId(value.projectId, options.projectId, 'projectId')
+      const activityId = identifierField(value.activityId, 'activityId')
+      return options.service.createActivityArtifact(
+        parseCreateActivityArtifactInput(value, projectId, activityId),
+      )
+    }
+    case 'promote_activity_artifact': {
+      const value = asRecord(input, 'promoteActivityArtifact')
+      assertKeys(value, ['artifactId', 'assetId', 'kind', 'projectId'], 'promoteActivityArtifact')
+      const projectId = scopedId(value.projectId, options.projectId, 'projectId')
+      const artifactId = identifierField(value.artifactId, 'artifactId')
+      return options.service.promoteActivityArtifact(
+        parsePromoteActivityArtifactInput(value, projectId, artifactId),
+      )
     }
     case 'create_publication_plan': {
       const value = asRecord(input, 'publicationPlan')

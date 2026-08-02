@@ -81,6 +81,7 @@ describe('content studio workbench', () => {
     await wrapper.get('button[data-module="assets"]').trigger('click')
     expect(wrapper.get('h1').text()).toContain('项目素材库')
     expect(wrapper.text()).toContain('Algorithm Visualizer 主 Logo')
+    expect(wrapper.get('.artifact-promote-button').attributes()).toHaveProperty('disabled')
     await wrapper.get('button[data-asset-filter="template"]').trigger('click')
     expect(wrapper.find('[data-asset-id="quick-sort-template"]').exists()).toBe(true)
 

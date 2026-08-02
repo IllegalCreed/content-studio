@@ -118,6 +118,39 @@ describe('workbench runtime client', () => {
     )
   })
 
+  it('registers an activity artifact and promotes it only through explicit runtime calls', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ artifactId: 'artifact-a' }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ assetId: 'asset-a' }), { status: 201 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const runtime = createWorkbenchRuntime('/api/v1')
+    await runtime.createActivityArtifact({
+      activityId: 'activity-a',
+      artifactId: 'artifact-a',
+      kind: 'video-clip',
+      projectId: 'project-a',
+      relativePath: '.content-studio/activity-a/clip.webm',
+      sha256: 'a'.repeat(64),
+    })
+    await runtime.promoteActivityArtifact({
+      artifactId: 'artifact-a',
+      assetId: 'asset-a',
+      kind: 'video',
+      projectId: 'project-a',
+    })
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/v1/projects/project-a/activities/activity-a/artifacts',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/projects/project-a/activity-artifacts/artifact-a/promote',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
   it('confirms an activity video plan with optimistic concurrency', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({

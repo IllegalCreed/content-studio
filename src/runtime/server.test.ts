@@ -13,9 +13,11 @@ import {
 } from '../control-plane/service'
 import {
   createContentStudioServer,
+  parseCreateActivityArtifactInput,
   parseCreateActivityInput,
   parseCreateChannelContentInput,
   parseCreateOwnerHandoffInput,
+  parsePromoteActivityArtifactInput,
   parseRecordMonitoringObservationInput,
   parseRecordPublicationReceiptInput,
 } from './server'
@@ -335,6 +337,70 @@ describe('content studio local application server', () => {
     }, 'project-a', 'activity-a', 'publication-a')).toThrow(/publicationId/i)
   })
 
+  it('parses activity artifact registration and explicit project promotion', () => {
+    const artifact = parseCreateActivityArtifactInput({
+      activityId: 'activity-a',
+      artifactId: 'artifact-a',
+      kind: 'video-clip',
+      projectId: 'project-a',
+      relativePath: '.content-studio/activity-a/clip.webm',
+      sha256: 'a'.repeat(64),
+    }, 'project-a', 'activity-a')
+    expect(artifact).toMatchObject({ artifactId: 'artifact-a', kind: 'video-clip' })
+    expect(() => parseCreateActivityArtifactInput({
+      activityId: 'activity-a',
+      artifactId: 'artifact-a',
+      kind: 'video-clip',
+      projectId: 'project-a',
+      relativePath: '../outside.webm',
+      sha256: 'a'.repeat(64),
+    }, 'project-a', 'activity-a')).toThrow(/relativePath/i)
+    for (const relativePath of ['/absolute/clip.webm', 'C:/absolute/clip.webm', 'clip\u0000.webm']) {
+      expect(() => parseCreateActivityArtifactInput({
+        activityId: 'activity-a',
+        artifactId: 'artifact-a',
+        kind: 'video-clip',
+        projectId: 'project-a',
+        relativePath,
+        sha256: 'a'.repeat(64),
+      }, 'project-a', 'activity-a')).toThrow(/relativePath/i)
+    }
+    expect(() => parseCreateActivityArtifactInput({
+      activityId: 'activity-a',
+      artifactId: 'artifact-a',
+      kind: 'unknown',
+      projectId: 'project-a',
+      relativePath: 'clip.webm',
+      sha256: 'a'.repeat(64),
+    }, 'project-a', 'activity-a')).toThrow(/kind/i)
+    expect(() => parseCreateActivityArtifactInput({
+      activityId: 'activity-a',
+      artifactId: 'artifact-a',
+      kind: 'video-clip',
+      projectId: 'project-a',
+      relativePath: 'clip.webm',
+      sha256: 'not-a-digest',
+    }, 'project-a', 'activity-a')).toThrow(/sha256/i)
+
+    expect(parsePromoteActivityArtifactInput({
+      artifactId: 'artifact-a',
+      assetId: 'asset-a',
+      kind: 'video',
+      projectId: 'project-a',
+    }, 'project-a', 'artifact-a')).toEqual({
+      artifactId: 'artifact-a',
+      assetId: 'asset-a',
+      kind: 'video',
+      projectId: 'project-a',
+    })
+    expect(() => parsePromoteActivityArtifactInput({
+      artifactId: 'artifact-a',
+      assetId: 'asset-a',
+      kind: 'article-version',
+      projectId: 'project-a',
+    }, 'project-a', 'artifact-a')).toThrow(/kind/i)
+  })
+
   it('serves a project-scoped view and creates an activity through the application service', async () => {
     const { project, snapshot } = createProject()
     const binding: ProjectChannelBinding = {
@@ -449,6 +515,47 @@ describe('content studio local application server', () => {
       expect(contentResponse.status).toBe(201)
       expect(await contentResponse.json()).toMatchObject({ contentId: 'content-a', version: 1 })
 
+      const artifactResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/activities/activity-a/artifacts`,
+        {
+          body: JSON.stringify({
+            activityId: 'activity-a',
+            artifactId: 'artifact-a',
+            kind: 'video-clip',
+            projectId: 'project-a',
+            relativePath: '.content-studio/activity-a/clip.webm',
+            sha256: 'a'.repeat(64),
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(artifactResponse.status).toBe(201)
+      expect(await artifactResponse.json()).toMatchObject({
+        activityId: 'activity-a',
+        artifactId: 'artifact-a',
+        version: 1,
+      })
+
+      const promoteResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/activity-artifacts/artifact-a/promote`,
+        {
+          body: JSON.stringify({
+            artifactId: 'artifact-a',
+            assetId: 'asset-a',
+            kind: 'video',
+            projectId: 'project-a',
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(promoteResponse.status).toBe(201)
+      expect(await promoteResponse.json()).toMatchObject({
+        assetId: 'asset-a',
+        sourceArtifactId: 'artifact-a',
+      })
+
       const publicationPlanResponse = await fetch(
         `${running.baseUrl}/api/v1/projects/project-a/activities/activity-a/publication-plans`,
         {
@@ -552,6 +659,8 @@ describe('content studio local application server', () => {
       ).then(response => response.json())
       expect(contentView.contentGroups).toMatchObject([{ contentGroupId: 'group-a' }])
       expect(contentView.channelContents).toMatchObject([{ contentId: 'content-a' }])
+      expect(contentView.activityArtifacts).toMatchObject([{ artifactId: 'artifact-a' }])
+      expect(contentView.projectAssets).toMatchObject([{ assetId: 'asset-a' }])
 
       const taskResponse = await fetch(
         `${running.baseUrl}/api/v1/projects/project-a`,

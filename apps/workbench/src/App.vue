@@ -4,6 +4,7 @@ import StatusRail from './components/StatusRail.vue'
 import VideoJobPanel from './components/VideoJobPanel.vue'
 import type {
   AssetProjection,
+  ActivityArtifactProjection,
   CampaignProjection,
   ChannelContentProjection,
   ContentGroupProjection,
@@ -146,6 +147,8 @@ const contentSaving = ref(false)
 const contentSaveError = ref<string | null>(null)
 const publicationPlanActionError = ref<string | null>(null)
 const publicationPlanActionPending = ref<string | null>(null)
+const assetPromotionError = ref<string | null>(null)
+const assetPromotionPending = ref<string | null>(null)
 const runtimeTaskIds = ref<Set<string>>(new Set())
 const runtimeActivityIds = ref<Set<string>>(new Set())
 const taskActionError = ref<string | null>(null)
@@ -552,6 +555,54 @@ async function createPublicationPlanForContent(content: ChannelContentProjection
   }
   finally {
     publicationPlanActionPending.value = null
+  }
+}
+
+function projectAssetKindForArtifact(
+  artifact: ActivityArtifactProjection,
+): ProjectAsset['kind'] | null {
+  return artifact.kind === '视频'
+    || artifact.kind === '视频片段'
+    ? 'video'
+    : artifact.kind === '图片'
+      ? 'image'
+      : artifact.kind === '音频'
+        ? 'audio'
+        : null
+}
+
+function isArtifactPromoted(artifact: ActivityArtifactProjection): boolean {
+  return snapshot.projectAssets.some(asset => asset.assetId === `asset-${artifact.artifactId}`)
+}
+
+async function promoteActivityArtifact(artifact: ActivityArtifactProjection): Promise<void> {
+  const kind = projectAssetKindForArtifact(artifact)
+  if (
+    kind === null
+    || !snapshot.runtimeConnected
+    || assetPromotionPending.value !== null
+    || isArtifactPromoted(artifact)
+  ) {
+    return
+  }
+  assetPromotionPending.value = artifact.artifactId
+  assetPromotionError.value = null
+  try {
+    await workbenchRuntime.promoteActivityArtifact({
+      artifactId: artifact.artifactId,
+      assetId: `asset-${artifact.artifactId}`,
+      kind,
+      projectId: snapshot.project.projectId,
+    })
+    await refreshProjectView()
+  }
+  catch (error: unknown) {
+    assetPromotionError.value = error instanceof Error
+      ? error.message
+      : '活动产物晋升失败'
+  }
+  finally {
+    assetPromotionPending.value = null
   }
 }
 
@@ -1675,7 +1726,24 @@ async function refreshProjectView(): Promise<void> {
           </div>
           <div class="activity-artifact-panel">
             <div class="section-heading"><div><p class="eyebrow">活动产物</p><h3>本次活动生成的文件</h3></div><span>需要用户明确保存才会进入项目素材库</span></div>
-            <div class="artifact-list"><button v-for="artifact in snapshot.activityArtifacts" :key="artifact.artifactId" type="button" @click="selectArtifact(artifact.activityId)"><strong>{{ artifact.name }}</strong><span>{{ artifact.kind }} · {{ artifact.size }} · {{ artifact.status }}</span></button></div>
+            <p v-if="assetPromotionError" class="form-error">{{ assetPromotionError }}</p>
+            <div v-if="snapshot.activityArtifacts.length > 0" class="artifact-list">
+              <article v-for="artifact in snapshot.activityArtifacts" :key="artifact.artifactId" class="artifact-list-item">
+                <button type="button" @click="selectArtifact(artifact.activityId)">
+                  <strong>{{ artifact.name }}</strong>
+                  <span>{{ artifact.kind }} · {{ artifact.size }} · {{ artifact.status }}</span>
+                </button>
+                <button
+                  type="button"
+                  class="artifact-promote-button"
+                  :disabled="!snapshot.runtimeConnected || projectAssetKindForArtifact(artifact) === null || isArtifactPromoted(artifact) || assetPromotionPending !== null"
+                  @click="promoteActivityArtifact(artifact)"
+                >
+                  {{ assetPromotionPending === artifact.artifactId ? '保存中…' : isArtifactPromoted(artifact) ? '已保存为项目素材' : projectAssetKindForArtifact(artifact) === null ? '该类型不可晋升' : '保存为项目素材' }}
+                </button>
+              </article>
+            </div>
+            <div v-else class="empty-state">当前项目还没有登记活动产物。</div>
           </div>
           <div class="retention-note"><span>当前保留规则</span><strong>{{ snapshot.storage.retention }}</strong><button type="button" disabled>查看清理预览</button></div>
         </section>

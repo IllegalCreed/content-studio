@@ -2504,6 +2504,25 @@ footer {
   margin-top: 0.75rem;
 }
 
+.artifact-list-item {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.artifact-list-item .artifact-promote-button {
+  align-items: center;
+  padding: 0.45rem 0.6rem;
+  color: var(--accent);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.58rem;
+  text-align: center;
+}
+
+.artifact-list-item .artifact-promote-button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
 @media (max-width: 900px) {
   .activity-detail-grid,
   .asset-library-layout,
