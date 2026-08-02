@@ -1,4 +1,5 @@
 import type {
+  CampaignJobStatus,
   CaptureStep,
   ChannelBlueprint,
   ChannelId,
@@ -28,11 +29,12 @@ export const CHANNEL_BLUEPRINTS = {
 } satisfies Record<ChannelId, ChannelBlueprint>
 
 export const DEFAULT_ACTION_DURATION_MS = {
-  capture: 2000,
-  click: 600,
-  fill: 600,
-  press: 400,
-  wait: 0,
+  'capture': 2000,
+  'click': 600,
+  'fill': 600,
+  'press': 400,
+  'wait': 0,
+  'wait-for': 1000,
 } satisfies Record<CaptureStep['kind'], number>
 
 export const VIDEO_VIEWPORTS = {
@@ -49,6 +51,37 @@ export const VIDEO_VIEWPORTS = {
     width: 1080,
   },
 } satisfies Record<VideoFormat, { height: number, width: number }>
+
+export const CAMPAIGN_JOB_TRANSITIONS = {
+  'awaiting-owner': ['cancelled', 'published'],
+  'cancelled': ['queued'],
+  'composing': ['awaiting-owner', 'cancelled', 'failed'],
+  'failed': ['queued'],
+  'generating': ['cancelled', 'failed', 'recording'],
+  'monitoring': [],
+  'published': ['monitoring'],
+  'queued': ['cancelled', 'generating'],
+  'recording': ['cancelled', 'composing', 'failed'],
+} as const satisfies Record<CampaignJobStatus, readonly CampaignJobStatus[]>
+
+export const DEFAULT_RECORDING_MAX_ATTEMPTS = 1
+export const MAX_RECORDING_ATTEMPTS = 3
+
+export const CONTENT_STUDIO_RECORD_TYPES = {
+  activity: 'activity',
+  activityArtifact: 'activity-artifact',
+  channelContent: 'channel-content',
+  contentGroup: 'content-group',
+  monitoringObservation: 'monitoring-observation',
+  ownerHandoff: 'owner-handoff',
+  project: 'project',
+  projectAsset: 'project-asset',
+  projectChannelBinding: 'project-channel-binding',
+  projectSnapshot: 'project-snapshot',
+  publicationPlan: 'publication-plan',
+  publicationReceipt: 'publication-receipt',
+  report: 'report',
+} as const
 
 function blueprint(
   delivery: ChannelBlueprint['delivery'],

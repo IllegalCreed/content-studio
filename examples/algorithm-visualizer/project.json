@@ -45,6 +45,32 @@
       "startPath": "/docs/quick-sort",
       "steps": [
         {
+          "kind": "wait-for",
+          "locator": {
+            "by": "role",
+            "value": "button",
+            "name": "拒绝"
+          },
+          "durationMs": 5000
+        },
+        {
+          "kind": "click",
+          "locator": {
+            "by": "role",
+            "value": "button",
+            "name": "拒绝"
+          }
+        },
+        {
+          "kind": "wait-for",
+          "locator": {
+            "by": "role",
+            "value": "button",
+            "name": "播放"
+          },
+          "durationMs": 5000
+        },
+        {
           "kind": "click",
           "locator": {
             "by": "role",
@@ -71,6 +97,32 @@
       },
       "startPath": "/en/docs/quick-sort",
       "steps": [
+        {
+          "kind": "wait-for",
+          "locator": {
+            "by": "role",
+            "value": "button",
+            "name": "Decline"
+          },
+          "durationMs": 5000
+        },
+        {
+          "kind": "click",
+          "locator": {
+            "by": "role",
+            "value": "button",
+            "name": "Decline"
+          }
+        },
+        {
+          "kind": "wait-for",
+          "locator": {
+            "by": "role",
+            "value": "button",
+            "name": "Play"
+          },
+          "durationMs": 5000
+        },
         {
           "kind": "click",
           "locator": {

@@ -4,7 +4,10 @@ trustPolicy: no-downgrade
 
 packages:
   - .
+  - apps/*
 
+catalog:
+  playwright: ^1.62.0
 catalogs:
   dev:
     '@antfu/eslint-config': 9.2.0
@@ -15,3 +18,10 @@ catalogs:
     tsdown: 0.22.14
     typescript: 6.0.3
     vitest: 4.1.10
+  web:
+    '@vitejs/plugin-vue': ^6.0.8
+    '@vue/test-utils': ^2.4.11
+    happy-dom: ^20.11.1
+    vite: ^8.1.5
+    vue: ^3.5.40
+    vue-tsc: ^3.3.8

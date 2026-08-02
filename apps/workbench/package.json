@@ -1,0 +1,24 @@
+{
+  "name": "@illegalcreed/content-studio-workbench",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "vue-tsc --noEmit && vite build",
+    "dev": "vite",
+    "test": "vitest run",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "vue": "catalog:web"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "catalog:web",
+    "@vue/test-utils": "catalog:web",
+    "happy-dom": "catalog:web",
+    "typescript": "catalog:dev",
+    "vite": "catalog:web",
+    "vitest": "catalog:dev",
+    "vue-tsc": "catalog:web"
+  }
+}

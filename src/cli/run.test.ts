@@ -149,4 +149,154 @@ describe('content-studio CLI', () => {
       })
     }
   })
+
+  it('starts the local runtime on the dedicated application-service port', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
+    const projectPath = join(temporaryDirectory, 'project.json')
+    const messages: string[] = []
+    const controller = new AbortController()
+    controller.abort()
+
+    try {
+      await writeFile(projectPath, JSON.stringify(project), 'utf8')
+      await expect(
+        runCli(
+          [
+            'serve',
+            '--project',
+            projectPath,
+            '--port',
+            '0',
+            '--db',
+            join(temporaryDirectory, 'state.sqlite'),
+          ],
+          {
+            cwd: temporaryDirectory,
+            signal: controller.signal,
+            write: message => messages.push(message),
+          },
+        ),
+      ).resolves.toBe(130)
+      expect(messages[0]).toMatch(/Content Studio runtime listening at http:\/\/127\.0\.0\.1:\d+/)
+    }
+    finally {
+      await rm(temporaryDirectory, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
+
+  it('records a compiled video plan through the fixed CLI grammar', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
+    const projectPath = join(temporaryDirectory, 'project.json')
+    const campaignPath = join(temporaryDirectory, 'campaign.json')
+    const outputPath = join(temporaryDirectory, 'recording')
+    const messages: string[] = []
+    const recordingInputs: unknown[] = []
+
+    try {
+      await writeFile(
+        projectPath,
+        JSON.stringify({
+          ...project,
+          captureFlows: [
+            {
+              id: 'demo',
+              startPath: '/demo',
+              steps: [
+                {
+                  kind: 'capture',
+                  label: 'demo',
+                  durationMs: 100,
+                },
+              ],
+              title: {
+                'en': 'Demo',
+                'zh-CN': '演示',
+              },
+            },
+          ],
+        }),
+        'utf8',
+      )
+      await writeFile(
+        campaignPath,
+        JSON.stringify({
+          ...campaign,
+          video: {
+            flowIds: ['demo'],
+            format: 'landscape',
+          },
+        }),
+        'utf8',
+      )
+
+      await expect(
+        runCli(
+          [
+            'record',
+            '--project',
+            projectPath,
+            '--campaign',
+            campaignPath,
+            '--base-url',
+            'http://127.0.0.1:11000',
+            '--out',
+            outputPath,
+            '--attempts',
+            '2',
+          ],
+          {
+            cwd: temporaryDirectory,
+            write: message => messages.push(message),
+          },
+          {
+            record: async (input) => {
+              recordingInputs.push(input)
+              return {
+                attempts: [],
+                receipt: {
+                  artifactDirectory: join(outputPath, 'attempt-1'),
+                  artifacts: [],
+                  attempt: 1,
+                  campaignId: 'quick-sort-launch',
+                  completedActions: 1,
+                  completedScenes: 1,
+                  jobId: 'quick-sort-launch-recording',
+                  logs: {
+                    consoleErrors: 0,
+                    consoleWarnings: 0,
+                    entries: [],
+                    pageErrors: 0,
+                  },
+                  outcome: 'succeeded',
+                  planSha256: 'plan-sha',
+                  projectId: 'algorithm-visualizer',
+                  receiptVersion: 1,
+                  totalActions: 1,
+                  totalScenes: 1,
+                },
+              }
+            },
+          },
+        ),
+      ).resolves.toBe(0)
+
+      expect(recordingInputs[0]).toMatchObject({
+        baseUrl: 'http://127.0.0.1:11000',
+        jobId: 'quick-sort-launch-recording',
+        maxAttempts: 2,
+        outputDirectory: outputPath,
+        projectId: 'algorithm-visualizer',
+      })
+      expect(messages.at(-1)).toContain('Recorded 1 action')
+    }
+    finally {
+      await rm(temporaryDirectory, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
 })

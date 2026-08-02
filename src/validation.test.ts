@@ -253,6 +253,40 @@ describe('manifest validation', () => {
     ).not.toThrow()
   })
 
+  it('accepts a semantic wait-for step for asynchronously mounted project UI', () => {
+    const input = {
+      ...project,
+      captureFlows: [
+        {
+          ...project.captureFlows[0],
+          steps: [
+            {
+              kind: 'wait-for',
+              locator: {
+                by: 'role',
+                value: 'button',
+                name: '开始',
+              },
+              durationMs: 5000,
+            },
+          ],
+        },
+      ],
+    } as unknown
+
+    expect(validateProjectManifest(input).captureFlows[0]?.steps).toEqual([
+      {
+        kind: 'wait-for',
+        locator: {
+          by: 'role',
+          value: 'button',
+          name: '开始',
+        },
+        durationMs: 5000,
+      },
+    ])
+  })
+
   it('rejects campaign references and policy fields outside the project contract', () => {
     expect(() =>
       validateCampaign(

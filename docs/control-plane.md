@@ -1,91 +1,289 @@
-# Control-plane model
+# 控制面模型
 
-> Status: design baseline for V0.2
-> Last reviewed: 2026-07-29
+> 状态：V0.2 设计基线
+> 最近评审：2026-08-02
 
-## Aggregate model
+## 领域归属
 
-All records are project-scoped and versioned. IDs are opaque references; local
-artifact paths are accepted only inside an explicit Content Studio output root.
-External media handoffs use checksums and narrow artifact identifiers rather
-than arbitrary filesystem paths.
+项目是 Content Studio 业务数据的主要归属边界。全局层只拥有渠道定义、可用能力
+定义和跨项目投影，不拥有项目素材或发布活动。
 
-| Model         | Required identity and relationships                             | Mutable operational data                                     |
-| ------------- | --------------------------------------------------------------- | ------------------------------------------------------------ |
-| Project       | `projectId`, manifest version, canonical origin, repository URL | enabled locales, preview adapter reference                   |
-| Campaign      | `campaignId`, `projectId`, brief version, selected channels     | lifecycle status, current stage, attempt counters            |
-| Channel       | `projectId`, channel ID, locale, delivery class                 | capability/policy snapshot from `marketing-ops`              |
-| Content asset | asset ID, campaign/channel/locale, generator version            | checksum, media type, size, local artifact reference         |
-| Video job     | job ID, campaign ID, immutable plan checksum                    | stage, attempt, progress, cancellation request, event cursor |
-| Owner handoff | handoff ID, campaign/channel, artifact checksums                | review checklist, official destination, expiry, disposition  |
-| Receipt       | receipt ID, campaign/channel, authorization reference           | outcome, public URL, external timestamp, adapter summary     |
-| Report        | report ID, campaign ID, receipt references                      | 1h/48h/7d observations, errors, aggregate metrics            |
+ID 都是不透明引用。本地素材路径只允许位于明确的 Content Studio 输出根目录。
+对外移交媒体时使用校验和与窄范围素材标识，不通过 MCP 传递任意文件路径。
 
-These aggregates are not screen-specific view models. The CLI, Vue workspace,
-and a future MCP-hosted surface issue the same application commands and consume
-projections derived from the same events.
+| 模型         | 归属与主要关系                                      | 运行数据                               |
+| ------------ | --------------------------------------------------- | -------------------------------------- |
+| 全局渠道定义 | `channelId`、支持的内容类型、资源规格、基础交付类别 | 平台限制、适配器能力定义               |
+| 渠道账号身份 | `channelAccountRef`、`channelId`、脱敏别名          | 外部账号归属、授权状态和适配器引用     |
+| 项目         | `projectId`、项目清单版本、规范来源、预览适配器     | 启用语言、项目状态                     |
+| 项目渠道绑定 | `projectId`、`channelId`、`channelAccountRef`       | 是否启用、默认账号、连接引用、策略快照 |
+| 发布活动     | `activityId`、`projectId`、简报版本                 | 业务状态、目标渠道、时间范围           |
+| 内容组       | `contentGroupId`、`activityId`                      | 主题、核心观点、内容顺序               |
+| 渠道内容     | `contentId`、内容组、渠道、文章/视频                | 当前修订、审核状态、生成来源           |
+| 项目素材     | `assetId`、`projectId`、素材版本                    | 校验和、媒体类型、来源和引用           |
+| 活动产物     | `artifactId`、活动/渠道内容、来源素材               | 校验和、规格、本地产物引用             |
+| 执行任务     | `taskId`、项目/活动、制作/发布/监测类型             | 状态、尝试、进度、取消请求、事件游标   |
+| 人工接管     | `handoffId`、发布安排、产物校验和                   | 检查单、官方地址、失效时间、处理结果   |
+| 发布回执     | `receiptId`、发布安排、授权引用                     | 结果、公开地址、外部时间、适配器摘要   |
+| 数据快照     | `observationId`、发布回执、采集计划                 | 指标值、采集时间、来源、错误           |
+| 报告         | `reportId`、项目或活动、回执引用                    | 聚合指标、异常和生成版本               |
 
-### Project
+当前 V0.1 API 使用 `Campaign` 和 `campaignId`。产品层将其显示为“发布活动”；
+在版本化迁移完成前，`activityId` 可以映射到现有 `campaignId`，不能直接破坏
+已有清单、CLI 或生成结果。
 
-The Project points to a validated `ProjectManifest` snapshot. A new manifest
-version produces a new immutable snapshot; campaigns retain the version they
-used. The preview adapter is a known implementation selected by ID, not an
-arbitrary command embedded in project data.
+## 本地运行时与发布依赖
 
-### Campaign
+Content Studio 默认以开源本地运行时保存项目、活动、素材、任务和只读投影。
+普通用户通过统一安装器获得 Content Studio 服务及固定兼容版本的
+`marketing-ops`，不需要安装第二个 Plugin。
 
-The Campaign binds a project snapshot to a brief, content targets, channels, and
-optional video plan. It owns the end-to-end control-plane state but does not own
-publishing authorization. Authorization is represented only by a reference
-returned from `marketing-ops`.
+`marketing-ops` 仍拥有独立项目档案、渠道配置、策略、授权、外部写入和权威发布
+回执。两者不共享凭据存储；Content Studio 只通过有类型的项目范围客户端读取
+新鲜状态、提交已验证的发布包并接收匹配回执。
 
-### Channel
+依赖安装与能力状态分开表达：
 
-The Channel record combines Content Studio's static delivery metadata with a
-time-bounded capability and policy snapshot from `marketing-ops`. A stale or
-unhealthy snapshot blocks handoff; local configuration cannot override it.
+```text
+not-installed → installed → healthy → project-configured
+                                      → channel-ready
+```
 
-### Content asset
+该状态不是发布流水线的一部分，也不授予权限。即使达到 `channel-ready`，每次
+真实写入仍需当前项目、活动、渠道和操作相匹配的明确授权。任一检查不确定时，
+发布任务进入阻塞或人工接管，不能推断成功。
 
-Every generated text, image, audio, subtitle, clip, preview frame, and composed
-video is an asset. Assets are immutable after checksum assignment. A revision
-creates a new asset linked to its source assets.
+## 关系模型
 
-### Video job
+```mermaid
+flowchart TB
+  G["全局渠道定义"] --> B["项目渠道绑定"]
+  CA["渠道账号身份"] --> B
+  P["项目"] --> B
+  P --> PA["项目素材"]
+  P --> A["发布活动"]
+  B --> A
+  A --> CG["内容组"]
+  CG --> CC["渠道内容：文章或视频"]
+  PA --> CC
+  CC --> AR["活动产物与资源变体"]
+  CC --> PP["发布安排"]
+  AR --> PP
+  PP --> HO["人工接管（按需）"]
+  PP --> PR["发布回执"]
+  PR --> OB["数据快照"]
+  OB --> RP["活动/项目报告"]
+```
 
-A Video Job consumes one immutable `VideoPlan`. Recording and composition use
-separate attempts so a composition retry does not repeat a successful
-recording. Each attempt preserves progress events, a bounded log summary,
-preview frames, and a receipt.
+### 全局渠道定义、渠道账号与项目渠道绑定
 
-### Owner handoff
+全局渠道管理描述平台本身，不表达某个项目已经获得发布权限。项目必须显式创建
+渠道绑定，并为它选择项目允许使用的渠道账号后，活动才能选择该渠道账号。
 
-The handoff is a review packet, not an authenticated browser session. It tells
-the Owner what is ready, where the official destination is, and which checks
-remain. Login, CAPTCHA/2FA, edits, and the final click remain under Owner
-control.
+一个平台可以有多个账号，一个项目也可以在同一平台绑定多个账号，但默认先选择一个
+项目默认账号。账号身份属于 `marketing-ops` 的授权边界，Content Studio 只保存不透明
+的 `channelAccountRef`、脱敏别名和新鲜状态投影。账号密码、token、cookie、浏览器
+Profile 和支付信息不进入 Content Studio、MCP 参数或日志。
 
-### Receipt
+一个活动对渠道的实际能力取以下交集：
 
-Recorder and compositor receipts describe local work. Publication receipts come
-only from `marketing-ops` and include the matching project, campaign,
-authorization, channel, outcome, and public result. Receipt payloads never
-include credentials or raw browser state.
+```text
+全局渠道定义
+∩ 项目渠道绑定
+∩ 项目渠道账号
+∩ 活动目标
+∩ marketing-ops 当前策略和授权
+```
 
-### Report
+项目可以把全局声明的自动候选能力降级为人工辅助或仅生成内容，但不能在本地把
+不允许的渠道升级为自动发布。连接绑定只保存不透明账号引用和健康状态，不保存
+token、cookie、密码或浏览器配置。发布回执、监测快照和人工接管必须带上账号引用，
+避免把同一平台的不同账号混为一谈。
 
-Reports are projections over immutable assets and receipts plus monitoring
-observations. They can be regenerated; they do not mutate historical receipts.
+### 项目
 
-## Lifecycle state machine
+项目指向经过验证的 `ProjectManifest` 快照。新的清单版本产生新的不可变快照；
+已有活动保留创建时使用的版本。项目拥有：
+
+- 事实、定位、内容规则和来源；
+- 已启用渠道及项目级默认值；
+- 文章和视频的制作方式；
+- 可跨项目内活动复用的项目素材；
+- 发布活动和项目范围任务投影。
+
+### 发布活动
+
+发布活动围绕一次主题、目标或时间窗口组织多个内容组。不同渠道可以有不同标题、
+正文、脚本和资源，只要它们服务于同一个活动目标。
+
+活动页面包含内容组、渠道内容、活动产物、发布安排、发布记录和数据表现。它不
+把这些业务对象统一命名为“任务”。活动的业务状态为：
+
+```text
+draft → planned → active → completed → archived
+```
+
+执行流水线状态由相关执行记录计算后投影到活动页面，不直接替代活动业务状态。
+
+活动与任务是两个层次：一个活动可以产生多个制作、发布和监测任务。任务必须保留
+`projectId` 和 `activityId`，控制面展示时还要解析出活动名称、内容和渠道，不能只
+显示技术 ID。活动列表显示业务状态（草稿、已规划、进行中、已完成、已归档），任务
+列表显示执行状态（排队中、生成中、录制中、合成中、等待人工、已发布、监测中）。
+
+### 内容组与渠道内容
+
+内容组表达共同主题和核心观点。一个内容组拥有一个或多个渠道内容：
+
+- 文章：包括标题、大纲、正文、摘要、配图和渠道化表达；
+- 视频：包括脚本、分镜、录制计划、字幕稿、旁白稿和封面方案。
+
+渠道内容是面向具体平台的完整作品，不是同一母稿的机械复制。AI 可以共享事实
+和活动目标，但必须遵循目标渠道的格式、语气和长度约束。
+
+### 项目素材、活动产物和资源变体
+
+当前阶段不设置全局素材库。
+
+项目素材包括 Logo、字体、品牌色、产品截图、插图、音视频片段和模板，可被同一
+项目内多个活动引用。活动产物包括文章修订、生成图片、封面、录制片段、预览帧、
+字幕、音轨和合成视频。
+
+素材在分配校验和后不可变；修改会创建新版本并链接来源。活动产物如需复用，必须
+由用户显式沉淀为新的项目素材版本。
+
+移动端、PC 端、横屏、竖屏、方形、分辨率和平台封装格式由资源变体表达。渠道
+规格决定需要哪些变体，系统不为所有内容固定生成“移动端 + PC 端”两份文件。
+
+### 素材保留与清理
+
+Content Studio 不把所有图片、视频和音频都永久保留，也不要求用户手动维护每一个
+文件。素材按“是否重要、是否可重新生成”分为三类：
+
+| 类型                                                   | 默认策略                                         | 清理后仍保留                 |
+| ------------------------------------------------------ | ------------------------------------------------ | ---------------------------- |
+| 用户显式保存的项目素材、审核通过的最终产物、已发布内容 | 长期保留，只有用户主动删除                       | 版本、来源、校验和、发布回执 |
+| 草稿、失败尝试、旧预览帧、旧录制片段和中间产物         | 按项目保留期限自动提醒并可清理，默认采用有限期限 | 活动版本、任务事件和失败摘要 |
+| 浏览器缓存、FFmpeg 临时文件和其他可重建缓存            | 任务结束后自动清理                               | 必要的任务结果摘要           |
+
+清理策略由用户在本地运行时设置。系统先显示占用空间和待清理清单，得到确认后将
+Content Studio 自己登记的文件移入回收区，保留恢复窗口；不会扫描或删除项目目录中
+未知的文件。当前 V0.2 只有不可覆盖的尝试目录，还没有自动清理器；在清理器完成前，
+录制产物会一直保留在 `.content-studio/` 下。
+
+### 执行任务
+
+执行任务只有三种顶层类型：
+
+| 类型     | 来源业务对象       | 典型执行                                       |
+| -------- | ------------------ | ---------------------------------------------- |
+| 制作任务 | 渠道内容或活动产物 | AI 生成、图片生成、录制、合成、字幕、旁白      |
+| 发布任务 | 发布安排           | 准备发布包、调用 `marketing-ops`、等待人工接管 |
+| 监测任务 | 已发布回执         | 定时采集、重试、指标标准化和报告更新           |
+
+全局任务面板聚合所有项目任务；项目任务面板过滤同一份执行记录。两者都是投影，
+不各自存储任务。
+
+每次尝试保留有序进度事件、受限日志摘要、预览和回执。取消只终止当前尝试；
+重试创建新尝试并链接此前记录。
+
+一个制作任务内部可以继续细化为步骤，例如视频制作的脚本与拍摄大纲、分镜与录制
+计划、浏览器录制、预览帧、合成、字幕、旁白和资源变体。步骤优先作为任务事件和
+任务详情中的进度清单保存；只有需要独立调度、取消或重试时才拆成子任务。项目任务
+面板和全局任务面板仍然查询同一份顶层执行记录。
+
+### 渠道授权人与人工接管
+
+“渠道授权人”是有权在对应平台账号中执行人工步骤的人，不等于项目负责人或
+内容审核人。
+
+人工接管是一个审查包，包含发布安排、产物校验和、检查单、官方目标地址和失效
+时间。它不是登录会话，也不包含凭据、cookie 或浏览器配置。渠道授权人在官方
+平台界面完成登录、2FA/CAPTCHA、审核、必要修改和最终发布点击。
+
+人工接管不应作为孤立的业务层级理解。它是任务进入 `awaiting-owner` 后的人工处理
+步骤；总览和任务面板可以聚合“待人工处理”，活动详情和任务详情负责展示完整上下文。
+
+内部代码可暂时保留 `OwnerHandoff` 和 `awaiting-owner`；产品界面显示“人工
+接管”和“等待渠道授权人”。
+
+### 发布回执
+
+录制器和合成器回执描述本地制作结果。发布回执只能来自 `marketing-ops`，必须
+包含匹配的项目、活动/外部 campaign 授权、渠道、发布安排和结果。
+
+人工接管本身不能让内容进入“已发布”。只有匹配的成功发布回执才允许控制面显示
+已发布状态和公开地址。
+
+### 数据快照与报告
+
+监测绑定具体发布回执和公开地址，不绑定文章生成或视频录制任务。每个发布记录
+可以有独立采集计划，例如发布后 1 小时、48 小时、7 天或项目自定义时间点。
+
+标准指标包括：
+
+- 播放量和阅读量；
+- 点赞、评论、回复、收藏和分享；
+- 可用时的点击量或其他渠道特有指标。
+
+指标值同时记录采集时间和来源。平台未提供的指标为 `null`，不能写成 `0`。
+允许的数据来源是公开数据、授权渠道适配器或渠道授权人的明确录入。
+
+报告是不可变素材、发布回执和数据快照的可再生投影，不修改历史回执。Content
+Studio 不抓取未授权的私有后台，也不在本仓库执行回复、删除或其他渠道写入。
+
+## AI 创作模型
+
+MCP 主机中的 AI 是主要创作者和流程协调者。Content Studio MCP 暴露固定的
+高层能力，使 AI 可以：
+
+- 读取项目事实、素材、活动简报和渠道约束；
+- 创建或修订内容组和渠道内容；
+- 保存文章、图片方案、视频脚本、分镜、字幕稿和旁白稿版本；
+- 启动、取消和重试制作任务；
+- 读取进度、预览、回执和监测数据；
+- 根据审核意见修改内容并生成活动复盘。
+
+AI 生成记录应保存输入版本、事实引用、产物和生成摘要。它不保存模型的隐式推理
+过程，不在 MCP 参数、项目清单或本地产物中接收模型或渠道凭据。
+
+交互式创作由当前 MCP 主机中的 AI 发起。定时和长时间运行的自动创作以后由后台
+AI 执行器承接，但它必须调用相同的应用服务、写入相同的事件流，并接受同样的
+取消、重试、审计和授权限制。
+
+## 生命周期状态机
+
+统一发布流水线继续使用以下外部状态：
+
+`queued → generating → recording → composing → awaiting-owner → published → monitoring`
+
+产品界面对应显示：
+
+`排队中 → 生成中 → 录制中 → 合成中 → 等待渠道授权人 → 已发布 → 监测中`
+
+并非所有内容都执行每个阶段：
+
+```text
+视频：
+queued → generating → recording → composing
+       → awaiting-owner → published → monitoring
+
+文章：
+queued → generating → composing
+       → awaiting-owner → published → monitoring
+```
+
+导入的完成素材可以跳过生成阶段；不需要人工处理且具有匹配授权的发布可以跳过
+`awaiting-owner`。跳过必须记录显式事件，不能伪造已执行阶段。
 
 ```mermaid
 stateDiagram-v2
   [*] --> queued
   queued --> generating
   generating --> recording
+  generating --> composing: article or skipped recording
   recording --> composing
   composing --> awaiting_owner
+  composing --> published: authorized automatic delivery
   awaiting_owner --> published
   published --> monitoring
   monitoring --> [*]
@@ -94,34 +292,27 @@ stateDiagram-v2
   generating --> cancelled
   recording --> cancelled
   composing --> cancelled
+  awaiting_owner --> cancelled
   generating --> failed
   recording --> failed
   composing --> failed
-  awaiting_owner --> cancelled
-
   failed --> queued: retry from safe stage
   cancelled --> queued: explicit retry
 ```
 
-Canonical external names use kebab case:
+状态规则：
 
-`queued → generating → recording → composing → awaiting-owner → published → monitoring`
+- 状态变化是追加事件，不是 UI 直接改字段；
+- 只有当前任务版本可以转换状态；
+- 取消对当前尝试终止，保留已产生的证据；
+- 重试增加尝试编号并链接失败或取消的尝试；
+- `published` 必须有成功且匹配的 `marketing-ops` 回执；
+- `monitoring` 至少绑定一个已发布渠道；
+- 多渠道部分成功按发布记录分别表示，再由活动投影汇总。
 
-Rules:
+## 标准任务事件
 
-- transitions are append-only events, not direct UI mutations;
-- only the current job version may transition;
-- cancellation is cooperative and terminal for the current attempt;
-- a retry increments the attempt and links to the failed/cancelled attempt;
-- `published` requires a successful, matching `marketing-ops` receipt;
-- `monitoring` requires at least one published channel and records observation
-  windows independently;
-- partial multi-channel publication is represented per channel and summarized
-  by the Campaign projection; it never fabricates a successful receipt.
-
-## Standard job event
-
-Each long-running worker emits:
+当前录制器事件契约保持不变：
 
 ```ts
 interface JobProgressEvent {
@@ -136,6 +327,7 @@ interface JobProgressEvent {
     | 'action-started'
     | 'preview-ready'
     | 'action-completed'
+    | 'scene-completed'
     | 'attempt-completed'
     | 'attempt-failed'
     | 'attempt-cancelled'
@@ -144,76 +336,91 @@ interface JobProgressEvent {
     total: number
   }
   message: string
-  artifact?: {
-    assetId: string
-    kind: 'preview-frame'
-  }
+  artifact?: RecorderArtifact
 }
 ```
 
-Workers add runtime timestamps at the persistence boundary. Sequence and
-attempt, not timestamps, define event order.
+应用主机持久化事件信封时可以附加运行时间。规范顺序由 `attempt` 和 `sequence`
+决定，不依赖时间戳。
 
-## Workspace projections and commands
+后续的 AI 生成、发布和监测执行器复用同一事件信封与尝试模型，但拥有各自明确的
+`stage` 和事件 `kind`，不把录制专属事件强行用于其他任务。
 
-The control surface consumes narrow projections instead of reading storage
-directories:
+## 控制面投影和命令
 
-| Projection        | Minimum contents                                                                  |
-| ----------------- | --------------------------------------------------------------------------------- |
-| Project portfolio | project/version identity, locales, validation result, preview readiness           |
-| Campaign board    | lifecycle stage, selected channels, asset/job counts, next safe action            |
-| Channel center    | delivery class, snapshot age, runtime health, policy blockers, Owner action       |
-| Content library   | immutable revisions, locale/channel fit, checksums, approval disposition          |
-| Video job detail  | stage, attempt history, ordered progress, preview frames, bounded logs, artifacts |
-| Owner inbox       | handoff expiry, checklist, official destination, expected receipt, disposition    |
-| Report timeline   | receipt-backed outcomes and 1h/48h/7d observation windows                         |
+| 投影         | 最小内容                                              |
+| ------------ | ----------------------------------------------------- |
+| 项目列表     | 项目/版本、启用渠道账号、预览就绪状态、活动和任务摘要 |
+| 发布活动列表 | 业务状态、内容组、目标渠道、发布完成度、下一安全操作  |
+| 全局渠道中心 | 内容类型、资源规格、交付类别、健康和平台限制          |
+| 项目渠道设置 | 是否启用、账号身份、默认值、连接引用和当前策略阻塞    |
+| 项目素材库   | 不可变版本、来源、校验和、活动引用                    |
+| 任务面板     | 三类任务、阶段、尝试、进度、预览、日志摘要和安全操作  |
+| 人工接管列表 | 失效时间、检查单、官方地址、预期回执和处理结果        |
+| 报告时间线   | 按发布回执组织的结果与数据快照                        |
 
-Initial application commands are intentionally high-level:
+初始应用命令保持高层且有范围限制：
 
-- register or validate a project snapshot;
-- create or revise a campaign;
-- generate content and video-plan assets;
-- start, cancel, or retry a recording/composition job;
-- prepare an Owner handoff;
-- refresh `marketing-ops` channel state;
-- ingest a matching receipt and regenerate reports.
+- 注册或验证项目快照；
+- 在项目中启用或停用全局渠道；
+- 创建或修订发布活动、内容组和渠道内容；
+- 生成文章、图片方案、视频脚本和资源变体；
+- 启动、取消或重试制作任务；
+- 创建发布安排并准备人工接管；
+- 刷新 `marketing-ops` 渠道状态；
+- 接收匹配发布回执并调度监测；
+- 根据回执和数据快照重建报告。
 
-There is no command for arbitrary shell, browser automation, selector execution,
-credential entry, CAPTCHA handling, or unscoped channel writes.
+不存在任意 Shell、浏览器脚本、选择器执行、凭据输入、CAPTCHA 处理或无范围渠道
+写入命令。
 
-## MCP-style application boundary
+## MCP App 边界
 
-Content Studio may later expose its projections, commands, and progress events
-through an MCP application surface. That transport is an adapter, not the
-domain boundary. A local Vue application service remains the first control
-surface so Playwright, FFmpeg, local artifact access, cancellation, and
-streaming previews have an explicit process owner.
+MCP 不是后期附加的可选传输层，而是 AI 使用 Content Studio 的首要应用边界。
+它暴露受约束的项目资源、结构化工具、进度通知和可视化控制面。
 
-An MCP adapter must expose fixed high-level operations with project and campaign
-scope. It cannot accept arbitrary browser instructions, file paths, shell
-commands, cookies, or credentials. External publishing still flows through the
-independent `marketing-ops` contract and its matching authorization.
+Vue 工作台可以作为 MCP App 的可视化界面，也可以独立连接同一应用服务。CLI
+继续服务于确定性编译、验证和开发流程。三者不能绕开应用服务直接修改素材目录、
+任务状态或授权信息。
 
-## Recorder receipt
+```text
+MCP AI / Vue 工作台 / CLI
+            │
+            ▼
+    控制面应用服务
+            │
+    ┌───────┼────────┐
+    ▼       ▼        ▼
+Content  执行任务   投影/素材/事件
+Studio   运行时     持久化
+core      │
+          ├─ Playwright / FFmpeg / AI 执行器
+          └─ 独立 marketing-ops 边界
+```
 
-A recorder receipt is machine-readable and contains:
+MCP 工具只能接受项目和活动范围内的版本化参数，不接受任意路径、脚本、浏览器
+配置、cookie 或凭据。
 
-- schema version, job/campaign/project IDs, plan checksum, and attempt;
-- terminal outcome (`succeeded`, `failed`, or `cancelled`);
-- scene/action totals and completed counts;
-- video, preview, and diagnostic artifact references with checksums;
-- bounded log counts and sanitized summaries;
-- failure code and safe message when unsuccessful;
-- links to prior attempts.
+## 录制器回执
 
-Raw console text is not automatically persisted. Log summarization removes
-URLs containing credentials, sensitive-looking field values, and excessive
-payloads before writing a bounded report.
+录制器回执包含：
 
-## Persistence and API posture
+- schema 版本、任务/活动/项目 ID、计划校验和和尝试编号；
+- 重试时的上一尝试引用；
+- 终态（`succeeded`、`failed` 或 `cancelled`）；
+- 场景/动作总量与完成量；
+- 视频、预览和诊断产物引用及校验和；
+- 有界日志数量和安全摘要；
+- 失败代码和安全错误信息；
+- 之前尝试的链接。
 
-V0.2 keeps the contracts storage-agnostic. A local file implementation may
-store job metadata under `.content-studio/jobs/<job-id>/`, with immutable
-`attempt-<n>/` directories. The future workspace should consume application
-service APIs or an event stream and never traverse arbitrary local paths.
+原始控制台文本不会自动持久化。日志摘要在写入前移除含凭据的 URL、疑似敏感
+字段值和过大载荷。
+
+## 持久化姿态
+
+V0.2 契约保持存储无关。本地实现可以把任务元数据保存在
+`.content-studio/jobs/<job-id>/`，并为每次尝试创建不可变的
+`attempt-<n>/` 目录。
+
+工作台和 MCP App 只能消费应用服务 API、资源或事件流，不能遍历任意本地路径。

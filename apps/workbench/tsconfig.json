@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "paths": {
+      "@content-studio/core-types": [
+        "../../src/types.ts"
+      ]
+    },
+    "types": [
+      "vitest/globals"
+    ],
+    "strict": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "vite.config.ts"
+  ]
+}

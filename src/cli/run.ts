@@ -1,16 +1,37 @@
 // @env node
 
-import type { CampaignSpec, ProjectManifest } from '../types'
+import type {
+  CampaignSpec,
+  PlaywrightRecordingOptions,
+  ProjectChannelBinding,
+  ProjectManifest,
+  ProjectRecord,
+  ProjectSnapshot,
+  RecordingJobInput,
+  RecordingJobResult,
+} from '../types'
 import { readFile, stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import process from 'node:process'
 import { generateStudioBundle } from '../bundle/generate'
+import { CHANNEL_BLUEPRINTS } from '../constants'
 import { writeStudioBundle } from '../output/write'
+import { recordWithPlaywright } from '../recording/playwright'
+import { createContentStudioServer } from '../runtime/server'
 import { validateCampaign, validateProjectManifest } from '../validation'
+import { compileVideoPlan } from '../video/compile'
 
 export interface CliRuntime {
   cwd: string
+  signal?: AbortSignal
   write: (message: string) => void
+}
+
+export interface CliServices {
+  record: (
+    input: RecordingJobInput,
+    options?: PlaywrightRecordingOptions,
+  ) => Promise<RecordingJobResult>
 }
 
 const DEFAULT_RUNTIME: CliRuntime = {
@@ -18,26 +39,57 @@ const DEFAULT_RUNTIME: CliRuntime = {
   write: message => process.stdout.write(`${message}\n`),
 }
 
+const DEFAULT_SERVICES: CliServices = {
+  record: recordWithPlaywright,
+}
+
 const MAX_INPUT_BYTES = 1024 * 1024
 
 export async function runCli(
   arguments_: string[],
   runtime: CliRuntime = DEFAULT_RUNTIME,
+  services: CliServices = DEFAULT_SERVICES,
 ): Promise<number> {
   const command = arguments_[0]
   if (command === undefined || command === 'help' || command === '--help') {
     runtime.write(renderHelp())
     return 0
   }
-  if (command !== 'generate' && command !== 'validate')
+  if (
+    command !== 'generate'
+    && command !== 'record'
+    && command !== 'serve'
+    && command !== 'validate'
+  ) {
     throw new Error(`Unknown command: ${command}`)
+  }
 
-  const options = parseOptions(arguments_.slice(1))
+  const options = parseOptions(
+    arguments_.slice(1),
+    command === 'serve'
+      ? new Set(['campaign', 'db', 'port', 'project'])
+      : command === 'record'
+        ? new Set(['attempts', 'base-url', 'campaign', 'out', 'project'])
+        : new Set(['campaign', 'out', 'project']),
+  )
   const projectPath = requireOption(options, 'project')
-  const campaignPath = requireOption(options, 'campaign')
+  const serveCampaignPath = command === 'serve'
+    ? options.get('campaign')
+    : requireOption(options, 'campaign')
   const project = validateProjectManifest(
     await readJsonFile(projectPath, runtime.cwd),
   )
+  if (command === 'serve') {
+    const campaign = serveCampaignPath === undefined
+      ? undefined
+      : validateCampaign(
+          await readJsonFile(serveCampaignPath, runtime.cwd),
+          project,
+        )
+    return runServe(project, campaign, options, runtime)
+  }
+
+  const campaignPath = requireOption(options, 'campaign')
   const campaign = validateCampaign(
     await readJsonFile(campaignPath, runtime.cwd),
     project,
@@ -51,6 +103,47 @@ export async function runCli(
   }
 
   const outputPath = requireOption(options, 'out')
+  if (command === 'record') {
+    if (campaign.video === undefined)
+      throw new Error('Campaign does not define a video plan')
+
+    const baseUrl = requireOption(options, 'base-url')
+    const attempts = parseAttempts(options.get('attempts'))
+    const result = await services.record(
+      {
+        baseUrl,
+        jobId: `${campaign.campaignId}-recording`,
+        ...(attempts === undefined ? {} : { maxAttempts: attempts }),
+        outputDirectory: resolve(runtime.cwd, outputPath),
+        plan: compileVideoPlan(project, campaign),
+        projectId: project.projectId,
+        ...(runtime.signal === undefined
+          ? {}
+          : { signal: runtime.signal }),
+      },
+      {
+        emit: (event) => {
+          runtime.write(JSON.stringify(event))
+        },
+      },
+    )
+    if (result.receipt.outcome === 'cancelled') {
+      runtime.write(
+        `Recording cancelled after ${result.receipt.completedActions} action(s).`,
+      )
+      return 130
+    }
+    if (result.receipt.outcome === 'failed') {
+      throw new Error(
+        `Recording failed with ${result.receipt.failure?.code ?? 'runtime-error'}`,
+      )
+    }
+    runtime.write(
+      `Recorded ${result.receipt.completedActions} action(s) in ${result.receipt.artifactDirectory}.`,
+    )
+    return 0
+  }
+
   const bundle = generateStudioBundle(project, campaign)
   const result = await writeStudioBundle(
     bundle,
@@ -62,9 +155,11 @@ export async function runCli(
   return 0
 }
 
-function parseOptions(arguments_: string[]): Map<string, string> {
+function parseOptions(
+  arguments_: string[],
+  allowedOptions: ReadonlySet<string>,
+): Map<string, string> {
   const options = new Map<string, string>()
-  const allowedOptions = new Set(['campaign', 'out', 'project'])
   for (let index = 0; index < arguments_.length; index += 2) {
     const flag = arguments_[index]
     const value = arguments_[index + 1]
@@ -80,6 +175,15 @@ function parseOptions(arguments_: string[]): Map<string, string> {
     options.set(name, value)
   }
   return options
+}
+
+function parseAttempts(input: string | undefined): number | undefined {
+  if (input === undefined)
+    return undefined
+  const attempts = Number(input)
+  if (!Number.isInteger(attempts) || attempts < 1 || attempts > 3)
+    throw new Error('--attempts must be an integer between 1 and 3')
+  return attempts
 }
 
 async function readJsonFile(path: string, cwd: string): Promise<unknown> {
@@ -106,8 +210,87 @@ function requireOption(options: Map<string, string>, name: string): string {
 function renderHelp(): string {
   return [
     'content-studio generate --project <project.json> --campaign <campaign.json> --out <directory>',
+    'content-studio record --project <project.json> --campaign <campaign.json> --base-url <url> --out <directory> [--attempts <1-3>]',
+    'content-studio serve --project <project.json> [--campaign <campaign.json>] [--db <path>] [--port <11001>]',
     'content-studio validate --project <project.json> --campaign <campaign.json>',
   ].join('\n')
+}
+
+async function runServe(
+  project: ProjectManifest,
+  campaign: CampaignSpec | undefined,
+  options: Map<string, string>,
+  runtime: CliRuntime,
+): Promise<number> {
+  const snapshot: ProjectSnapshot = {
+    manifest: project,
+    projectId: project.projectId,
+    snapshotId: `${project.projectId}-snapshot-1`,
+    version: 1,
+  }
+  const projectRecord: ProjectRecord = {
+    captureMode: 'deterministic',
+    currentSnapshotId: snapshot.snapshotId,
+    name: project.name,
+    projectId: project.projectId,
+    repeatability: 'high',
+    sourceAccess: 'source-owned',
+  }
+  const projectChannelBindings: ProjectChannelBinding[] = campaign === undefined
+    ? []
+    : campaign.channels.map(channel => ({
+        channel: channel.id,
+        delivery: CHANNEL_BLUEPRINTS[channel.id].delivery,
+        enabled: true,
+        projectId: project.projectId,
+      }))
+  const handle = createContentStudioServer({
+    databasePath: resolve(
+      runtime.cwd,
+      options.get('db') ?? '.content-studio/content-studio.sqlite',
+    ),
+    project: projectRecord,
+    projectChannelBindings,
+    snapshot,
+  })
+  const port = parsePort(options.get('port'))
+  try {
+    await listenServer(handle.server, port)
+    const address = handle.server.address()
+    if (address === null || typeof address === 'string')
+      throw new Error('Content Studio runtime did not expose a TCP address')
+    runtime.write(
+      `Content Studio runtime listening at http://127.0.0.1:${address.port}`,
+    )
+    if (runtime.signal === undefined)
+      return 0
+    if (!runtime.signal.aborted) {
+      await new Promise<void>(resolveSignal =>
+        runtime.signal?.addEventListener('abort', () => resolveSignal(), { once: true }),
+      )
+    }
+    return 130
+  }
+  finally {
+    await handle.close()
+  }
+}
+
+function listenServer(
+  server: ReturnType<typeof createContentStudioServer>['server'],
+  port: number,
+): Promise<void> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    server.once('error', rejectPromise)
+    server.listen(port, '127.0.0.1', () => resolvePromise())
+  })
+}
+
+function parsePort(input: string | undefined): number {
+  const port = input === undefined ? 11001 : Number(input)
+  if (!Number.isInteger(port) || port < 0 || port > 65535)
+    throw new Error('--port must be an integer between 0 and 65535')
+  return port
 }
 
 export type { CampaignSpec, ProjectManifest }

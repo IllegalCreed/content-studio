@@ -15,5 +15,8 @@ export default defineConfig({
         statements: 85,
       },
     },
+    include: [
+      'src/**/*.test.ts',
+    ],
   },
 })

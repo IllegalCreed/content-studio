@@ -1,144 +1,355 @@
-# Architecture
+# 架构
 
-## Control-plane boundary
+> 状态：演进中
+> 最近评审：2026-08-02
+
+## AI 原生控制面
 
 ```mermaid
 flowchart TB
-  UI["Vue 3 control surface"] --> API["Control-plane application service"]
+  AI["MCP 主机中的 AI"] <--> MCP["Content Studio Plugin / MCP App"]
+  UI["Vue 3 控制面"] --> APP["控制面应用服务"]
+  MCP --> APP
   CLI["CLI"] --> CORE["Content Studio core"]
-  API --> CORE
-  CORE --> GEN["Deterministic content generator"]
-  CORE --> PLAN["Semantic video compiler"]
-  CORE --> REC["Playwright recorder"]
-  CORE --> COMP["FFmpeg compositor"]
-  API --> STORE["Job and artifact metadata store"]
-  API --> MO["Independent marketing-ops"]
-  MO --> OWNER["Owner in official channel UI"]
-  MO --> CH["Authorized channel adapters"]
+  APP --> CORE
+  APP --> STORE["项目、活动、任务、素材和事件存储"]
+  CORE --> GEN["确定性编译器和 AI 创作契约"]
+  CORE --> PLAN["语义视频计划编译器"]
+  CORE --> REC["Playwright 录制器"]
+  CORE --> COMP["FFmpeg 合成器"]
+  APP --> MO["随附但独立的 marketing-ops"]
+  MO --> PERSON["渠道授权人使用官方平台界面"]
+  MO --> CHANNEL["已授权渠道适配器"]
   MO --> STORE
 ```
 
-The Vue application is a replaceable control surface. It renders projects,
-campaigns, artifacts, job events, preview frames, Owner handoffs, receipts, and
-reports. It does not implement generation, browser recording, composition,
-authorization, or channel-specific publishing.
+Content Studio 的目标不是让 Vue 页面自己调用各种生成 API，而是把项目事实、
+发布活动、AI 创作、任务执行和结果观察封装为稳定的应用服务与 MCP 能力。
 
-Content Studio owns:
+- AI 负责策划、创作、渠道适配、根据审核修改和数据复盘；
+- Vue 工作台负责可视化、编辑、审核、取消、重试和人工接管；
+- core 负责验证、版本化、确定性编译和领域规则；
+- 运行时适配器负责录制、合成、AI 后台执行等长任务；
+- `marketing-ops` 独立负责真实渠道授权、外部写入和发布回执。
 
-- versioned project and campaign inputs;
-- deterministic content and semantic video-plan compilation;
-- local recording and composition jobs;
-- local artifact metadata, progress events, and media receipts;
-- preparation of a project-scoped `marketing-ops` handoff.
+当前 V0.1 确定性编译器和 V0.2 录制器是已经落地的基础。V0.3 的第一条本地运行时
+切片已经提供 `content-studio serve` 和项目/活动 API，Vue 工作台可以创建并读取
+发布活动；MCP AI 创作契约、任务写入和后台 AI 执行器仍按路线图接入，文档不把计划
+能力描述成当前已经实现。
 
-`marketing-ops` independently owns:
+## 所有权边界
 
-- registered-project identity and canonical channel configuration;
-- campaign authorization and channel policy;
-- publishing, replies, deletion, runtime adapter health, and quotas;
-- owner-assisted handoff coordination;
-- external-write receipts and publication monitoring.
+Content Studio 拥有：
 
-Content Studio may display `marketing-ops` state, but it does not infer or expand
-authorization from local project data.
+- 版本化项目事实、项目渠道选择、项目渠道账号绑定和发布活动输入；
+- 项目素材、活动产物、渠道内容修订和资源变体；
+- AI 创作结果的版本、事实引用和安全生成摘要；
+- 本地制作任务、进度事件、预览和媒体回执；
+- 发布安排与发送给 `marketing-ops` 的项目范围移交数据；
+- 发布回执和监测结果的本地只读投影。
 
-## Layering
+`marketing-ops` 独立拥有：
+
+- 已注册项目身份和规范渠道配置；
+- 外部 campaign 授权和渠道策略；
+- 发布、回复、删除、运行时健康和配额；
+- 人工辅助发布协调；
+- 外部写入回执和授权监测。
+
+Content Studio 可以显示 `marketing-ops` 的新鲜状态，但不能从项目配置、AI
+生成内容、发布安排或人工接管推断或扩大授权。
+
+## 开源本地运行时
+
+Content Studio 的默认产品形态是开源、本地优先。安装器把用户需要的组件组织成
+一个本地运行时，而不是要求用户分别克隆和维护多个仓库：
 
 ```text
-apps/workbench (future Vue 3)
+Content Studio installer
         │
-        ▼
-control-plane application services
-        │
-        ├── core generation and validation
-        ├── recording job runner ── Playwright adapter
-        ├── composition job runner ─ FFmpeg adapter
-        ├── artifact/event stores
-        └── marketing-ops client boundary
+        ├─ Content Studio CLI、core 和应用服务
+        ├─ 本地 MCP Server 与 Vue 工作台
+        ├─ 本地元数据存储
+        ├─ Playwright / FFmpeg Worker
+        └─ 固定兼容版本的 marketing-ops
 ```
 
-The dependency direction points inward. Runtime adapters implement narrow core
-interfaces. Tests can exercise cancellation, retry, state transitions, and
-event order without launching a browser or contacting a channel.
+本地 MCP 使用 `stdio` 或只绑定 `127.0.0.1`。项目数据、素材和制作产物默认不
+离开用户设备；首次访问项目必须由用户明确选择范围。本地运行时不得自动扫描项目、
+修改项目代码、开放公网端口或配置渠道。
 
-## Project adapter
+### 本地数据与文件存储
 
-A project manifest is the reusable content and capture adapter:
+本地运行时本身就是 Content Studio 的后端边界，不需要用户另外部署云端 API 或
+数据库服务器。正式运行时采用两层存储：
 
-- `facts` are the only source claims available to deterministic content generation;
-- `tagline` and `topic` provide localized positioning;
-- `captureFlows` describe reproducible interactions;
-- `startPath` is project-relative;
-- locators are semantic (`role`, `label`, `text`, `test-id`).
+- 内置 SQLite 保存项目登记、项目快照、发布活动、内容版本、任务、追加式进度
+  事件、人工接管、发布回执、监测快照和报告索引；
+- 项目 `.content-studio/` 或用户明确指定的窄目录保存图片、视频、音频、字幕、
+  预览帧和其他媒体文件，SQLite 只记录文件的受控引用、版本和校验和。
 
-V0.2 adds an explicit project-owned preview adapter. It may start a known local
-preview command through a fixed implementation or attach to a caller-supplied
-base URL. The public contract does not accept arbitrary shell, JavaScript,
-selectors, environment dumps, credentials, or browser profiles.
+项目任务面板和全局任务面板查询同一份本地任务数据，只改变筛选范围。大型媒体不
+直接塞进 SQLite，便于备份、迁移和单独清理。
 
-If a new project already has stable accessibility names or test IDs, it needs
-only a manifest and preview configuration. If an interaction cannot be selected
-or reset deterministically, the target project may need a small
-accessibility/testability change. The recorder and compositor stay generic.
+媒体保留分为“长期素材”“活动产物”和“可重建缓存”三类。长期素材、审核通过的
+最终产物和发布回执默认不自动删除；草稿、失败尝试、旧预览和中间产物按用户设置
+的期限进入清理候选；缓存任务结束后可以自动清理。清理只允许作用于 Content
+Content Studio 自己登记的文件，并提供预览、确认、回收区和恢复窗口。V0.3.0 的内存
+Repository 仍用于纯内存测试；`SqliteContentStudioRepository` 已提供第一版本地
+控制数据持久化，任务事件和清理管理仍属于 V0.3.2 的后续工作。
 
-## Deterministic core
+Content Studio Plugin 是 AI 宿主入口，只包含 Skills、MCP 连接和 MCP App UI
+声明，不复制 core 或发布逻辑。用户只安装这一个 Plugin。
 
-The compiler:
+### `marketing-ops` 受管依赖
 
-1. rejects sensitive-looking fields and non-HTTPS public URLs;
-2. validates facts, locale, channel, target origin, and capture-flow references;
-3. generates channel packages from current declared facts;
-4. compiles capture steps into an absolute timeline and viewport;
-5. writes only known bundle files to an explicit narrow directory.
+`marketing-ops` 随 Content Studio 安装和做兼容性检查，但保持独立仓库、包、
+进程或 MCP 服务、数据存储和发布责任。它不是 Content Studio core 的内部模块。
 
-No generation timestamp is stored, so identical inputs produce identical
-bundles. Runtime job events and receipts are intentionally time-bearing and live
-outside the deterministic bundle.
+应用服务通过固定、有类型的客户端边界调用它：
 
-## Recorder execution boundary
+1. 每次调用解析一个明确且稳定的 `projectId`；
+2. 写入前获取该项目最新渠道状态；
+3. 只传递项目 renderer 生成的版本化发布包和窄素材引用；
+4. 重试保持活动标识和幂等键；
+5. 只有匹配且持久化的发布回执才能更新发布投影。
 
-The recorder consumes a compiled `VideoPlan`; it never accepts uncompiled
-selectors or scripts.
+安装、启动、健康检查、项目绑定、AI 生成或人工接管都不产生发布授权。渠道配置
+只能通过 `marketing-ops` 的本地交互式流程完成，Content Studio、MCP 参数和日志
+都不能接触凭据或浏览器会话。
 
-For each attempt it:
+`marketing-ops` 未就绪或渠道尚未配置时，文章、图片和视频制作继续可用；发布与
+授权监测能力明确显示为未配置或被阻塞，并保持 fail closed。
 
-1. creates an isolated browser context with the plan viewport and reduced motion;
-2. navigates to each project-relative scene path under one explicit origin;
-3. resolves only role, label, text, or test-id locators;
-4. performs the compiled click, fill, press, wait, and capture actions;
-5. emits ordered progress events and preview-frame references;
-6. rejects dialogs, downloads, authentication routes, and cross-origin
-   navigation;
-7. closes the context, preserves attempt evidence, and returns a recorder
-   receipt.
+## 分层
 
-An `AbortSignal` stops future work and interrupts abort-aware waits. Retry starts
-a fresh isolated attempt, emits its own attempt number, and never overwrites the
-previous attempt directory.
+```text
+apps/workbench ───────┐
+MCP App adapter ──────┼─→ 控制面应用服务
+CLI ──────────────────┘          │
+                                ├─ 项目、活动和内容服务
+                                ├─ 任务命令与投影
+                                ├─ 素材、事件和回执存储
+                                └─ marketing-ops 客户端边界
+                                           │
+                            Content Studio core
+                                      │
+                      ┌───────────────┼───────────────┐
+                      ▼               ▼               ▼
+                  AI 执行器      Playwright 录制    FFmpeg 合成
+```
 
-## Channel delivery classes
+依赖方向指向 core。UI 和 MCP 适配器只能调用应用服务，不能成为第二个生成、
+录制、合成、监测或发布引擎。
 
-- `automatic-candidate`: GitHub, Bluesky, DEV, Mastodon. This is capability
-  metadata, not authorization.
-- `owner-assisted`: Weibo, X, Zhihu, Juejin, Jianshu, V2EX, Hacker News,
-  Product Hunt, Facebook, Bilibili, YouTube, Douyin.
-- `content-only`: Reddit, Xiaohongshu, WeChat. Content can be prepared, but no
-  current delivery handoff is implied.
+运行时适配器实现窄接口。测试应能在不启动真实浏览器、不调用模型、不连接渠道的
+情况下验证取消、重试、状态转换和事件顺序。
 
-The classification follows the current zero-new-cost and no-enterprise-entity
-constraints. `marketing-ops` remains the final source of truth for runtime
-channel health, policy, and permission.
+## MCP 应用边界
 
-## Owner handoff
+MCP 是 AI 使用 Content Studio 的首要应用边界，而不是未来才考虑的附加传输层。
+它应提供：
 
-An Owner handoff contains a campaign/channel reference, artifact checksums,
-review checklist, and official destination URL. It contains no session,
-credential, cookie, browser profile, or instruction to bypass platform
-controls.
+- 项目、项目事实、素材、活动、渠道内容、任务和报告等只读资源；
+- 创建或修订活动与内容、启动或控制任务等结构化工具；
+- 长任务进度、预览、失败和人工接管通知；
+- 复用相同应用服务的 Vue 可视化控制面。
 
-The Owner performs login, 2FA/CAPTCHA, review, and final publish in the official
-channel UI. A later `marketing-ops` receipt—not the handoff itself—is the
-evidence that permits the control plane to display `published`.
+MCP 工具必须是高层、有类型、有项目范围的操作。它们不能接收任意 Shell、
+JavaScript、选择器、本地路径、浏览器配置、cookie、token 或密码。
 
-See [control-plane model](control-plane.md) for the aggregate contracts and
-state machine.
+交互式内容创作由 MCP 主机中的 AI 完成。需要定时或脱离对话持续执行的生成工作，
+由显式配置的后台 AI 执行器接手；后台执行器必须写入相同任务事件和产物契约，
+不能绕过审核、审计或发布授权。
+
+## MCP 2026-07-28 适配
+
+远程服务首选 MCP `2026-07-28`：
+
+- 通过 `server/discover` 公布版本、身份、工具和扩展能力；
+- 每个请求显式携带协议版本与客户端能力；
+- 不依赖 `initialize` 握手或 `Mcp-Session-Id`；
+- 使用不可猜测的 `projectId`、`activityId`、`taskId` 等业务句柄表达跨调用
+  状态；
+- 在每次工具调用时重新校验用户、项目和句柄归属；
+- 工具与资源列表使用确定性顺序、明确 `ttlMs` 和正确 `cacheScope`。
+
+MCP Tasks 只承担单个长工具调用的通用异步生命周期。Content Studio 内部继续
+保存生成、录制、合成、等待人工、发布和监测等细粒度状态，再映射为
+`working`、`input_required`、`completed`、`failed` 或 `cancelled`。
+
+新 Tasks 扩展没有 `tasks/list`。全局与项目任务面板继续调用有业务范围的
+`list_global_tasks` 和 `list_project_tasks`，不能把 MCP Task 句柄协议当成任务
+数据库。
+
+MCP App UI 以版本化 `ui://` resource 交付，通过开放 `ui/*` JSON-RPC bridge
+调用工具。Vue 控制面按行内卡片、内容审核视图和全屏活动工作台拆分。所有核心
+工具在不渲染 UI 时仍必须可用。
+
+新实现不依赖已经弃用的 Roots、Sampling 或 MCP Logging。项目范围通过工具参数
+和资源 URI 表达；交互式 AI 来自 MCP 主机；后台 AI 使用宿主任务机制或独立
+执行器；日志使用安全应用摘要和 OpenTelemetry。
+
+详细协议、Plugin 打包和审核基线见
+[MCP App 与公开上架准备](mcp-app-readiness.md)。
+
+## 公网入口与可选远程拓扑
+
+Algorithm Visualizer 的自有服务器已经证明现有域名、TLS、Nginx、Node.js 和
+PM2 基础可用于部署轻量服务。公网服务主要用于公共 Plugin 审核、MCP 入口和 UI
+resources；本地自托管不依赖该服务。公共形态优先采用：
+
+```text
+Nginx / TLS
+    │
+    ▼
+无状态 MCP API + MCP App UI resources
+    │
+    ├─ 项目、活动、任务和素材元数据
+    └─ 受控任务队列
+             │
+             ▼
+经用户明确连接的本地或独立 Worker
+Playwright / FFmpeg / AI / marketing-ops
+```
+
+现有服务器资源适合作为轻量 MCP API 试运行环境，不适合同时承载高并发
+Playwright、FFmpeg 和后台 AI 制作。API 与媒体 Worker 必须能独立扩容、限流和
+失败恢复。
+
+生产服务使用独立非 root 用户、窄目录、进程托管、健康检查、资源限制、备份和
+OpenTelemetry。模型与渠道凭据继续由外部部署/授权系统管理，不能进入 MCP 参数、
+项目数据、日志或仓库。
+
+公网入口与本地运行时之间的连接协议必须单独威胁建模，不能通过模型提示或工具
+参数传递设备身份、连接材料或凭据。完整安装与分发决策见
+[开源、本地优先与安装分发](local-first-distribution.md)。
+
+## 全局渠道与项目绑定
+
+渠道目录是全局能力定义；一个渠道可以有多个账号身份。项目通过
+`ProjectChannelBinding` 选择启用的渠道，并绑定一个默认账号或多个项目允许使用的
+账号。活动只能选择项目已启用的渠道账号。
+
+```text
+全局渠道定义
+  + 项目渠道绑定
+  + 项目渠道账号
+  + 活动目标渠道
+  + marketing-ops 当前策略/授权
+  = 本次发布可用能力
+```
+
+本地项目设置可以降低自动化程度，不能提升外部权限。渠道健康、策略、授权和发布
+状态来自新鲜的 `marketing-ops` 快照或回执。
+
+现有 19 渠道清单及 `automatic-candidate`、`owner-assisted`、
+`content-only` 分类仍是 Content Studio 的静态能力元数据，不代表实际授权。
+
+## 项目适配方式
+
+项目注册时必须选择接入模式：
+
+1. **有源项目（`source-owned`）。** 项目可以增加关键节点的 `data-testid` 或
+   其他稳定语义标注，并注册受信任的窄适配器。目标是由 AI 生成拍摄大纲和录制
+   计划，再由 Playwright 确定性执行。
+2. **无源项目（`web-assisted`）。** 项目只有线上网页，不能修改源码。AI 观察
+   可见页面并生成辅助计划，由浏览器插件或宿主 Computer Use 能力协助录制，必要
+   时由用户完成现场步骤。目标是一次性或低频辅助录制，不承诺同等的自动重放。
+3. **导入已有产物。** 直接把已有文章、图片、音频或视频登记为版本化素材，跳过
+   页面录制。
+
+有源项目优先使用 role、label、text 和可访问名称，`testid` 只标注录制真正依赖
+的关键按钮、状态和结果节点，不要求修改所有 DOM。AI 生成的内容脚本、拍摄大纲
+和录制计划必须经过项目范围校验；无源模式的浏览器辅助计划还要记录人工介入和
+可重复性等级。
+
+受信任项目适配器是代码级扩展点，不是 MCP 的任意代码执行入口。它必须：
+
+- 以已注册 adapter ID 选择已知实现；
+- 使用版本化、可验证的窄参数；
+- 不接收任意命令、脚本或环境变量转储；
+- 不读取凭据、浏览器 profile 或用户会话；
+- 浏览器交互继续使用 role、label、text 或 test-id 等语义定位；
+- 对目标项目的代码修改必须由项目所有者明确许可并单独评审。
+
+完整的有源/无源接入决策、任务差异和实施顺序见
+[项目接入模式](project-integration-modes.md)。
+
+## 确定性 core
+
+当前编译器：
+
+1. 拒绝疑似敏感字段和非 HTTPS 公开 URL；
+2. 验证事实、语言、渠道、目标 origin 和 capture-flow 引用；
+3. 从已声明事实生成渠道内容包；
+4. 把 capture step 编译为绝对时间线和 viewport；
+5. 只向明确的窄目录写入已知 bundle 文件。
+
+确定性 bundle 不存储生成时间，因此相同输入产生相同结果。运行任务事件和回执
+有时间信息，位于 bundle 之外。
+
+AI 创作层在此基础上增加内容修订和非确定性产物，但必须记录项目/活动输入版本、
+事实引用、生成器版本和产物校验和。它不能修改历史产物，也不能把模型生成的陈述
+自动升级为项目事实。
+
+## 录制执行边界
+
+录制器只消费编译后的 `VideoPlan`，不接受未编译的选择器或脚本。
+
+每次尝试：
+
+1. 使用计划 viewport 和 reduced-motion 创建隔离浏览器上下文；
+2. 在一个明确 origin 下导航到项目相对场景路径；
+3. 只解析 role、label、text 或 test-id 定位；
+4. 执行已编译的 `wait-for`、click、fill、press、wait 和 capture 动作；
+5. 发出有序进度事件和预览帧引用；
+6. 拒绝弹窗、下载、认证路径和跨 origin 导航；
+7. 关闭上下文、保留尝试证据并返回录制器回执。
+
+`AbortSignal` 停止后续工作并中断支持取消的等待。重试创建新的隔离尝试，使用新
+尝试编号，并且永不覆盖以前的 `attempt-<n>/` 目录。
+
+## 内容、素材和任务
+
+文章与视频是发布内容类型。图片生成、录制、字幕、旁白和合成属于制作能力。
+
+素材只有两个当前作用域：
+
+- 项目素材：可在本项目多个活动间复用；
+- 活动产物：为一次活动生成，显式操作后才能沉淀为项目素材。
+
+移动端、PC 端和不同比例文件是渠道内容的资源变体。平台规格决定实际生成集合。
+
+任务只有制作、发布、监测三类。全局和项目任务面板查询同一任务存储，只改变
+投影范围。活动页面展示内容、发布和数据等业务对象，不复制任务模型。
+
+## 人工接管
+
+人工接管包含活动/渠道/发布安排引用、产物校验和、审核清单和官方目标地址。
+它不包含会话、凭据、cookie、浏览器 profile 或绕过平台控制的说明。
+
+渠道授权人在官方渠道界面执行登录、2FA/CAPTCHA、审核和最终发布点击。只有
+随后的匹配 `marketing-ops` 回执才能让控制面显示“已发布”。
+
+“渠道授权人”与项目负责人、内容审核人是不同角色。内部兼容名可以保留
+`Owner`，面向用户统一使用中文。
+
+## 发布监测
+
+发布和监测都以每个渠道发布记录为单位：
+
+```text
+发布安排
+  → 发布回执和公开地址
+    → 监测计划
+      → 定时数据快照
+        → 活动/项目报告
+```
+
+数据可以来自公开信息、授权适配器或渠道授权人的明确录入。不可用指标使用
+`null`，不能伪造为零。Content Studio 只显示和分析结果；本仓库不执行发布、
+回复、删除、私有后台抓取或未经匹配授权的其他渠道操作。
+
+详细领域契约和状态机见[控制面模型](control-plane.md)，完整页面层级见
+[产品功能模块](product-modules.md)。

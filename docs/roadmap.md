@@ -1,102 +1,340 @@
-# Roadmap
+# 路线图
 
-> Status: active
-> Last reviewed: 2026-07-29
+> 状态：生效
+> 最近评审：2026-08-02
 
-## Product direction
+## 产品方向
 
-Content Studio is evolving from a deterministic compiler into a cross-project
-content-production control plane. Algorithm Visualizer remains the first
-end-to-end fixture. The visual workspace is a client of the reusable core, and
-all publishing remains behind independent `marketing-ops` authorization and
-policy.
+Content Studio 正在从确定性内容编译器发展为跨项目、AI 原生的 MCP 内容生产与
+发布控制台，并采用开源、本地优先、云端可选的分发形态。Algorithm Visualizer
+继续作为第一个端到端验证项目。
 
-## V0.1 — compiler foundation
+MCP AI、Vue 工作台和 CLI 复用同一套 Content Studio core、任务、素材和回执
+契约。`marketing-ops` 作为受管运行时依赖随 Content Studio 安装，但真实发布仍
+位于其独立的授权和渠道策略之后。
 
-- [x] Versioned project and campaign contracts.
-- [x] Sensitive-field, HTTPS, canonical-origin, fact, locale, channel, and flow validation.
-- [x] Deterministic content generation for the 19-channel inventory.
-- [x] Semantic capture-flow compiler for landscape, portrait, and square video.
-- [x] Safe local bundle writer and fixed CLI grammar.
-- [x] Algorithm Visualizer example.
+公开发布目标是进入 ChatGPT 与 Codex 共用的 Plugins Directory，并以首批
+AI 内容生产应用的标准准备无状态 MCP Server、MCP App UI、Skills、公共服务和
+审核材料。
 
-## V0.2 — observable local recording
+领域结构遵循以下基线：
 
-### Contract and execution kernel
+- 渠道全局定义，项目显式启用，发布活动从项目渠道中选择；
+- 素材归项目，活动拥有本次生成产物，暂不建设全局素材库；
+- 发布活动组织同一主题下不同平台的不同文章或视频；
+- 活动内使用内容组、渠道内容、资源变体、发布安排、发布记录和数据表现；
+- 制作、发布、监测是执行任务，只在全局和项目任务面板中投影；
+- 面向用户使用“发布活动”“渠道授权人”“人工接管”等中文术语。
 
-- [x] Record the product vision, control-plane boundary, aggregate model, and
-      lifecycle state machine.
-- [ ] Define standard recorder progress events, log summaries, preview frames,
-      attempt receipts, and typed failure codes.
-- [ ] Add a recording runner with cooperative cancellation and bounded,
-      policy-driven retry.
-- [ ] Preserve every attempt under a distinct narrow output directory.
+## V0.1 — 编译器基础
 
-### Playwright adapter
+- [x] 版本化项目和 campaign 契约。
+- [x] 敏感字段、HTTPS、规范 origin、事实、语言、渠道和 flow 验证。
+- [x] 为当前 19 渠道生成确定性内容。
+- [x] 为横屏、竖屏和方形视频编译语义 capture flow。
+- [x] 安全的本地 bundle writer 和固定 CLI 语法。
+- [x] Algorithm Visualizer 示例。
 
-- [ ] Add a Playwright recorder that consumes only compiled semantic actions.
-- [ ] Start or attach to a project preview through an explicit project-owned adapter.
-- [ ] Record isolated clips with fixed viewport, reduced motion policy, and deterministic waits.
-- [ ] Fail closed on missing locators, navigation outside the project origin, dialogs, downloads, or authentication pages.
-- [ ] Preserve video evidence, sanitized log summaries, preview frames, and a machine-readable recorder receipt.
-- [ ] Add the fixed `record` CLI grammar after the library contract is stable.
+现有 `Campaign`、`campaignId` 等名字继续作为 V0.1 兼容契约；产品层显示为
+“发布活动”，以后通过版本化迁移演进。
 
-### V0.2 acceptance gates
+## V0.2 — 可观察的本地录制
 
-- [ ] Unit tests prove event order, cancellation, retry isolation, semantic-only
-      locator mapping, and fail-closed policy.
-- [ ] An integration fixture records a local deterministic page without secrets
-      or a persistent browser profile.
-- [ ] `pnpm lint:check`, `pnpm type-check`, `pnpm test`, `pnpm coverage`,
-      `pnpm build`, and `pnpm generate:example` pass.
+### 产品和控制面基线
 
-## V0.3 — minimal workspace and composition
+- [x] 记录 AI 原生 MCP App 产品愿景和安全边界。
+- [x] 记录全局渠道、项目渠道绑定、项目素材和活动产物的归属关系。
+- [x] 记录发布活动、内容组、渠道内容、资源变体、发布记录和监测模型。
+- [x] 记录制作、发布、监测三类任务及全局/项目投影关系。
+- [x] 记录渠道授权人、人工接管、发布回执和监测指标语义。
+- [x] 记录统一生命周期和文章/视频可跳过阶段规则。
 
-### Vue 3 workspace
+### 契约和执行内核
 
-- [ ] Create a minimal Vue 3 + TypeScript control surface.
-- [ ] Add the first real projections: Project Portfolio, Campaign Board, Video
-      Job Detail, and Owner Inbox.
-- [ ] Show lifecycle stage, attempt history, progress events, bounded logs,
-      preview frames, and landscape/portrait/square artifacts.
-- [ ] Support cancel and retry through application-service commands.
-- [ ] Add a read-only Channel Center backed by fresh `marketing-ops` health and
-      policy snapshots; local UI state cannot enable publishing.
-- [ ] Keep all production behavior in Content Studio core/runtime adapters.
+- [x] 定义标准录制进度事件、日志摘要、预览帧、尝试回执和类型化失败代码。
+- [x] 添加支持协作式取消和策略化有界重试的录制 runner。
+- [x] 为每次尝试保留独立的窄输出目录。
 
-### Media automation
+### Playwright 适配器
 
-- [ ] Add FFmpeg scene composition, transitions, crops, loudness normalization, and platform aspect-ratio variants.
-- [ ] Generate captions and narration scripts from the same declared facts.
-- [ ] Support a zero-cost local narration path and an optional reviewed provider interface.
-- [ ] Produce thumbnails, cover frames, subtitles, descriptions, and media checksums.
+- [x] 添加只消费编译后语义动作的 Playwright 录制器。
+- [x] 通过显式的项目预览适配器启动或连接项目。
+- [x] 使用固定 viewport、reduced-motion 和确定性等待录制隔离片段。
+- [x] 对缺失定位、跨项目 origin、弹窗、下载和认证页面 fail closed。
+- [x] 保留视频证据、安全日志摘要、预览帧和机器可读录制回执。
+- [x] 在库契约稳定后添加固定 `record` CLI 语法。
 
-## V0.4 — marketing-ops handoff
+### V0.2 验收
 
-- [ ] Convert content/media artifacts into a versioned, project-scoped handoff contract.
-- [ ] Keep media references local and checksum-addressed; never pass arbitrary file paths through MCP.
-- [ ] Display authorization and channel-health snapshots without treating them as local publishing authority.
-- [ ] Support Owner handoff packets for official-UI login, 2FA/CAPTCHA, review, and final click.
-- [ ] Ingest matching publication receipts and reconcile public URLs.
-- [ ] Add 1h/48h/7d follow-up reports from monitoring observations.
-- [ ] Add per-channel artifact constraints before any upload adapter can be considered.
+- [x] 单元测试覆盖事件顺序、取消、重试隔离、纯语义定位和 fail-closed 策略。
+- [x] 集成 fixture 无凭据、无持久浏览器 profile 地录制本地确定性页面。
+- [x] `pnpm lint:check`、`pnpm type-check`、`pnpm test`、`pnpm coverage`、
+      `pnpm build` 和 `pnpm generate:example` 通过。
 
-## Later — portable application surfaces
+## 执行原则
 
-- [ ] Stabilize project, campaign, job, artifact, handoff, receipt, and report
-      application-service contracts.
-- [ ] Expose high-level projections, commands, and progress events through an
-      optional MCP application adapter without binding the product to one host.
-- [ ] Add Content Library, full Channel Center, Report Timeline, and audit views
-      after their backing contracts are real.
-- [ ] Keep the local-first workspace usable when a channel is content-only,
-      reauthentication-required, blocked, or Owner-assisted.
+路线图按“领域基础 → 本地运行时 → AI/MCP → 媒体 → 发布 → 分发”的依赖顺序
+推进。每个阶段都先写失败测试，再实现最小闭环；没有通过该阶段验收，不提前扩展
+下一个阶段的 UI 或公网能力。
 
-## Non-goals
+每个功能按以下 TDD 循环实现：
 
-- Credential storage or browser-session ownership.
-- Channel login, CAPTCHA/2FA handling, stealth, or internal APIs.
-- Publishing, replies, or deletion without matching external authorization.
-- Publishing authority inferred from generated content or an Owner handoff.
-- Arbitrary scripts, arbitrary selectors, or project-specific recorder forks
-  when a declarative manifest is sufficient.
+1. 在 `src/types.ts` 或对应测试文件中写出失败的契约测试。
+2. 实现最小纯函数、应用服务或运行时适配器。
+3. 验证项目隔离、权限边界、取消、重试和回执条件。
+4. 接入控制面或 MCP，而不是在控制面复制领域逻辑。
+5. 通过相关局部门禁后，再运行完整门禁。
+
+统一验收命令为：
+
+```bash
+pnpm lint:check
+pnpm type-check
+pnpm test
+pnpm coverage
+pnpm build
+pnpm generate:example
+```
+
+## V0.2 收口 — 建立可信基线
+
+当前录制器和最小工作台已经完成主要实现，下一步先做基线收口，不新增业务功能：
+
+- [x] 审查当前未提交改动，按文档、core/CLI、录制器和工作台划分变更范围。
+- [x] 用本地 Playwright fixture 和 Algorithm Visualizer 公开页面完成一次录制；取消和
+      重试由录制任务契约测试覆盖。
+- [x] 确认所有输出都在 `.content-studio/` 或明确的窄目录中。
+- [x] 确认测试 fixture 不含凭据、cookie、浏览器 Profile 或未知外部写入。
+- [ ] 通过全部门禁并形成可回滚的 V0.2 基线提交。
+
+2026-08-02 收口证据：`pnpm lint:check`、`pnpm type-check`、`pnpm test`、
+`pnpm coverage`、`pnpm build` 和 `pnpm generate:example` 均通过。Playwright 本地
+fixture 已验证语义定位、`wait-for`、预览帧、视频片段、进度事件和回执；Algorithm
+Visualizer 的中英文快速排序页面已在公开无凭据环境中各完成一段录制，并检查了预览
+帧。这次真实页面录制仅作为 recorder smoke test，不作为可视化区域构图、连续播放
+时长或成片内容质量验收。取消、可重试失败、失败不重试和尝试隔离已有契约测试。
+基线提交仍需在确认变更范围后进行。
+
+V0.2 的停止线是：录制器契约稳定后，后续代码只能通过应用服务调用它，不能在
+Vue 页面中再实现一套录制逻辑。V0.2 遇到认证页面继续 fail closed，不接收用户
+凭据，也不实现验证码绕过；人工登录后继续录制属于后续任务引擎能力。
+
+## V0.3 — 领域应用服务与本地运行时
+
+### V0.3.0 领域模型和存储接口
+
+先定义领域，再选择数据库。所有领域类型继续集中在 `src/types.ts`，运行时实现
+通过窄接口隔离。
+
+- [x] 定义项目、项目快照和项目渠道绑定。
+- [x] 定义发布活动、内容组、渠道内容、项目素材和活动产物。
+- [x] 定义发布安排、人工接管、发布回执、数据快照和报告。
+- [x] 定义制作、发布、监测三类任务及统一事件信封。
+- [x] 为已实现的项目、活动、内容组、渠道内容、素材和活动产物定义 `projectId`
+      归属和不可变版本关系。
+- [x] 建立内存 Repository 和应用服务，不先绑定具体数据库。
+- [x] 保留 `Campaign`/`campaignId` 到“发布活动”的兼容映射。
+
+V0.3.0 的第一条领域切片已落地：应用服务现在能注册项目快照、绑定项目渠道、
+创建发布活动和渠道内容、保存活动产物、显式晋升项目素材、创建发布安排并接收
+匹配的发布回执。跨项目读取、未启用渠道、活动产物自动进入项目素材库、历史版本
+修改和回执错绑均有测试覆盖。人工接管只能绑定准确的发布安排，监测快照只能绑定
+成功发布回执，报告只能引用同项目的监测快照。通用任务事件和状态机已在 V0.3.1 的
+第一条内存切片中落地。
+
+首批测试必须覆盖：跨项目读取被拒绝、活动只能选择项目已启用渠道、活动产物不
+能自动变成项目素材、历史版本不可变、发布记录必须绑定活动和渠道。
+
+### V0.3.1 通用任务引擎
+
+把当前录制任务扩展为通用执行记录：
+
+- [x] 将状态统一为
+      `queued → generating → recording → composing → awaiting-owner → published → monitoring`。
+- [x] 支持文章跳过 `recording`，导入素材跳过 `generating`，但每次跳过都追加事件。
+- [x] 实现追加式事件、尝试编号、取消请求和安全重试。
+- [x] 让取消只终止当前尝试，重试创建新的尝试并保留旧证据。
+- [ ] 规定只有匹配的 `marketing-ops` 成功回执才能进入 `published`。
+- [x] 提供全局任务和项目任务查询投影，不复制任务存储。
+
+验收目标：使用纯内存假执行器，可以测试视频和文章两条流水线，而不启动浏览器、
+不连接渠道。
+
+V0.3.1 的第一条内存任务切片已落地：视频、文章和导入素材可以共用一份任务存储，
+状态变化、阶段跳过、取消、重试和尝试历史都会追加为事件；全局任务面板和项目任务
+面板只查询同一份数据。真实 `marketing-ops` 客户端和外部回执接入仍属于 V0.5，
+因此当前任务引擎只接受应用服务已经验证过的“匹配回执”结果，不自行授予发布权限。
+
+### V0.3.2 本地 Runtime
+
+- [x] 建立只接受明确项目清单的本地应用服务；当前先支持一个显式注册项目，完整多
+      项目注册表仍待补齐。
+- [x] 项目数据使用本地 SQLite 持久化；项目产物继续写入项目 `.content-studio/`。
+- [ ] 为长期素材、活动产物和可重建缓存定义不同的保留策略；默认不自动删除用户
+      显式保存的素材、最终产物和发布回执。
+- [ ] 提供 Content Studio 自己登记文件的占用统计、清理预览、用户确认、回收区和
+      恢复窗口；不扫描或删除未知项目文件。
+- [x] 提供 `content-studio serve` 的本地应用服务边界，默认使用 11001。
+- [x] 本地应用服务 HTTP 只绑定 `127.0.0.1`；`content-studio mcp --stdio` 仍待实现。
+- [ ] 支持进程重启后恢复任务、事件游标和尝试历史。
+- [ ] 提供 `content-studio doctor` 的最小版本、目录和 Worker 检查。
+- [ ] 不扫描任意项目目录；项目注册和能力选择必须由用户明确确认。
+
+### V0.3.3 MCP 与 AI 创作闭环
+
+- [ ] 先实现本地 MCP，再实现远程 Streamable HTTP 适配器。
+- [ ] 暴露项目事实、素材、活动、内容、任务、回执和报告资源。
+- [ ] 暴露创建活动、保存内容版本、启动/取消/重试任务等高层工具。
+- [ ] 实现 MCP `2026-07-28` 的 `server/discover`、显式项目句柄和缓存元数据。
+- [ ] 将长调用映射到 MCP Tasks，并保留领域级任务查询和轮询回退。
+- [ ] MCP 工具不接收任意路径、脚本、选择器、凭据或模型 API Key。
+- [ ] AI 由 MCP 宿主负责创作，Content Studio 只保存版本、事实引用和安全摘要。
+
+第一个 AI 垂直切片：读取 Algorithm Visualizer 项目事实，创建一个发布活动，生成
+不同渠道的文章和视频脚本，启动录制任务并返回可观察回执。
+
+### V0.3.3a 项目接入模式
+
+- [ ] 在项目模型中增加 `source-owned` 和 `web-assisted` 接入模式。
+- [ ] 为有源项目定义关键 `testid`/语义标注规范，不要求修改所有 DOM。
+- [ ] AI 根据主题生成拍摄大纲，再根据项目标注生成版本化录制计划。
+- [ ] 支持项目负责人明确许可后注册窄范围项目适配器。
+- [ ] 为无源项目定义 AI 页面观察和浏览器辅助录制边界。
+- [ ] 实现 `awaiting-owner` 人机接管：用户在可见浏览器中完成登录/验证码后确认，
+      录制器在同一临时会话继续非认证步骤。
+- [ ] 确保人工输入不进入 MCP 参数、录制计划、日志、回执或可重放动作。
+- [ ] 允许有源项目在自有本地/测试环境提供 mock 登录或受限的 CAPTCHA 测试开关，
+      但 Content Studio 不提供通用绕过逻辑。
+- [ ] 使用无凭据测试页面验证 Computer Use/浏览器插件辅助流程，不接入真实渠道。
+- [ ] 在回执中记录接入模式、计划版本、人工介入和可重复性等级。
+- [ ] 无源模式未稳定前，不将其作为默认无人值守 Worker，也不让它阻塞有源模式。
+
+完整定义见[项目接入模式](project-integration-modes.md)。
+
+### V0.3.4 真实 Vue 工作台
+
+- [x] 建立最小 Vue 3 + TypeScript 控制面。
+- [x] 接入本地应用服务的项目视图和发布活动创建；任务、素材、人工接管和报告仍是
+      演示投影。
+- [ ] 接入项目列表、发布活动列表、项目任务面板和视频制作详情。
+- [ ] 接入全局任务面板、全局渠道中心和项目渠道选择。
+- [ ] 接入项目素材、活动产物、人工接管和发布回执视图。
+- [ ] 显示生命周期、尝试历史、进度、预览、日志摘要和资源变体。
+- [ ] 通过应用服务执行取消和重试，不在 UI 本地修改任务状态。
+
+2026-08-02 工作台 mock 闭环已可运行：静态示例现在按“全局控制台”和“当前项目”
+分组，提供总览、项目概览、发布活动详情、全局/项目任务面板、渠道管理、项目素材库、
+待人工处理和项目报告等明确功能页。活动详情能看到内容组、渠道内容、关联任务、项目
+素材引用和活动产物；任务详情能看到所属活动、内容、渠道和内部步骤；渠道页展示
+marketing-ops 第一版的只读状态快照和全局规格；素材页展示文件记录而不是单一数量；
+报告页用明确标注的演示指标说明监测结果应该如何回到活动和渠道。
+其中项目视图和发布活动已经接入本地应用服务；任务、素材、人工接管、清理和报告仍不
+伪造执行结果，发布授权仍必须等待后续 `marketing-ops` 接入。
+
+2026-08-02 本地运行时切片已验证：`content-studio serve` 在 11001 启动后，工作台
+通过 `/api` 读取项目和渠道绑定，活动页可以创建一个真实持久化的发布活动；服务停止
+后工作台会回退到只读演示。当前没有接入真实渠道写入，也没有开放取消、重试或发布。
+
+V0.3 的完成标准是：用户可以在本地完成“项目 → 发布活动 → 内容 → 制作任务 →
+预览回执”的闭环；即使没有真实渠道，也能完整演示。
+
+### V0.3.5 分发风险验证
+
+这一步不做完整市场发布，只验证公共入口和本地 Runtime 的关系：
+
+- [ ] 用无项目数据的测试服务验证公共 MCP 入口和本地运行时连接方式。
+- [ ] 完成设备确认、连接材料和断线恢复的威胁建模。
+- [ ] 确认连接材料不进入模型提示、MCP 参数、日志或项目文件。
+- [ ] 如果安全连接方案尚未确定，先发布本地 Plugin，不阻塞本地产品开发。
+
+## V0.4 — 媒体自动化
+
+- [ ] 添加 FFmpeg 场景合成、转场、裁切和响度标准化。
+- [ ] 根据渠道规格生成横屏、竖屏、方形、移动端、PC 端和分辨率变体。
+- [ ] 生成字幕文件、旁白稿、封面和媒体校验和。
+- [ ] 增加本地旁白路径和可审核的可选 provider 接口。
+- [ ] 为合成任务复用同一事件、取消、重试、日志和回执契约。
+- [ ] 使用合成媒体 fixture 测试，不连接真实渠道。
+- [ ] 支持经项目所有者许可的受信任项目适配器，但不接受任意代码、命令或选择器。
+
+V0.4 的完成标准是：一个视频渠道内容可以从脚本和录制片段生成最终资源变体，
+并在工作台中查看、取消和重试。
+
+## V0.5 — marketing-ops 发布协作与监测
+
+本阶段开始把 `marketing-ops` 当成 Content Studio 总路线中的独立配套子项目：先
+接入真实状态和有类型客户端，再扩展账号、发布回执和监测，不把渠道写入逻辑复制到
+core 或 Vue。详细的 M0—M6 子路线、当前“单渠道多账号尚未正式支持”的事实和验收
+标准见 [marketing-ops 扩展路线](marketing-ops-roadmap.md)。
+
+### 先接入状态，再接入写入
+
+- [ ] 定义 `marketing-ops` 版本兼容矩阵和有类型客户端。
+- [ ] 明确当前公共契约仍是项目范围的单渠道可见身份；多账号先作为目标契约设计，
+      在 `channelAccountRef`、账号级状态和账号级回执落地前，UI 不把演示数据当成
+      可执行发布能力。
+- [ ] `content-studio doctor` 检查其安装、版本、健康和项目档案状态。
+- [ ] 未配置渠道时保持内容制作可用，把发布显示为未配置或被阻塞。
+- [ ] 读取项目最新渠道状态和策略，不使用本地 UI 状态推断授权。
+- [ ] 把文章、视频和资源变体编译为项目范围发布包。
+- [ ] 使用校验和、窄素材 ID 和 renderer 产物，不传递任意文件路径。
+
+### 人工接管、回执与报告
+
+- [ ] 为每个发布安排创建人工接管包。
+- [ ] 渠道授权人在官方界面完成登录、验证、审核和最终点击。
+- [ ] 接收并验证匹配的 `marketing-ops` 发布回执和公开地址。
+- [ ] 没有持久化且匹配的回执时，绝不显示“已发布”。
+- [ ] 为每个发布记录建立 1 小时、48 小时、7 天等监测计划。
+- [ ] 标准化播放、阅读、点赞、评论、回复、收藏、分享和点击；不可用值为 `null`。
+- [ ] 从回执和数据快照生成活动和项目报告，并支持 AI 复盘。
+
+V0.5 的完成标准是：一个活动可以分别为多个渠道准备发布包，完成人工接管，
+接收回执，并在之后生成有来源的监测报告；测试仍使用假适配器，不执行未经授权
+的真实发布。
+
+## V0.6 — 开源本地分发
+
+- [ ] 确定开源许可证、贡献方式、商标和发布治理。
+- [ ] 定义统一的本地 Runtime 布局和版本化发布物。
+- [ ] 实现可校验、幂等、默认不要求 root 的 macOS/Linux 安装器。
+- [ ] 提供下载后检查再执行的安装方式，不只提供 `curl | sh`。
+- [ ] 安装器随 Content Studio 交付固定兼容版本的 `marketing-ops`。
+- [ ] 提供升级、诊断、回滚和不会删除未知文件的安全卸载。
+- [ ] 首次使用确认项目目录、能力和项目内适配器许可。
+- [ ] 通过本地 Marketplace 安装一个 Content Studio Plugin。
+- [ ] 为本地自托管和私有服务器提供完整故障诊断文档。
+
+V0.6 的完成标准是：新用户不需要购买 Content Studio 服务器，只通过安装器和一个
+Plugin 就能完成本地 AI 创作、制作、人工接管和回执查看。
+
+## V1.0 — 公共 Plugin 与市场审核
+
+- [ ] 在现有轻量服务器上部署只承担公共入口、UI resources 和有限元数据的服务。
+- [ ] 使用独立域名、TLS、非 root 用户、窄目录、限流、备份和 OpenTelemetry。
+- [ ] 实现公开生产 MCP URL、域名验证、CSP 和健康检查。
+- [ ] 为工具补齐准确的 `readOnlyHint`、`openWorldHint` 和 `destructiveHint`。
+- [ ] 准备官网、隐私政策、服务条款、支持页、Logo、目录描述和 starter prompts。
+- [ ] 准备至少 5 个正向审核用例和 3 个拒绝或安全降级用例。
+- [ ] 审核 fixture 不依赖内部网络、真实渠道或仓库凭据。
+- [ ] 完成公开扫描、审核和首版发布。
+
+V1.0 的停止线是：市场入口即使不可用，本地 Plugin 和 CLI 仍能完成核心 headless
+工作流；公网服务不能成为项目数据和媒体制作的单点依赖。
+
+## 后续方向
+
+- [ ] 在出现明确跨项目品牌共享需求时，再设计显式品牌空间或共享素材集合。
+- [ ] 在开放 MCP Apps 标准上支持更多宿主，但不分叉领域模型。
+- [ ] 根据真实渠道和任务数据扩展跨项目报告、审计和通知。
+- [ ] 在渠道仅内容生成、需要重新认证、被阻塞或人工辅助时，保持本地制作和
+      人工接管流程可用。
+
+## 非目标
+
+- 保存模型或渠道凭据、cookie、密码、Keychain 值或浏览器 profile。
+- 渠道登录、CAPTCHA/2FA 自动处理、stealth 或私有 API。
+- 在没有匹配外部授权时执行发布、回复或删除。
+- 从 AI 生成内容、项目设置或人工接管推断发布权限。
+- 通过 MCP 运行任意 Shell、脚本、选择器或项目代码。
+- 在没有明确共享和权限模型前建设全局素材库。

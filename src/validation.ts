@@ -83,7 +83,7 @@ export function validateCampaign(
   return campaign
 }
 
-function assertNoSensitiveKeys(
+export function assertNoSensitiveKeys(
   input: unknown,
   path = 'input',
   visited = new Set<object>(),
@@ -241,6 +241,13 @@ function parseCaptureStep(input: unknown, name: string): CaptureStep {
     return {
       kind,
       durationMs: parseDuration(value.durationMs, `${name}.durationMs`),
+    }
+  }
+  if (kind === 'wait-for') {
+    return {
+      kind,
+      locator: parseLocator(value.locator, `${name}.locator`),
+      ...(durationMs === undefined ? {} : { durationMs }),
     }
   }
   if (kind === 'capture') {
