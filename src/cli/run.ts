@@ -131,6 +131,10 @@ export async function runCli(
 
     const baseUrl = requireOption(options, 'base-url')
     const attempts = parseAttempts(options.get('attempts'))
+    const projectRecord = createProjectRecord(
+      project,
+      `${project.projectId}-snapshot-1`,
+    )
     const result = await services.record(
       {
         baseUrl,
@@ -139,6 +143,13 @@ export async function runCli(
         outputDirectory: resolve(runtime.cwd, outputPath),
         plan: compileVideoPlan(project, campaign),
         projectId: project.projectId,
+        recordingContext: {
+          captureMode: projectRecord.captureMode,
+          humanIntervention: false,
+          planVersion: 1,
+          repeatability: projectRecord.repeatability,
+          sourceAccess: projectRecord.sourceAccess,
+        },
         ...(runtime.signal === undefined
           ? {}
           : { signal: runtime.signal }),

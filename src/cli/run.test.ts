@@ -344,6 +344,13 @@ describe('content-studio CLI', () => {
         maxAttempts: 2,
         outputDirectory: outputPath,
         projectId: 'algorithm-visualizer',
+        recordingContext: {
+          captureMode: 'deterministic',
+          humanIntervention: false,
+          planVersion: 1,
+          repeatability: 'high',
+          sourceAccess: 'source-owned',
+        },
       })
       expect(messages.at(-1)).toContain('Recorded 1 action')
     }

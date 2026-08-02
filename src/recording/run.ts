@@ -5,6 +5,7 @@ import type {
   RecorderFailure,
   RecorderFailureCode,
   RecorderLogSummary,
+  RecordingContext,
   RecordingJobDependencies,
   RecordingJobInput,
   RecordingJobResult,
@@ -110,6 +111,9 @@ export async function runRecordingJob(
         jobId: validatedInput.jobId,
         plan: validatedInput.plan,
         projectId: validatedInput.projectId,
+        ...(validatedInput.recordingContext === undefined
+          ? {}
+          : { recordingContext: validatedInput.recordingContext }),
         ...(validatedInput.signal === undefined
           ? {}
           : { signal: validatedInput.signal }),
@@ -234,6 +238,9 @@ export async function runRecordingJob(
       planSha256: hashPlan(validatedInput.plan),
       ...(attempt === 1 ? {} : { previousAttempt: attempt - 1 }),
       projectId: validatedInput.projectId,
+      ...(validatedInput.recordingContext === undefined
+        ? {}
+        : { recordingContext: validatedInput.recordingContext }),
       receiptVersion: 1,
       totalActions,
       totalScenes: validatedInput.plan.scenes.length,
@@ -324,7 +331,28 @@ function validateRecordingJobInput(
     baseUrl: baseUrl.origin,
     maxAttempts,
     outputDirectory: validateOutputDirectory(input.outputDirectory),
+    ...(input.recordingContext === undefined
+      ? {}
+      : { recordingContext: validateRecordingContext(input.recordingContext) }),
   }
+}
+
+function validateRecordingContext(input: RecordingContext): RecordingContext {
+  if (
+    (input.sourceAccess !== 'source-owned' && input.sourceAccess !== 'web-assisted')
+    || (input.captureMode !== 'deterministic' && input.captureMode !== 'assisted')
+    || (input.repeatability !== 'high'
+      && input.repeatability !== 'conditional'
+      && input.repeatability !== 'low')
+    || typeof input.humanIntervention !== 'boolean'
+    || !Number.isInteger(input.planVersion)
+    || input.planVersion < 1
+  ) {
+    throw new Error('Recording context is invalid')
+  }
+  if (input.sourceAccess === 'web-assisted' && input.captureMode === 'deterministic')
+    throw new Error('Recording context cannot mark web-assisted capture as deterministic')
+  return { ...input }
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {

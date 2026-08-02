@@ -611,11 +611,19 @@ export class ContentStudioApplicationService {
     const task = this.taskStore.getTask(projectId, taskId)
     if (task === undefined)
       throw new RecordNotFoundError('Task', taskId)
+    const activity = this.requireActivity(projectId, task.activityId)
     const plan = this.getActivityVideoPlan(projectId, task.activityId)
     return executeProductionTask(this.taskStore, {
       ...input,
       plan,
       projectId,
+      recordingContext: {
+        captureMode: project.captureMode,
+        humanIntervention: false,
+        planVersion: activity.version,
+        repeatability: project.repeatability,
+        sourceAccess: project.sourceAccess,
+      },
       taskId,
     }, dependencies)
   }

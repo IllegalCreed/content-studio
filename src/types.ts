@@ -552,9 +552,18 @@ export interface RecorderAttemptReceipt {
   planSha256: string
   previousAttempt?: number
   projectId: string
+  recordingContext?: RecordingContext
   receiptVersion: 1
   totalActions: number
   totalScenes: number
+}
+
+export interface RecordingContext {
+  captureMode: ProjectCaptureMode
+  humanIntervention: boolean
+  planVersion: number
+  repeatability: ProjectRepeatability
+  sourceAccess: ProjectAccessMode
 }
 
 export interface RecordingJobResult {
@@ -595,6 +604,7 @@ export interface RecordingJobInput {
   outputDirectory: string
   plan: VideoPlan
   projectId: string
+  recordingContext?: RecordingContext
   signal?: AbortSignal
 }
 
@@ -605,6 +615,7 @@ export interface RecordingAttemptContext {
   jobId: string
   plan: VideoPlan
   projectId: string
+  recordingContext?: RecordingContext
   signal?: AbortSignal
 }
 

@@ -5,6 +5,7 @@ import type {
   ExecutionTaskStore,
   PlaywrightRecordingOptions,
   RecorderAttemptReceipt,
+  RecordingContext,
   RecordingJobInput,
   RecordingJobResult,
 } from '../types'
@@ -26,6 +27,7 @@ export interface ProductionTaskInput {
   plan: RecordingJobInput['plan']
   projectId: string
   projectOrigin: string
+  recordingContext?: RecordingContext
   signal?: AbortSignal
   taskId: string
 }
@@ -92,6 +94,9 @@ export async function runProductionTask(
         outputDirectory,
         plan: input.plan,
         projectId: input.projectId,
+        ...(input.recordingContext === undefined
+          ? {}
+          : { recordingContext: input.recordingContext }),
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       },
       dependencies.options,

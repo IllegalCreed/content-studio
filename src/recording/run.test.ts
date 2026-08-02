@@ -224,6 +224,26 @@ describe('recording job runner', () => {
         ...baseInput,
         maxAttempts: 1.5,
       },
+      {
+        ...baseInput,
+        recordingContext: {
+          captureMode: 'deterministic' as const,
+          humanIntervention: false,
+          planVersion: 0,
+          repeatability: 'high' as const,
+          sourceAccess: 'source-owned' as const,
+        },
+      },
+      {
+        ...baseInput,
+        recordingContext: {
+          captureMode: 'deterministic' as const,
+          humanIntervention: false,
+          planVersion: 1,
+          repeatability: 'high' as const,
+          sourceAccess: 'web-assisted' as const,
+        },
+      },
     ]) {
       await expect(
         runRecordingJob(input, {
@@ -291,6 +311,37 @@ describe('recording job runner', () => {
       },
       outcome: 'failed',
     })
+  })
+
+  it('keeps project integration context on every attempt receipt', async () => {
+    const result = await runRecordingJob(
+      {
+        baseUrl: 'http://127.0.0.1:11000',
+        jobId: 'recording-job-context',
+        outputDirectory: '/tmp/content-studio-recording-job-context',
+        plan,
+        projectId: 'algorithm-visualizer',
+        recordingContext: {
+          captureMode: 'deterministic',
+          humanIntervention: false,
+          planVersion: 3,
+          repeatability: 'high',
+          sourceAccess: 'source-owned',
+        },
+      },
+      {
+        createSession: async () => createSessionWithNoop(),
+      },
+    )
+
+    expect(result.receipt.recordingContext).toEqual({
+      captureMode: 'deterministic',
+      humanIntervention: false,
+      planVersion: 3,
+      repeatability: 'high',
+      sourceAccess: 'source-owned',
+    })
+    expect(result.attempts[0]?.recordingContext).toEqual(result.receipt.recordingContext)
   })
 })
 

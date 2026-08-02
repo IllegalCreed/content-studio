@@ -370,7 +370,7 @@ describe('content studio application service', () => {
       totalActions: 1,
       totalScenes: 1,
     }
-    const recorderInputs: Array<{ plan: unknown }> = []
+    const recorderInputs: Array<{ plan: unknown, recordingContext: unknown }> = []
     await expect(service.runActivityProductionTask(
       'video-project',
       taskId,
@@ -381,7 +381,10 @@ describe('content studio application service', () => {
       },
       {
         record: async (input) => {
-          recorderInputs.push({ plan: input.plan })
+          recorderInputs.push({
+            plan: input.plan,
+            recordingContext: input.recordingContext,
+          })
           return { attempts: [receipt], receipt }
         },
       },
@@ -389,6 +392,13 @@ describe('content studio application service', () => {
     expect(recorderInputs[0]?.plan).toMatchObject({
       campaignId: 'video-campaign',
       scenes: [{ id: 'quick-sort' }],
+    })
+    expect(recorderInputs[0]?.recordingContext).toEqual({
+      captureMode: 'deterministic',
+      humanIntervention: false,
+      planVersion: 1,
+      repeatability: 'high',
+      sourceAccess: 'source-owned',
     })
 
     expect(() => service.createActivity({
