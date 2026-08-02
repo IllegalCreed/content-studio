@@ -5,6 +5,7 @@
 .DS_Store
 .eslintcache
 .idea
+.zcode/
 .env
 .nuxt
 .temp
