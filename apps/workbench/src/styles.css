@@ -811,9 +811,11 @@ main {
 }
 
 button.primary-button {
+  padding: 0.65rem 0.9rem;
   color: #111310;
   border-color: var(--acid);
   background: var(--acid);
+  font-size: 0.72rem;
 }
 
 button:disabled {
@@ -1777,7 +1779,7 @@ footer {
   line-height: 1.45;
 }
 
-.shooting-plan-actions button {
+.shooting-plan-actions button:not(.primary-button) {
   flex: 0 0 auto;
   padding: 0.55rem 0.7rem;
   font-size: 0.68rem;

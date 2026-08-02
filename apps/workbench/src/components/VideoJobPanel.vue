@@ -87,6 +87,7 @@ const progress = computed(() =>
         <button
           type="button"
           class="primary-button"
+          data-testid="retry-task"
           :disabled="!runtimeConnected"
         >
           重试这一轮

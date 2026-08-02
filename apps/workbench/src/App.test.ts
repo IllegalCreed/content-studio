@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import App from './App.vue'
+import './styles.css'
 
 describe('content studio workbench', () => {
   it('把规划中的模块作为可切换的功能页面展示', async () => {
@@ -57,6 +58,7 @@ describe('content studio workbench', () => {
     expect(wrapper.find('.task-detail .status-rail').exists()).toBe(true)
     expect(wrapper.text()).toContain('浏览器录制')
     expect(wrapper.text()).toContain('快速排序可视化指南')
+    const retryButton = wrapper.get('[data-testid="retry-task"]')
     await wrapper.get('button[data-task-id="release-notes-publish-x"]').trigger('click')
     expect(wrapper.text()).toContain('需要人工介入')
     expect(wrapper.text()).toContain('等待渠道授权人登录、审核和最终点击')
@@ -84,6 +86,9 @@ describe('content studio workbench', () => {
     expect(wrapper.get('[data-testid="project-channel-config"] [data-testid="save-channel-binding"]').attributes()).toHaveProperty('disabled')
     expect(wrapper.get('[data-testid="project-view-channels"]').classes()).toContain('primary-button')
     expect(wrapper.get('[data-testid="project-view-activities"]').classes()).toContain('primary-button')
+    const saveChannelButton = wrapper.get('[data-testid="save-channel-binding"]')
+    expect(getComputedStyle(saveChannelButton.element).fontSize).toBe(getComputedStyle(retryButton.element).fontSize)
+    expect(getComputedStyle(saveChannelButton.element).padding).toBe(getComputedStyle(retryButton.element).padding)
 
     await wrapper.get('button[data-module="assets"]').trigger('click')
     expect(wrapper.get('h1').text()).toContain('项目素材库')
