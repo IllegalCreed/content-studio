@@ -120,6 +120,7 @@ export interface TaskProjection {
   activityTitle: string
   attempt: number
   channel: ChannelId
+  contentId?: string
   contentTitle: string
   detail: string
   events: Array<{

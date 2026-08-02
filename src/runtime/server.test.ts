@@ -286,6 +286,28 @@ describe('content studio local application server', () => {
       expect(contentResponse.status).toBe(201)
       expect(await contentResponse.json()).toMatchObject({ contentId: 'content-a', version: 1 })
 
+      const publicationPlanResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/activities/activity-a/publication-plans`,
+        {
+          body: JSON.stringify({
+            activityId: 'activity-a',
+            channel: 'github',
+            contentId: 'content-a',
+            projectId: 'project-a',
+            publicationId: 'publication-a',
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(publicationPlanResponse.status).toBe(201)
+      expect(await publicationPlanResponse.json()).toMatchObject({
+        activityId: 'activity-a',
+        channel: 'github',
+        contentId: 'content-a',
+        publicationId: 'publication-a',
+      })
+
       const contentView = await fetch(
         `${running.baseUrl}/api/v1/projects/project-a`,
       ).then(response => response.json())
@@ -306,6 +328,14 @@ describe('content studio local application server', () => {
           skipStages: [],
           status: 'queued',
           taskId: 'production-content-a',
+        }),
+        expect.objectContaining({
+          activityId: 'activity-a',
+          channel: 'github',
+          contentId: 'content-a',
+          kind: 'publication',
+          status: 'queued',
+          taskId: 'publication-publication-a',
         }),
       ])
       expect((await fetch(

@@ -170,6 +170,7 @@ describe('content Studio local MCP server', () => {
       tools: Array<{ inputSchema: unknown, name: string }>
     }).tools
     expect(listedTools.map(tool => tool.name)).toEqual(expect.arrayContaining([
+      'create_publication_plan',
       'create_publishing_activity',
       'get_activity_video_plan',
       'retry_task',
@@ -747,6 +748,32 @@ describe('content Studio local MCP server', () => {
     await expect(server.handleMessage({
       jsonrpc: '2.0',
       id: 40,
+      method: 'tools/call',
+      params: {
+        name: 'create_publication_plan',
+        arguments: {
+          activityId: 'content-pack-demo',
+          channel: 'github',
+          contentId: 'content-pack-github-en',
+          projectId,
+          publicationId: 'content-pack-publication',
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          activityId: 'content-pack-demo',
+          channel: 'github',
+          contentId: 'content-pack-github-en',
+          publicationId: 'content-pack-publication',
+        },
+      },
+    })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 41,
       method: 'tools/call',
       params: {
         name: 'start_production_task',

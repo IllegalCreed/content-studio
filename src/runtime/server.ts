@@ -13,6 +13,7 @@ import type {
   ProjectChannelBinding,
   ProjectRecord,
   ProjectSnapshot,
+  PublicationPlan,
   VideoFormat,
   VideoOutlineScene,
 } from '../types'
@@ -289,6 +290,26 @@ async function handleRequest(
     }
 
     if (
+      request.method === 'POST'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'activities'
+      && segments[6] === 'publication-plans'
+    ) {
+      const projectId = decodeSegment(segments[3]!)
+      const activityId = decodeSegment(segments[5]!)
+      const input = parseCreatePublicationPlanInput(
+        await readJsonBody(request),
+        projectId,
+        activityId,
+      )
+      sendJson(response, 201, service.createPublicationPlan(input))
+      return
+    }
+
+    if (
       request.method === 'GET'
       && segments.length === 7
       && segments[0] === 'api'
@@ -507,6 +528,42 @@ export function parseCreateChannelContentInput(
     locale: locale as Locale,
     projectId,
     title: stringField(value.title, 'title'),
+  }
+}
+
+export function parseCreatePublicationPlanInput(
+  input: unknown,
+  projectId: string,
+  activityId: string,
+): PublicationPlan {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'publicationPlan')
+  const supportedKeys = new Set([
+    'activityId',
+    'channel',
+    'contentId',
+    'projectId',
+    'publicationId',
+  ])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key))
+      throw new RequestError(400, `publicationPlan contains unsupported field: ${key}`)
+  }
+  const inputProjectId = stringField(value.projectId, 'projectId')
+  if (inputProjectId !== projectId)
+    throw new RequestError(400, 'projectId must match the URL')
+  const inputActivityId = identifierField(value.activityId, 'activityId')
+  if (inputActivityId !== activityId)
+    throw new RequestError(400, 'activityId must match the URL')
+  const channel = stringField(value.channel, 'channel')
+  if (!(channel in CHANNEL_BLUEPRINTS))
+    throw new RequestError(400, `Unsupported channel: ${channel}`)
+  return {
+    activityId,
+    channel: channel as PublicationPlan['channel'],
+    contentId: identifierField(value.contentId, 'contentId'),
+    projectId,
+    publicationId: identifierField(value.publicationId, 'publicationId'),
   }
 }
 

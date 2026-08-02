@@ -7,6 +7,7 @@ import type {
   CreatePublishingActivityInput,
   ExecutionTask,
   ExecutionTaskEvent,
+  PublicationPlan,
   PublishingActivity,
   RecorderAttemptReceipt,
 } from '@content-studio/core-types'
@@ -37,6 +38,7 @@ export interface WorkbenchRuntime {
   createChannelContent: (input: CreateChannelContentInput) => Promise<ChannelContent>
   createContentGroup: (input: CreateContentGroupInput) => Promise<ContentGroup>
   createActivity: (input: CreatePublishingActivityInput) => Promise<PublishingActivity>
+  createPublicationPlan: (input: PublicationPlan) => Promise<PublicationPlan>
   health: () => Promise<RuntimeHealth>
   project: (projectId: string) => Promise<ContentStudioProjectView>
   recordTask: (
@@ -93,6 +95,13 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
     ),
     createActivity: input => request<PublishingActivity>(
       `/projects/${encodeURIComponent(input.projectId)}/activities`,
+      {
+        body: JSON.stringify(input),
+        method: 'POST',
+      },
+    ),
+    createPublicationPlan: input => request<PublicationPlan>(
+      `/projects/${encodeURIComponent(input.projectId)}/activities/${encodeURIComponent(input.activityId)}/publication-plans`,
       {
         body: JSON.stringify(input),
         method: 'POST',

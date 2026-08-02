@@ -22,6 +22,7 @@ import {
   parseCreateActivityInput,
   parseCreateChannelContentInput,
   parseCreateContentGroupInput,
+  parseCreatePublicationPlanInput,
 } from '../runtime/server'
 import { assertNoSensitiveKeys } from '../validation'
 
@@ -343,6 +344,17 @@ function toolDefinitions(): Array<Record<string, unknown>> {
       annotations: {
         destructiveHint: false,
         openWorldHint: false,
+        readOnlyHint: false,
+      },
+      description: '为活动中的一个渠道成品建立本地发布安排和发布任务，不会执行渠道发布。',
+      inputSchema: publicationPlanSchema(),
+      name: 'create_publication_plan',
+      title: '创建发布安排',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
         readOnlyHint: true,
       },
       description: '读取活动编译后的版本化视频拍摄计划，不会启动浏览器或发布内容。',
@@ -494,6 +506,20 @@ function contentGroupSchema(): Record<string, unknown> {
   }
 }
 
+function publicationPlanSchema(): Record<string, unknown> {
+  return {
+    properties: {
+      activityId: { type: 'string' },
+      channel: { type: 'string' },
+      contentId: { type: 'string' },
+      projectId: { type: 'string' },
+      publicationId: { type: 'string' },
+    },
+    required: ['activityId', 'channel', 'contentId', 'projectId', 'publicationId'],
+    type: 'object',
+  }
+}
+
 function channelContentSchema(): Record<string, unknown> {
   return {
     properties: {
@@ -631,6 +657,21 @@ function executeTool(
       ], 'activity')
       const activity = parseCreateActivityInput(input, options.projectId)
       return options.service.createActivity(activity)
+    }
+    case 'create_publication_plan': {
+      const value = asRecord(input, 'publicationPlan')
+      assertKeys(value, [
+        'activityId',
+        'channel',
+        'contentId',
+        'projectId',
+        'publicationId',
+      ], 'publicationPlan')
+      const projectId = scopedId(value.projectId, options.projectId, 'projectId')
+      const activityId = identifierField(value.activityId, 'activityId')
+      return options.service.createPublicationPlan(
+        parseCreatePublicationPlanInput(value, projectId, activityId),
+      )
     }
     case 'get_activity_video_plan': {
       const value = scopedRecord(input, options.projectId, ['activityId', 'projectId'])

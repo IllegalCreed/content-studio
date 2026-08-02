@@ -20,6 +20,7 @@ import type {
   CreateContentGroupInput,
   ExecutionTask,
   ExecutionTaskEvent,
+  PublicationPlan,
   PublishingActivity,
 } from '@content-studio/core-types'
 import {
@@ -136,6 +137,8 @@ const activitySaveError = ref<string | null>(null)
 const contentComposerOpen = ref(false)
 const contentSaving = ref(false)
 const contentSaveError = ref<string | null>(null)
+const publicationPlanActionError = ref<string | null>(null)
+const publicationPlanActionPending = ref<string | null>(null)
 const runtimeTaskIds = ref<Set<string>>(new Set())
 const runtimeActivityIds = ref<Set<string>>(new Set())
 const taskActionError = ref<string | null>(null)
@@ -453,6 +456,7 @@ function openContentComposer(): void {
   contentForm.locale = 'zh-CN'
   contentForm.title = ''
   contentSaveError.value = null
+  publicationPlanActionError.value = null
   contentComposerOpen.value = true
 }
 
@@ -497,6 +501,38 @@ async function saveChannelContent(): Promise<void> {
   }
   finally {
     contentSaving.value = false
+  }
+}
+
+function hasPublicationTask(contentId: string): boolean {
+  return selectedCampaignTasks.value.some(task =>
+    task.kind === '发布' && task.contentId === contentId,
+  )
+}
+
+async function createPublicationPlanForContent(content: ChannelContentProjection): Promise<void> {
+  if (!snapshot.runtimeConnected || !selectedCampaignIsRuntime.value || hasPublicationTask(content.contentId))
+    return
+  publicationPlanActionPending.value = content.contentId
+  publicationPlanActionError.value = null
+  const input: PublicationPlan = {
+    activityId: selectedCampaign.value.campaignId,
+    channel: content.channel,
+    contentId: content.contentId,
+    projectId: snapshot.project.projectId,
+    publicationId: `publication-${content.contentId}`,
+  }
+  try {
+    await workbenchRuntime.createPublicationPlan(input)
+    await refreshProjectView()
+  }
+  catch (error: unknown) {
+    publicationPlanActionError.value = error instanceof Error
+      ? error.message
+      : '发布安排创建失败'
+  }
+  finally {
+    publicationPlanActionPending.value = null
   }
 }
 
@@ -660,6 +696,7 @@ function taskToProjection(
     activityTitle,
     attempt: task.attempt,
     channel,
+    ...(task.contentId === undefined ? {} : { contentId: task.contentId }),
     contentTitle,
     detail: task.status === 'queued'
       ? '任务已创建，等待 AI 生成内容和拍摄大纲。'
@@ -1311,6 +1348,7 @@ async function refreshProjectView(): Promise<void> {
                     </button>
                   </div>
                   <p v-if="selectedCampaign.contentGroups.length === 0" class="empty-state">当前活动还没有内容版本。可以先保存一条手动测试内容，之后由 AI/MCP 复用同一个内容接口。</p>
+                  <p v-if="publicationPlanActionError" class="form-error">{{ publicationPlanActionError }}</p>
                   <div class="content-group-list">
                     <article v-for="group in selectedCampaign.contentGroups" :key="group.contentGroupId" class="content-group-card">
                       <strong>{{ group.title }}</strong>
@@ -1320,6 +1358,14 @@ async function refreshProjectView(): Promise<void> {
                           <span>{{ content.format }}成品 · {{ content.channel }} · {{ content.accountAlias ?? '项目账号待绑定' }}</span>
                           <strong>{{ content.title }}</strong>
                           <small>{{ content.locale }} · {{ content.status }}</small>
+                          <button
+                            type="button"
+                            class="content-action-button"
+                            :disabled="!selectedCampaignIsRuntime || !snapshot.runtimeConnected || hasPublicationTask(content.contentId) || publicationPlanActionPending !== null"
+                            @click="createPublicationPlanForContent(content)"
+                          >
+                            {{ publicationPlanActionPending === content.contentId ? '创建中…' : hasPublicationTask(content.contentId) ? '已建立发布安排' : '建立发布安排' }}
+                          </button>
                         </li>
                       </ul>
                     </article>

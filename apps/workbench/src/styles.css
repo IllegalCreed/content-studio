@@ -1776,6 +1776,26 @@ footer {
   line-height: 1.45;
 }
 
+.content-action-button {
+  margin-top: 0.55rem;
+  padding: 0.4rem 0.55rem;
+  color: var(--muted);
+  border: 1px solid var(--stroke);
+  background: transparent;
+  font-size: 0.62rem;
+  cursor: pointer;
+}
+
+.content-action-button:not(:disabled):hover {
+  color: var(--ink);
+  border-color: #657042;
+}
+
+.content-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .content-group-card ul {
   display: grid;
   gap: 0.4rem;
