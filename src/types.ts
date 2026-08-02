@@ -163,10 +163,14 @@ export interface ContentStudioProjectView {
   activities: PublishingActivity[]
   channelContents: ChannelContent[]
   contentGroups: ContentGroup[]
+  monitoringObservations: MonitoringObservation[]
   ownerHandoffs: OwnerHandoff[]
+  publicationPlans: PublicationPlan[]
+  publicationReceipts: PublicationReceipt[]
   project: ProjectRecord
   projectAssets: ProjectAsset[]
   projectChannelBindings: ProjectChannelBinding[]
+  reports: ContentStudioReport[]
   snapshot: ProjectSnapshot
   tasks: ExecutionTask[]
   taskEvents: Record<string, ExecutionTaskEvent[]>

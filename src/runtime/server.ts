@@ -10,11 +10,15 @@ import type {
   CreatePublishingActivityInput,
   ExecutionTaskStore,
   Locale,
+  MonitoringObservation,
+  ObservationMetric,
+  ObservationSource,
   OwnerHandoff,
   ProjectChannelBinding,
   ProjectRecord,
   ProjectSnapshot,
   PublicationPlan,
+  PublicationReceipt,
   VideoFormat,
   VideoOutlineScene,
 } from '../types'
@@ -52,6 +56,21 @@ const ACTIVITY_STATUSES = new Set([
 ])
 const CONTENT_FORMATS = new Set<ChannelContentFormat>(['article', 'video'])
 const VIDEO_FORMATS = new Set<VideoFormat>(['landscape', 'portrait', 'square'])
+const OBSERVATION_METRICS = new Set<ObservationMetric>([
+  'clicks',
+  'comments',
+  'favorites',
+  'likes',
+  'reads',
+  'replies',
+  'shares',
+  'views',
+])
+const OBSERVATION_SOURCES = new Set<ObservationSource>([
+  'authorized-adapter',
+  'owner-entered',
+  'public',
+])
 
 export interface ContentStudioServerOptions {
   databasePath?: string
@@ -307,6 +326,50 @@ async function handleRequest(
         activityId,
       )
       sendJson(response, 201, service.createPublicationPlan(input))
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 9
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'activities'
+      && segments[6] === 'publication-plans'
+      && (segments[8] === 'receipts' || segments[8] === 'observations')
+    ) {
+      const requestProjectId = identifierField(
+        decodeSegment(segments[3]!),
+        'projectId',
+      )
+      const activityId = identifierField(
+        decodeSegment(segments[5]!),
+        'activityId',
+      )
+      const publicationId = identifierField(
+        decodeSegment(segments[7]!),
+        'publicationId',
+      )
+      const body = await readJsonBody(request)
+      if (segments[8] === 'receipts') {
+        const receipt = parseRecordPublicationReceiptInput(
+          body,
+          requestProjectId,
+          activityId,
+          publicationId,
+        )
+        sendJson(response, 201, service.recordPublicationReceipt(receipt))
+      }
+      else {
+        const observation = parseRecordMonitoringObservationInput(
+          body,
+          requestProjectId,
+          activityId,
+          publicationId,
+        )
+        sendJson(response, 201, service.recordMonitoringObservation(observation))
+      }
       return
     }
 
@@ -635,6 +698,121 @@ export function parseCreateOwnerHandoffInput(
     publicationId: identifierField(value.publicationId, 'publicationId'),
     status: 'pending',
   }
+}
+
+export function parseRecordPublicationReceiptInput(
+  input: unknown,
+  projectId: string,
+  activityId: string,
+  publicationId: string,
+): PublicationReceipt {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'publicationReceipt')
+  const supportedKeys = new Set([
+    'activityId',
+    'channel',
+    'externalReceiptId',
+    'projectId',
+    'publicationId',
+    'publicUrl',
+    'receiptId',
+    'status',
+  ])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key))
+      throw new RequestError(400, `publicationReceipt contains unsupported field: ${key}`)
+  }
+  const inputProjectId = stringField(value.projectId, 'projectId')
+  if (inputProjectId !== projectId)
+    throw new RequestError(400, 'projectId must match the URL')
+  const inputActivityId = identifierField(value.activityId, 'activityId')
+  if (inputActivityId !== activityId)
+    throw new RequestError(400, 'activityId must match the URL')
+  const inputPublicationId = identifierField(value.publicationId, 'publicationId')
+  if (inputPublicationId !== publicationId)
+    throw new RequestError(400, 'publicationId must match the URL')
+  const channel = stringField(value.channel, 'channel')
+  if (!(channel in CHANNEL_BLUEPRINTS))
+    throw new RequestError(400, `Unsupported channel: ${channel}`)
+  const status = stringField(value.status, 'status')
+  if (status !== 'failed' && status !== 'published')
+    throw new RequestError(400, `Unsupported publication receipt status: ${status}`)
+  return {
+    activityId,
+    channel: channel as PublicationReceipt['channel'],
+    externalReceiptId: stringField(value.externalReceiptId, 'externalReceiptId'),
+    projectId,
+    publicationId,
+    ...(value.publicUrl === undefined
+      ? {}
+      : { publicUrl: httpsUrlField(value.publicUrl, 'publicUrl') }),
+    receiptId: identifierField(value.receiptId, 'receiptId'),
+    status,
+  }
+}
+
+export function parseRecordMonitoringObservationInput(
+  input: unknown,
+  projectId: string,
+  activityId: string,
+  publicationId: string,
+): MonitoringObservation {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'monitoringObservation')
+  const supportedKeys = new Set([
+    'activityId',
+    'channel',
+    'collectedAt',
+    'metrics',
+    'observationId',
+    'projectId',
+    'publicationId',
+    'source',
+  ])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key))
+      throw new RequestError(400, `monitoringObservation contains unsupported field: ${key}`)
+  }
+  const inputProjectId = stringField(value.projectId, 'projectId')
+  if (inputProjectId !== projectId)
+    throw new RequestError(400, 'projectId must match the URL')
+  const inputActivityId = identifierField(value.activityId, 'activityId')
+  if (inputActivityId !== activityId)
+    throw new RequestError(400, 'activityId must match the URL')
+  const inputPublicationId = identifierField(value.publicationId, 'publicationId')
+  if (inputPublicationId !== publicationId)
+    throw new RequestError(400, 'publicationId must match the URL')
+  const channel = stringField(value.channel, 'channel')
+  if (!(channel in CHANNEL_BLUEPRINTS))
+    throw new RequestError(400, `Unsupported channel: ${channel}`)
+  const source = stringField(value.source, 'source')
+  if (!OBSERVATION_SOURCES.has(source as ObservationSource))
+    throw new RequestError(400, `Unsupported observation source: ${source}`)
+  return {
+    activityId,
+    channel: channel as MonitoringObservation['channel'],
+    collectedAt: dateTimeField(value.collectedAt, 'collectedAt'),
+    metrics: observationMetricsField(value.metrics),
+    observationId: identifierField(value.observationId, 'observationId'),
+    projectId,
+    publicationId,
+    source: source as ObservationSource,
+  }
+}
+
+function observationMetricsField(
+  input: unknown,
+): Partial<Record<ObservationMetric, number | null>> {
+  const value = asRecord(input, 'metrics')
+  const metrics: Partial<Record<ObservationMetric, number | null>> = {}
+  for (const [key, metric] of Object.entries(value)) {
+    if (!OBSERVATION_METRICS.has(key as ObservationMetric))
+      throw new RequestError(400, `Unsupported observation metric: ${key}`)
+    if (metric !== null && (typeof metric !== 'number' || !Number.isFinite(metric) || metric < 0))
+      throw new RequestError(400, `metrics.${key} must be a non-negative number or null`)
+    metrics[key as ObservationMetric] = metric
+  }
+  return metrics
 }
 
 function channelsField(input: unknown): CreatePublishingActivityInput['channels'] {

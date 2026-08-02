@@ -131,9 +131,13 @@ export interface ContentStudioRepository {
   listChannelContents: (projectId: string) => ChannelContent[]
   listContentGroups: (projectId: string) => ContentGroup[]
   listOwnerHandoffs: (projectId: string) => OwnerHandoff[]
+  listPublicationPlans: (projectId: string) => PublicationPlan[]
+  listPublicationReceipts: (projectId: string) => PublicationReceipt[]
+  listMonitoringObservations: (projectId: string) => MonitoringObservation[]
   listProjectAssets: (projectId: string) => ProjectAsset[]
   listProjectChannelBindings: (projectId: string) => ProjectChannelBinding[]
   listActivities: (projectId: string) => PublishingActivity[]
+  listReports: (projectId: string) => ContentStudioReport[]
 }
 
 export class InMemoryContentStudioRepository
@@ -398,6 +402,34 @@ implements ContentStudioRepository {
       .map(clone)
   }
 
+  listPublicationPlans(projectId: string): PublicationPlan[] {
+    return [...this.publicationPlans.values()]
+      .filter(plan => plan.projectId === projectId)
+      .sort((left, right) => left.publicationId.localeCompare(right.publicationId))
+      .map(clone)
+  }
+
+  listPublicationReceipts(projectId: string): PublicationReceipt[] {
+    return [...this.publicationReceipts.values()]
+      .filter(receipt => receipt.projectId === projectId)
+      .sort((left, right) => left.receiptId.localeCompare(right.receiptId))
+      .map(clone)
+  }
+
+  listMonitoringObservations(projectId: string): MonitoringObservation[] {
+    return [...this.monitoringObservations.values()]
+      .filter(observation => observation.projectId === projectId)
+      .sort((left, right) => left.observationId.localeCompare(right.observationId))
+      .map(clone)
+  }
+
+  listReports(projectId: string): ContentStudioReport[] {
+    return [...this.reports.values()]
+      .filter(report => report.projectId === projectId)
+      .sort((left, right) => left.reportId.localeCompare(right.reportId))
+      .map(clone)
+  }
+
   listChannelContents(projectId: string): ChannelContent[] {
     return [...this.channelContents.values()]
       .filter(content => content.projectId === projectId)
@@ -523,10 +555,14 @@ export class ContentStudioApplicationService {
         this.repository.listContentGroups(projectId),
         group => group.contentGroupId,
       ),
+      monitoringObservations: this.repository.listMonitoringObservations(projectId),
       ownerHandoffs: this.repository.listOwnerHandoffs(projectId),
+      publicationPlans: this.repository.listPublicationPlans(projectId),
+      publicationReceipts: this.repository.listPublicationReceipts(projectId),
       project,
       projectAssets: this.repository.listProjectAssets(projectId),
       projectChannelBindings: this.repository.listProjectChannelBindings(projectId),
+      reports: this.repository.listReports(projectId),
       snapshot,
       taskEvents: Object.fromEntries(tasks.map(task => [
         task.taskId,

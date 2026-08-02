@@ -16,6 +16,8 @@ import {
   parseCreateActivityInput,
   parseCreateChannelContentInput,
   parseCreateOwnerHandoffInput,
+  parseRecordMonitoringObservationInput,
+  parseRecordPublicationReceiptInput,
 } from './server'
 
 function createProject(projectId = 'project-a'): {
@@ -203,6 +205,136 @@ describe('content studio local application server', () => {
     }, 'project-a', 'activity-a')).toThrow(/URL/i)
   })
 
+  it('parses publication receipts and monitoring observations with bounded fields', () => {
+    const receipt = parseRecordPublicationReceiptInput({
+      activityId: 'activity-a',
+      channel: 'github',
+      externalReceiptId: 'release-a',
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+      publicUrl: 'https://github.com/example/project/releases/tag/v1',
+      receiptId: 'receipt-a',
+      status: 'published',
+    }, 'project-a', 'activity-a', 'publication-a')
+    expect(receipt).toMatchObject({ receiptId: 'receipt-a', status: 'published' })
+
+    expect(() => parseRecordPublicationReceiptInput({
+      activityId: 'activity-a',
+      channel: 'github',
+      externalReceiptId: 'release-a',
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+      publicUrl: 'http://github.com/example/project/releases/tag/v1',
+      receiptId: 'receipt-a',
+      status: 'published',
+    }, 'project-a', 'activity-a', 'publication-a')).toThrow(/HTTPS/i)
+    expect(parseRecordPublicationReceiptInput({
+      activityId: 'activity-a',
+      channel: 'github',
+      externalReceiptId: 'release-a-failed',
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+      receiptId: 'receipt-a-failed',
+      status: 'failed',
+    }, 'project-a', 'activity-a', 'publication-a')).toMatchObject({
+      status: 'failed',
+    })
+    expect(() => parseRecordPublicationReceiptInput({
+      activityId: 'activity-a',
+      channel: 'github',
+      externalReceiptId: 'release-a',
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+      receiptId: 'receipt-a',
+      status: 'unknown',
+    }, 'project-a', 'activity-a', 'publication-a')).toThrow(/status/i)
+    expect(() => parseRecordPublicationReceiptInput({
+      activityId: 'activity-a',
+      channel: 'github',
+      externalReceiptId: 'release-a',
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+      receiptId: 'receipt-a',
+      status: 'published',
+      unsafe: true,
+    }, 'project-a', 'activity-a', 'publication-a')).toThrow(/unsupported/i)
+
+    const observation = parseRecordMonitoringObservationInput({
+      activityId: 'activity-a',
+      channel: 'github',
+      collectedAt: '2026-08-03T00:00:00.000Z',
+      metrics: { comments: 2, favorites: null, views: 100 },
+      observationId: 'observation-a',
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+      source: 'public',
+    }, 'project-a', 'activity-a', 'publication-a')
+    expect(observation).toMatchObject({ observationId: 'observation-a', source: 'public' })
+
+    expect(() => parseRecordMonitoringObservationInput({
+      activityId: 'activity-a',
+      channel: 'github',
+      collectedAt: '2026-08-03T00:00:00.000Z',
+      metrics: { views: -1 },
+      observationId: 'observation-a',
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+      source: 'public',
+    }, 'project-a', 'activity-a', 'publication-a')).toThrow(/non-negative/i)
+    expect(parseRecordMonitoringObservationInput({
+      activityId: 'activity-a',
+      channel: 'github',
+      collectedAt: '2026-08-03T00:00:00.000Z',
+      metrics: {},
+      observationId: 'observation-b',
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+      source: 'authorized-adapter',
+    }, 'project-a', 'activity-a', 'publication-a')).toMatchObject({
+      source: 'authorized-adapter',
+    })
+    expect(() => parseRecordMonitoringObservationInput({
+      activityId: 'activity-a',
+      channel: 'github',
+      collectedAt: '2026-08-03T00:00:00.000Z',
+      metrics: { watchTime: 1 },
+      observationId: 'observation-c',
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+      source: 'public',
+    }, 'project-a', 'activity-a', 'publication-a')).toThrow(/metric/i)
+    expect(() => parseRecordMonitoringObservationInput({
+      activityId: 'activity-a',
+      channel: 'github',
+      collectedAt: 'not-a-date',
+      metrics: {},
+      observationId: 'observation-d',
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+      source: 'owner-entered',
+    }, 'project-a', 'activity-a', 'publication-a')).toThrow(/date-time/i)
+    expect(() => parseRecordMonitoringObservationInput({
+      activityId: 'activity-a',
+      channel: 'github',
+      collectedAt: '2026-08-03T00:00:00.000Z',
+      metrics: {},
+      observationId: 'observation-e',
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+      source: 'private-api',
+    }, 'project-a', 'activity-a', 'publication-a')).toThrow(/source/i)
+    expect(() => parseRecordMonitoringObservationInput({
+      activityId: 'activity-a',
+      channel: 'github',
+      collectedAt: '2026-08-03T00:00:00.000Z',
+      metrics: {},
+      observationId: 'observation-f',
+      projectId: 'project-a',
+      publicationId: 'other-publication',
+      source: 'owner-entered',
+    }, 'project-a', 'activity-a', 'publication-a')).toThrow(/publicationId/i)
+  })
+
   it('serves a project-scoped view and creates an activity through the application service', async () => {
     const { project, snapshot } = createProject()
     const binding: ProjectChannelBinding = {
@@ -367,6 +499,54 @@ describe('content studio local application server', () => {
         status: 'pending',
       })
 
+      const receiptResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/activities/activity-a/publication-plans/publication-a/receipts`,
+        {
+          body: JSON.stringify({
+            activityId: 'activity-a',
+            channel: 'github',
+            externalReceiptId: 'github-release-a',
+            projectId: 'project-a',
+            publicationId: 'publication-a',
+            publicUrl: 'https://github.com/example/project/releases/tag/v1',
+            receiptId: 'receipt-a',
+            status: 'published',
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(receiptResponse.status).toBe(201)
+      expect(await receiptResponse.json()).toMatchObject({
+        publicationId: 'publication-a',
+        receiptId: 'receipt-a',
+        status: 'published',
+      })
+
+      const observationResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/activities/activity-a/publication-plans/publication-a/observations`,
+        {
+          body: JSON.stringify({
+            activityId: 'activity-a',
+            channel: 'github',
+            collectedAt: '2026-08-03T00:00:00.000Z',
+            metrics: { comments: 2, likes: 10, views: 100 },
+            observationId: 'observation-a',
+            projectId: 'project-a',
+            publicationId: 'publication-a',
+            source: 'public',
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(observationResponse.status).toBe(201)
+      expect(await observationResponse.json()).toMatchObject({
+        activityId: 'activity-a',
+        observationId: 'observation-a',
+        publicationId: 'publication-a',
+      })
+
       const contentView = await fetch(
         `${running.baseUrl}/api/v1/projects/project-a`,
       ).then(response => response.json())
@@ -393,8 +573,16 @@ describe('content studio local application server', () => {
           channel: 'github',
           contentId: 'content-a',
           kind: 'publication',
-          status: 'awaiting-owner',
+          status: 'published',
           taskId: 'publication-publication-a',
+        }),
+        expect.objectContaining({
+          activityId: 'activity-a',
+          channel: 'github',
+          contentId: 'content-a',
+          kind: 'monitoring',
+          status: 'monitoring',
+          taskId: 'monitoring-publication-a',
         }),
       ])
       expect((await fetch(

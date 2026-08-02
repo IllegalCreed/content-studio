@@ -242,6 +242,9 @@ describe('content studio application service', () => {
       channelContents: [],
       contentGroups: [],
       ownerHandoffs: [],
+      publicationPlans: [],
+      publicationReceipts: [],
+      monitoringObservations: [],
       project,
       projectAssets: [],
       projectChannelBindings: [
@@ -252,6 +255,7 @@ describe('content studio application service', () => {
           projectId: 'project-a',
         },
       ],
+      reports: [],
       taskEvents: {},
       snapshot,
       tasks: [],
@@ -784,6 +788,12 @@ describe('content studio application service', () => {
       receiptId: 'receipt-1-repeat',
       status: 'published',
     })).toMatchObject({ status: 'published' })
+    expect(service.getProjectView('project-a')).toMatchObject({
+      publicationPlans: [publication],
+      publicationReceipts: expect.arrayContaining([
+        expect.objectContaining({ receiptId: 'receipt-1' }),
+      ]),
+    })
   })
 
   it('rejects mismatched ownership and duplicate immutable records', () => {
@@ -1193,6 +1203,7 @@ describe('content studio application service', () => {
         taskId: `monitoring-${publication.publicationId}`,
       }),
     ]))
+    expect(service.getProjectView('project-a').monitoringObservations).toEqual([observation])
   })
 
   it('报告只能引用同一项目和活动的监测快照', () => {
@@ -1257,6 +1268,7 @@ describe('content studio application service', () => {
     }
 
     expect(service.createReport(report)).toEqual(report)
+    expect(service.getProjectView('project-a').reports).toEqual([report])
     expect(() => service.createReport({
       ...report,
       activityId: 'wrong-activity',
