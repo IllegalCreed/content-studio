@@ -4,7 +4,9 @@ import type {
   ProjectChannelBinding,
   ProjectRecord,
   ProjectSnapshot,
+  RecorderAttemptReceipt,
 } from '../types'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   InMemoryContentStudioRepository,
@@ -295,6 +297,118 @@ describe('content studio local application server', () => {
         `${running.baseUrl}/api/v1/projects/project-a`,
       )
       expect((await afterResponse.json()).activities).toHaveLength(1)
+    }
+    finally {
+      await running.close()
+    }
+  })
+
+  it('runs a stored activity video plan through the local recording route', async () => {
+    const { project, snapshot: baseSnapshot } = createProject()
+    const snapshot: ProjectSnapshot = {
+      ...baseSnapshot,
+      manifest: {
+        ...baseSnapshot.manifest,
+        captureFlows: [{
+          id: 'quick-sort',
+          startPath: '/quick-sort',
+          steps: [{ durationMs: 100, kind: 'capture', label: 'algorithm' }],
+          title: {
+            'en': 'Quick sort',
+            'zh-CN': '快速排序',
+          },
+        }],
+      },
+    }
+    let recordingInput: { outputDirectory: string, plan: unknown } | undefined
+    const receipt: RecorderAttemptReceipt = {
+      artifactDirectory: '/tmp/content-studio-runtime-recording/attempt-1',
+      artifacts: [],
+      attempt: 1,
+      campaignId: 'video-campaign',
+      completedActions: 1,
+      completedScenes: 1,
+      jobId: 'production-video-activity',
+      logs: {
+        consoleErrors: 0,
+        consoleWarnings: 0,
+        entries: [],
+        pageErrors: 0,
+      },
+      outcome: 'succeeded',
+      planSha256: 'runtime-plan',
+      projectId: project.projectId,
+      receiptVersion: 1,
+      totalActions: 1,
+      totalScenes: 1,
+    }
+    const handle = createContentStudioServer({
+      production: {
+        record: async (input) => {
+          recordingInput = {
+            outputDirectory: input.outputDirectory,
+            plan: input.plan,
+          }
+          return { attempts: [receipt], receipt }
+        },
+      },
+      productionOutputRoot: '/tmp/content-studio-runtime-recording',
+      project,
+      projectChannelBindings: [{
+        channel: 'youtube',
+        delivery: 'owner-assisted',
+        enabled: true,
+        projectId: project.projectId,
+      }],
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    const activity = handle.service.createActivity({
+      activityId: 'video-activity',
+      campaignId: 'video-campaign',
+      channels: [{ id: 'youtube', locale: 'en' }],
+      goal: 'education',
+      projectId: project.projectId,
+      projectSnapshotId: snapshot.snapshotId,
+      status: 'draft',
+      targetUrl: 'https://project-a.example.com/quick-sort',
+      topic: {
+        'en': 'Quick sort',
+        'zh-CN': '快速排序',
+      },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+      },
+    })
+    const taskId = `production-${activity.activityId}`
+    handle.service.startProductionTask(project.projectId, taskId)
+    const running = await listen(handle.server)
+
+    try {
+      const response = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/tasks/${taskId}/record`,
+        {
+          body: JSON.stringify({
+            baseUrl: 'https://project-a.example.com',
+            projectOrigin: 'https://project-a.example.com',
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        receipt: { outcome: 'succeeded' },
+        task: { status: 'composing' },
+      })
+      expect(recordingInput?.outputDirectory).toBe(
+        join('/tmp/content-studio-runtime-recording', project.projectId, taskId),
+      )
+      expect(recordingInput?.plan).toMatchObject({
+        campaignId: 'video-campaign',
+        scenes: [{ id: 'quick-sort' }],
+      })
     }
     finally {
       await running.close()

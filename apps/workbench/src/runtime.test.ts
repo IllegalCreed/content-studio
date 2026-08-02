@@ -41,9 +41,10 @@ describe('workbench runtime client', () => {
     )
   })
 
-  it('sends task start, cancellation, retry and event requests to the local runtime', async () => {
+  it('sends task start, recording, cancellation, retry and event requests to the local runtime', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'generating' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ task: { status: 'composing' } }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'cancelled' }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ attempt: 2, status: 'queued' }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ events: [] }), { status: 200 }))
@@ -51,6 +52,14 @@ describe('workbench runtime client', () => {
 
     const runtime = createWorkbenchRuntime('/api/v1')
     await expect(runtime.startTask('project-a', 'task-a')).resolves.toMatchObject({ status: 'generating' })
+    await expect(runtime.recordTask(
+      'project-a',
+      'task-a',
+      {
+        baseUrl: 'https://project-a.example.com',
+        projectOrigin: 'https://project-a.example.com',
+      },
+    )).resolves.toMatchObject({ task: { status: 'composing' } })
     await expect(runtime.cancelTask('project-a', 'task-a')).resolves.toMatchObject({ status: 'cancelled' })
     await expect(runtime.retryTask('project-a', 'task-a')).resolves.toMatchObject({ attempt: 2 })
     await expect(runtime.taskEvents('project-a', 'task-a')).resolves.toEqual([])
@@ -61,6 +70,11 @@ describe('workbench runtime client', () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
+      '/api/v1/projects/project-a/tasks/task-a/record',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
       '/api/v1/projects/project-a/tasks/task-a/cancel',
       expect.objectContaining({ method: 'POST' }),
     )

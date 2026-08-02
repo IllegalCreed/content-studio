@@ -2,6 +2,7 @@
 
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { ContentStudioRepository } from '../control-plane/service'
+import type { ProductionTaskDependencies } from '../jobs/production'
 import type {
   ChannelContentFormat,
   CreateChannelContentInput,
@@ -16,6 +17,7 @@ import type {
 } from '../types'
 import { Buffer } from 'node:buffer'
 import { createServer } from 'node:http'
+import { dirname, join, resolve } from 'node:path'
 import { CHANNEL_BLUEPRINTS } from '../constants'
 import {
   ContentStudioApplicationService,
@@ -31,6 +33,7 @@ import {
   TaskScopeError,
   TaskStateError,
 } from '../jobs/task'
+import { recordWithPlaywright } from '../recording/playwright'
 import { assertNoSensitiveKeys } from '../validation'
 
 const MAX_BODY_BYTES = 256 * 1024
@@ -49,6 +52,8 @@ const VIDEO_FORMATS = new Set<VideoFormat>(['landscape', 'portrait', 'square'])
 
 export interface ContentStudioServerOptions {
   databasePath?: string
+  production?: ProductionTaskDependencies
+  productionOutputRoot?: string
   project: ProjectRecord
   projectChannelBindings?: ProjectChannelBinding[]
   repository?: ContentStudioRepository
@@ -75,8 +80,22 @@ export function createContentStudioServer(
   options: ContentStudioServerOptions,
 ): ContentStudioServerHandle {
   const application = createContentStudioApplication(options)
+  const production = options.production ?? {
+    record: recordWithPlaywright,
+  }
+  const productionOutputRoot = options.productionOutputRoot
+    ?? resolve(
+      dirname(options.databasePath ?? '.content-studio/content-studio.sqlite'),
+      'production',
+    )
   const server = createServer((request, response) => {
-    void handleRequest(request, response, application.service, options.project.projectId)
+    void handleRequest(
+      request,
+      response,
+      application.service,
+      options.project.projectId,
+      { dependencies: production, outputRoot: productionOutputRoot },
+    )
   })
 
   return {
@@ -117,6 +136,7 @@ async function handleRequest(
   response: ServerResponse,
   service: ContentStudioApplicationService,
   projectId: string,
+  production: RuntimeProductionOptions,
 ): Promise<void> {
   response.setHeader('Access-Control-Allow-Headers', 'content-type')
   response.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS, POST')
@@ -149,6 +169,37 @@ async function handleRequest(
     ) {
       const projectId = decodeSegment(segments[3]!)
       sendJson(response, 200, service.getProjectView(projectId))
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'tasks'
+      && segments[6] === 'record'
+    ) {
+      const requestProjectId = identifierField(
+        decodeSegment(segments[3]!),
+        'projectId',
+      )
+      const taskId = identifierField(
+        decodeSegment(segments[5]!),
+        'taskId',
+      )
+      const input = parseRecordProductionInput(await readJsonBody(request))
+      const result = await service.runActivityProductionTask(
+        requestProjectId,
+        taskId,
+        {
+          ...input,
+          outputDirectory: join(production.outputRoot, requestProjectId, taskId),
+        },
+        production.dependencies,
+      )
+      sendJson(response, 200, result)
       return
     }
 
@@ -314,6 +365,23 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   }
 }
 
+function parseRecordProductionInput(input: unknown): {
+  baseUrl: string
+  projectOrigin: string
+} {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'record task')
+  const supportedKeys = new Set(['baseUrl', 'projectOrigin'])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key))
+      throw new RequestError(400, `record task contains unsupported field: ${key}`)
+  }
+  return {
+    baseUrl: httpUrlField(value.baseUrl, 'baseUrl'),
+    projectOrigin: httpUrlField(value.projectOrigin, 'projectOrigin'),
+  }
+}
+
 export function parseCreateActivityInput(
   input: unknown,
   projectId: string,
@@ -476,6 +544,25 @@ function httpsUrlField(input: unknown, name: string): string {
   return url.toString()
 }
 
+function httpUrlField(input: unknown, name: string): string {
+  const value = stringField(input, name)
+  let url: URL
+  try {
+    url = new URL(value)
+  }
+  catch {
+    throw new RequestError(400, `${name} must be a valid HTTP(S) URL`)
+  }
+  if (
+    !['http:', 'https:'].includes(url.protocol)
+    || url.username !== ''
+    || url.password !== ''
+  ) {
+    throw new RequestError(400, `${name} must be an HTTP(S) URL without credentials`)
+  }
+  return url.toString()
+}
+
 function identifierField(input: unknown, name: string): string {
   const value = stringField(input, name)
   if (!IDENTIFIER_PATTERN.test(value))
@@ -559,4 +646,9 @@ class RequestError extends Error {
     super(message)
     this.name = 'RequestError'
   }
+}
+
+interface RuntimeProductionOptions {
+  dependencies: ProductionTaskDependencies
+  outputRoot: string
 }

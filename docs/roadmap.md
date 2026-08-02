@@ -231,6 +231,11 @@ MCP 不启动浏览器、不执行渠道写入，不接收凭据、任意路径�
 保持兼容，不需要填写视频计划。制作 Worker 还可以按任务所属活动读取该计划，不再由
 调用方重复拼装。
 
+本地 Runtime 新增项目范围的 `record` 路由：它只接收无凭据的预览地址和项目 origin，输出
+目录由 Runtime 固定在 `.content-studio/production/<project>/<task>/`，再由应用服务读取
+活动视频计划并调用 Playwright。工作台在任务进入 `generating` 后显示“开始录制”；没有
+视频计划的活动会被服务拒绝，不会启动浏览器。
+
 本地工作台也已接入同一个应用服务入口：排队中的制作任务显示“开始制作”操作，调用
 `POST /api/v1/projects/:projectId/tasks/:taskId/start` 后只推进到 `generating`，并刷新
 项目任务事件；未连接运行时或非制作任务不会显示为可执行状态。

@@ -176,6 +176,10 @@ origin、编译好的 `VideoPlan` 和窄输出目录后，才会调用内置录�
 影响。按活动运行制作任务时，Worker 只接收任务编号和预览/输出边界，由应用服务从任务
 所属活动读取计划。
 
+本地 HTTP Runtime 的 `POST /api/v1/projects/:projectId/tasks/:taskId/record` 已接入这条
+路径：请求只提供无凭据的 `baseUrl` 和 `projectOrigin`，输出目录由 Runtime 固定生成；
+工作台的“开始录制”操作不会接收脚本、选择器或任意文件路径。
+
 本地 HTTP 工作台复用同一个控制面，排队中的制作任务可以调用项目范围的 `start` 路由
 推进到 `generating`；这一步不会启动浏览器，也不会伪造录制回执。任务取消、重试和事件
 查询仍走同一份任务存储。

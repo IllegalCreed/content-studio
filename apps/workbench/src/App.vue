@@ -136,7 +136,7 @@ const contentSaving = ref(false)
 const contentSaveError = ref<string | null>(null)
 const runtimeTaskIds = ref<Set<string>>(new Set())
 const taskActionError = ref<string | null>(null)
-const taskActionPending = ref<'cancel' | 'retry' | 'start' | null>(null)
+const taskActionPending = ref<'cancel' | 'record' | 'retry' | 'start' | null>(null)
 const activityForm = reactive<{
   channel: ChannelId
   topic: string
@@ -191,6 +191,13 @@ const canStartSelectedTask = computed(() =>
   && snapshot.runtimeConnected
   && selectedTask.value.kind === '制作'
   && selectedTask.value.status === 'queued',
+)
+
+const canRecordSelectedTask = computed(() =>
+  selectedTaskIsRuntime.value
+  && snapshot.runtimeConnected
+  && selectedTask.value.kind === '制作'
+  && selectedTask.value.status === 'generating',
 )
 
 const canRetrySelectedTask = computed(() =>
@@ -320,11 +327,15 @@ async function startSelectedTask(): Promise<void> {
   await changeSelectedTask('start')
 }
 
+async function recordSelectedTask(): Promise<void> {
+  await changeSelectedTask('record')
+}
+
 async function retrySelectedTask(): Promise<void> {
   await changeSelectedTask('retry')
 }
 
-async function changeSelectedTask(action: 'cancel' | 'retry' | 'start'): Promise<void> {
+async function changeSelectedTask(action: 'cancel' | 'record' | 'retry' | 'start'): Promise<void> {
   if (taskActionPending.value !== null || !selectedTaskIsRuntime.value)
     return
   taskActionPending.value = action
@@ -334,6 +345,15 @@ async function changeSelectedTask(action: 'cancel' | 'retry' | 'start'): Promise
       await workbenchRuntime.cancelTask(snapshot.project.projectId, selectedTask.value.taskId)
     else if (action === 'retry')
       await workbenchRuntime.retryTask(snapshot.project.projectId, selectedTask.value.taskId)
+    else if (action === 'record')
+      await workbenchRuntime.recordTask(
+        snapshot.project.projectId,
+        selectedTask.value.taskId,
+        {
+          baseUrl: snapshot.project.canonicalUrl,
+          projectOrigin: snapshot.project.canonicalUrl,
+        },
+      )
     else
       await workbenchRuntime.startTask(snapshot.project.projectId, selectedTask.value.taskId)
     await refreshProjectView()
@@ -1214,6 +1234,15 @@ async function refreshProjectView(): Promise<void> {
                   <span v-else>操作会写入本地任务事件，不会触发渠道发布</span>
                 </p>
                 <div>
+                  <button
+                    type="button"
+                    class="primary-button"
+                    data-testid="record-task"
+                    :disabled="!canRecordSelectedTask || taskActionPending !== null"
+                    @click="recordSelectedTask"
+                  >
+                    {{ taskActionPending === 'record' ? '录制中…' : '开始录制' }}
+                  </button>
                   <button
                     type="button"
                     class="primary-button"

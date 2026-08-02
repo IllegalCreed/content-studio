@@ -8,12 +8,23 @@ import type {
   ExecutionTask,
   ExecutionTaskEvent,
   PublishingActivity,
+  RecorderAttemptReceipt,
 } from '@content-studio/core-types'
 
 export interface RuntimeHealth {
   contractVersion: 1
   projectId: string
   status: 'ready'
+}
+
+export interface RecordTaskInput {
+  baseUrl: string
+  projectOrigin: string
+}
+
+export interface RecordTaskResult {
+  receipt: RecorderAttemptReceipt
+  task: ExecutionTask
 }
 
 export interface WorkbenchRuntime {
@@ -23,6 +34,11 @@ export interface WorkbenchRuntime {
   createActivity: (input: CreatePublishingActivityInput) => Promise<PublishingActivity>
   health: () => Promise<RuntimeHealth>
   project: (projectId: string) => Promise<ContentStudioProjectView>
+  recordTask: (
+    projectId: string,
+    taskId: string,
+    input: RecordTaskInput,
+  ) => Promise<RecordTaskResult>
   retryTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
   startTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
   taskEvents: (projectId: string, taskId: string) => Promise<ExecutionTaskEvent[]>
@@ -73,6 +89,13 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
     health: () => request<RuntimeHealth>('/health'),
     project: projectId => request<ContentStudioProjectView>(
       `/projects/${encodeURIComponent(projectId)}`,
+    ),
+    recordTask: (projectId, taskId, input) => request<RecordTaskResult>(
+      `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/record`,
+      {
+        body: JSON.stringify(input),
+        method: 'POST',
+      },
     ),
     retryTask: (projectId, taskId) => request<ExecutionTask>(
       `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/retry`,
