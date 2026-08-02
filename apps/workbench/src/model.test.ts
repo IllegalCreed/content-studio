@@ -1,9 +1,14 @@
-import type { ContentStudioProjectView } from '@content-studio/core-types'
+import type {
+  ContentStudioProjectView,
+  ExecutionTask,
+  ExecutionTaskEvent,
+} from '@content-studio/core-types'
 import { describe, expect, it } from 'vitest'
 import {
   runtimeActivityArtifacts,
   runtimeProjectAssets,
   runtimeReports,
+  taskLifecycleProjection,
 } from './model'
 
 function projectView(overrides: Partial<ContentStudioProjectView> = {}): ContentStudioProjectView {
@@ -216,5 +221,104 @@ describe('runtime report projection', () => {
       source: '活动产物晋升',
       version: 'v1',
     }])
+  })
+})
+
+describe('execution task projection', () => {
+  it('projects the task-specific lifecycle from real status events', () => {
+    const task: ExecutionTask = {
+      activityId: 'activity-a',
+      attempt: 2,
+      channel: 'github',
+      contentId: 'content-a',
+      kind: 'production',
+      productionType: 'article',
+      projectId: 'project-a',
+      skipStages: ['recording'],
+      status: 'composing',
+      taskId: 'task-a',
+    }
+    const events: ExecutionTaskEvent[] = [
+      {
+        attempt: 1,
+        eventId: 'task-a:1',
+        kind: 'task-created',
+        message: 'Task created',
+        projectId: 'project-a',
+        sequence: 1,
+        status: 'queued',
+        taskId: 'task-a',
+        schemaVersion: 1,
+      },
+      {
+        attempt: 1,
+        eventId: 'task-a:2',
+        fromStatus: 'queued',
+        kind: 'status-changed',
+        message: 'Task changed from queued to failed',
+        projectId: 'project-a',
+        sequence: 2,
+        status: 'failed',
+        taskId: 'task-a',
+        toStatus: 'failed',
+        schemaVersion: 1,
+      },
+      {
+        attempt: 2,
+        eventId: 'task-a:3',
+        fromStatus: 'failed',
+        kind: 'attempt-retried',
+        message: 'Retry created as attempt 2',
+        previousAttempt: 1,
+        projectId: 'project-a',
+        sequence: 3,
+        status: 'queued',
+        taskId: 'task-a',
+        toStatus: 'queued',
+        schemaVersion: 1,
+      },
+      {
+        attempt: 2,
+        fromStatus: 'queued',
+        eventId: 'task-a:4',
+        kind: 'status-changed',
+        message: 'Task changed from queued to generating',
+        projectId: 'project-a',
+        sequence: 4,
+        status: 'generating',
+        taskId: 'task-a',
+        toStatus: 'generating',
+        schemaVersion: 1,
+      },
+      {
+        attempt: 2,
+        eventId: 'task-a:5',
+        fromStatus: 'generating',
+        kind: 'stage-skipped',
+        message: 'Task skipped recording',
+        projectId: 'project-a',
+        sequence: 5,
+        stage: 'recording',
+        status: 'composing',
+        taskId: 'task-a',
+        toStatus: 'composing',
+        schemaVersion: 1,
+      },
+    ]
+
+    const projection = taskLifecycleProjection(task, events)
+
+    expect(projection.progress).toBe(100)
+    expect(projection.detail).toContain('已跳过录制阶段')
+    expect(projection.steps).toEqual([
+      { detail: '已完成', label: '排队中', status: 'done' },
+      { detail: '已完成', label: '生成中', status: 'done' },
+      { detail: '该任务已配置跳过此阶段', label: '录制中', status: 'skipped' },
+      { detail: '当前阶段：合成中', label: '合成中', status: 'active' },
+    ])
+    expect(projection.attempts).toEqual([
+      { attempt: 1, eventCount: 2, lastEvent: '任务从排队中进入失败', status: '失败' },
+      { attempt: 2, eventCount: 3, lastEvent: '已跳过录制阶段', status: '合成中' },
+    ])
   })
 })

@@ -1,17 +1,13 @@
 <script setup lang="ts">
-import type { CampaignJobStatus } from '@content-studio/core-types'
 import { computed } from 'vue'
-import {
-  humanizeStatus,
-  lifecycleStages,
-} from '../model'
+import type { TaskStepProjection } from '../model'
 
 const props = defineProps<{
-  status: CampaignJobStatus
+  steps: TaskStepProjection[]
 }>()
 
 const activeIndex = computed(() =>
-  lifecycleStages.indexOf(props.status),
+  props.steps.findIndex(step => step.status === 'active'),
 )
 </script>
 
@@ -21,15 +17,16 @@ const activeIndex = computed(() =>
     aria-label="任务生命周期"
   >
     <li
-      v-for="(stage, index) in lifecycleStages"
-      :key="stage"
+      v-for="(step, index) in props.steps"
+      :key="step.label"
       :class="{
         active: index === activeIndex,
-        complete: index < activeIndex,
+        complete: step.status === 'done',
       }"
+      :data-step-status="step.status"
     >
       <span class="status-dot" />
-      <span>{{ humanizeStatus(stage) }}</span>
+      <span>{{ step.label }}</span>
     </li>
   </ol>
 </template>

@@ -32,11 +32,14 @@ import type {
 import {
   activityArtifactProjections,
   humanizeActivityStatus,
+  humanizeTaskEventKind,
   humanizeStatus,
   runtimeActivityArtifacts,
   runtimeProjectAssets,
   runtimeReports,
+  taskEventSummary,
   snapshot as snapshotSeed,
+  taskLifecycleProjection,
 } from './model'
 import { createWorkbenchRuntime } from './runtime'
 
@@ -837,23 +840,7 @@ function taskToProjection(
     .flatMap(group => group.contents)
     .find(content => content.contentId === task.contentId)?.title
     ?? '等待 AI 生成内容'
-  const statusLabel = humanizeStatus(task.status)
-  const stepLabels = task.kind === 'production'
-    ? task.productionType === 'article'
-      ? ['生成文章草稿', '校对渠道版本', '生成文章成品']
-      : ['生成脚本与拍摄大纲', '录制视频素材', '组装视频成品']
-    : task.kind === 'publication'
-      ? ['准备发布包', '等待授权人确认', '保存发布回执']
-      : ['建立监测计划', '采集渠道指标', '生成活动报告']
-  const activeStepIndex = task.status === 'queued' || task.status === 'generating'
-    ? 0
-    : task.status === 'recording'
-      ? 1
-      : task.status === 'composing' || task.status === 'awaiting-owner'
-        ? 2
-        : task.status === 'published'
-          ? stepLabels.length
-          : 0
+  const lifecycle = taskLifecycleProjection(task, events)
   return {
     accountAlias: account,
     activityId: task.activityId,
@@ -862,35 +849,25 @@ function taskToProjection(
     channel,
     ...(task.contentId === undefined ? {} : { contentId: task.contentId }),
     contentTitle,
-    detail: task.status === 'queued'
-      ? '任务已创建，等待 AI 生成内容和拍摄大纲。'
-      : `当前阶段：${statusLabel}`,
+    attempts: lifecycle.attempts,
+    detail: lifecycle.detail,
     events: events.map(event => ({
+      attempt: event.attempt,
       kind: event.kind,
       message: event.message,
       sequence: event.sequence,
+      ...(event.stage === undefined ? {} : { stage: event.stage }),
+      summary: taskEventSummary(event),
+      status: event.status,
     })),
     kind: task.kind === 'production'
       ? '制作'
       : task.kind === 'publication'
         ? '发布'
         : '监测',
+    progress: lifecycle.progress,
     status: task.status,
-    steps: stepLabels.map((label, index) => ({
-      detail: index < activeStepIndex
-        ? '已完成'
-        : index === activeStepIndex
-          ? `当前阶段：${statusLabel}`
-          : '等待前一阶段完成',
-      label,
-      status: task.status === 'failed' || task.status === 'cancelled'
-        ? index === activeStepIndex ? 'blocked' : 'pending'
-        : index < activeStepIndex
-          ? 'done'
-          : index === activeStepIndex
-            ? 'active'
-            : 'pending',
-    })),
+    steps: lifecycle.steps,
     taskId: task.taskId,
     title: task.kind === 'production' ? `制作：${activityTitle}` : `${task.kind}：${activityTitle}`,
   }
@@ -1623,7 +1600,7 @@ async function refreshProjectView(): Promise<void> {
               <p class="task-detail-context">{{ selectedTask.activityTitle }} → {{ selectedTask.contentTitle }} → {{ selectedTask.channel }} → {{ selectedTask.accountAlias }}</p>
               <p class="task-detail-copy">{{ selectedTask.detail }}</p>
               <div v-if="selectedTask.progress !== undefined" class="progress-track"><span :style="{ width: `${selectedTask.progress}%` }" /></div>
-              <StatusRail :status="selectedTask.status" />
+              <StatusRail :steps="selectedTask.steps" />
               <ol class="task-step-list" aria-label="任务步骤">
                 <li v-for="step in selectedTask.steps" :key="step.label" :data-step-status="step.status">
                   <span class="step-marker" />
@@ -1633,13 +1610,23 @@ async function refreshProjectView(): Promise<void> {
               <div class="task-detail-meta">
                 <span>任务编号 <code>{{ selectedTask.taskId }}</code></span>
                 <span>所属活动 <code>{{ selectedTask.activityId }}</code></span>
+                <span>当前尝试 <strong>第 {{ selectedTask.attempt }} 次</strong></span>
+              </div>
+              <div class="task-attempts">
+                <p class="eyebrow">尝试历史</p>
+                <ol>
+                  <li v-for="attempt in selectedTask.attempts" :key="`${selectedTask.taskId}-attempt-${attempt.attempt}`">
+                    <div><strong>第 {{ attempt.attempt }} 次尝试</strong><span>{{ attempt.status }}</span></div>
+                    <small>{{ attempt.eventCount }} 条事件 · {{ attempt.lastEvent }}</small>
+                  </li>
+                </ol>
               </div>
               <div v-if="selectedTask.events.length > 0" class="task-events">
                 <p class="eyebrow">运行事件</p>
                 <ol>
                   <li v-for="event in selectedTask.events" :key="`${selectedTask.taskId}-${event.sequence}`">
-                    <span>第 {{ event.sequence }} 条 · {{ event.kind }}</span>
-                    <small>{{ event.message }}</small>
+                    <span>第 {{ event.sequence }} 条 · {{ event.attempt === undefined ? selectedTask.attempt : event.attempt }} 次尝试 · {{ humanizeTaskEventKind(event.kind) }}</span>
+                    <small>{{ event.summary ?? event.message }}</small>
                   </li>
                 </ol>
               </div>

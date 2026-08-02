@@ -546,7 +546,7 @@ main {
 
 .status-rail {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
   margin: 3rem 0;
   padding: 0;
   list-style: none;
@@ -594,6 +594,15 @@ main {
 .status-rail li.active .status-dot {
   background: var(--acid);
   box-shadow: 0 0 0.8rem rgb(217 255 67 / 65%);
+}
+
+.status-rail li[data-step-status='skipped'] {
+  color: #686d62;
+  opacity: 0.7;
+}
+
+.status-rail li[data-step-status='blocked'] {
+  color: #d68066;
 }
 
 .detail-footer {
@@ -991,6 +1000,46 @@ button:disabled {
   padding: 0.8rem;
   border: 1px dashed var(--stroke);
   background: rgb(0 0 0 / 12%);
+}
+
+.task-attempts {
+  margin-top: 1.25rem;
+  padding: 0.8rem;
+  border: 1px solid var(--stroke);
+  background: rgb(0 0 0 / 10%);
+}
+
+.task-attempts ol {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task-attempts li {
+  display: grid;
+  gap: 0.18rem;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+}
+
+.task-attempts li div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.task-attempts li strong {
+  color: var(--text);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 500;
+}
+
+.task-attempts li span {
+  color: var(--acid);
 }
 
 .task-events ol {
@@ -1959,6 +2008,12 @@ footer {
 
 .task-step-list li[data-step-status='blocked'] .step-marker {
   border-color: #d68066;
+}
+
+.task-step-list li[data-step-status='skipped'] .step-marker {
+  border-color: var(--muted);
+  background: repeating-linear-gradient(135deg, transparent 0 2px, var(--muted) 2px 3px);
+  opacity: 0.65;
 }
 
 .task-step-list strong,

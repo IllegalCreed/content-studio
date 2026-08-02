@@ -3,6 +3,8 @@ import type {
   CampaignJobStatus,
   ChannelId,
   ContentStudioProjectView,
+  ExecutionTask,
+  ExecutionTaskEvent,
   ObservationMetric,
   VideoFormat,
 } from '@content-studio/core-types'
@@ -268,12 +270,208 @@ export interface OwnerHandoffProjection {
 
 export type ActivityStatusProjection = '草稿' | '已规划' | '进行中' | '已完成' | '已归档'
 
-export type TaskStepStatus = 'done' | 'active' | 'pending' | 'blocked'
+export type TaskStepStatus = 'done' | 'active' | 'pending' | 'blocked' | 'skipped'
 
 export interface TaskStepProjection {
   detail: string
   label: string
   status: TaskStepStatus
+}
+
+export interface TaskAttemptProjection {
+  attempt: number
+  eventCount: number
+  lastEvent: string
+  status: string
+}
+
+export interface TaskLifecycleProjection {
+  attempts: TaskAttemptProjection[]
+  detail: string
+  progress: number
+  steps: TaskStepProjection[]
+}
+
+const taskLifecycleLabels: Record<CampaignJobStatus, string> = {
+  'awaiting-owner': '等待人工',
+  'cancelled': '已取消',
+  'composing': '合成中',
+  'failed': '失败',
+  'generating': '生成中',
+  'monitoring': '监测中',
+  'published': '已发布',
+  'queued': '排队中',
+  'recording': '录制中',
+}
+
+/**
+ * Builds the task detail from the persisted task state and event stream.
+ * The activity remains the business object; these stages describe only one
+ * execution task and therefore vary by task kind.
+ */
+export function taskLifecycleProjection(
+  task: ExecutionTask,
+  events: ExecutionTaskEvent[] = [],
+): TaskLifecycleProjection {
+  const lifecycle = taskLifecycleFor(task)
+  const currentIndex = lifecycle.indexOf(task.status)
+  const completed = completedTask(task)
+  const latestObservedIndex = terminalTask(task.status)
+    ? latestLifecycleIndex(lifecycle, events)
+    : currentIndex
+  const progressIndex = Math.max(
+    0,
+    Math.min(latestObservedIndex < 0 ? 0 : latestObservedIndex, lifecycle.length - 1),
+  )
+  const isComplete = currentIndex === lifecycle.length - 1
+    && (completed || task.kind !== 'monitoring')
+  const progress = isComplete
+    ? 100
+    : lifecycle.length <= 1
+      ? 0
+      : Math.round((progressIndex / (lifecycle.length - 1)) * 100)
+  const lastEvent = events.at(-1)
+  const detail = lastEvent === undefined
+    ? task.status === 'queued'
+      ? '任务已创建，等待执行。'
+      : `当前阶段：${humanizeTaskStatus(task.status)}`
+    : taskEventSummary(lastEvent)
+
+  return {
+    attempts: taskAttemptProjections(task, events),
+    detail,
+    progress,
+    steps: lifecycle.map((stage, index) => {
+      const skipped = isTaskStageSkipped(task, stage)
+      const status: TaskStepStatus = skipped
+        ? 'skipped'
+        : completed
+          ? 'done'
+          : terminalTask(task.status)
+            ? index < latestObservedIndex
+              ? 'done'
+              : index === latestObservedIndex
+                ? 'blocked'
+                : 'pending'
+            : index < currentIndex
+              ? 'done'
+              : index === currentIndex
+                ? 'active'
+                : 'pending'
+      return {
+        detail: skipped
+          ? '该任务已配置跳过此阶段'
+          : status === 'done'
+            ? '已完成'
+            : status === 'blocked'
+              ? `在${humanizeTaskStatus(task.status)}前中断`
+              : status === 'active'
+                ? `当前阶段：${humanizeTaskStatus(stage)}`
+                : '等待前一阶段完成',
+        label: humanizeTaskStatus(stage),
+        status,
+      }
+    }),
+  }
+}
+
+export function humanizeTaskStatus(status: CampaignJobStatus): string {
+  return taskLifecycleLabels[status]
+}
+
+export function humanizeTaskEventKind(kind: string): string {
+  const labels: Record<string, string> = {
+    'attempt-cancelled': '尝试已取消',
+    'attempt-retried': '创建重试',
+    'stage-skipped': '跳过阶段',
+    'status-changed': '状态变化',
+    'task-created': '任务创建',
+  }
+  return labels[kind] ?? kind
+}
+
+export function taskEventSummary(event: ExecutionTaskEvent): string {
+  if (event.kind === 'task-created')
+    return '任务已创建，等待执行。'
+  if (event.kind === 'stage-skipped' && event.stage !== undefined)
+    return `已跳过${humanizeTaskStatus(event.stage).replace(/中$/u, '')}阶段`
+  if (event.kind === 'attempt-retried')
+    return `已创建第 ${event.attempt} 次重试`
+  if (event.kind === 'attempt-cancelled')
+    return `第 ${event.attempt} 次尝试已取消`
+  if (event.fromStatus !== undefined && event.toStatus !== undefined)
+    return `任务从${humanizeTaskStatus(event.fromStatus)}进入${humanizeTaskStatus(event.toStatus)}`
+  return event.message
+}
+
+function taskAttemptProjections(
+  task: ExecutionTask,
+  events: ExecutionTaskEvent[],
+): TaskAttemptProjection[] {
+  const byAttempt = new Map<number, ExecutionTaskEvent[]>()
+  for (const event of events) {
+    const attemptEvents = byAttempt.get(event.attempt) ?? []
+    attemptEvents.push(event)
+    byAttempt.set(event.attempt, attemptEvents)
+  }
+  if (!byAttempt.has(task.attempt))
+    byAttempt.set(task.attempt, [])
+
+  return [...byAttempt.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([attempt, attemptEvents]) => {
+      const last = attemptEvents.at(-1)
+      return {
+        attempt,
+        eventCount: attemptEvents.length,
+        lastEvent: last === undefined
+          ? attempt === task.attempt ? '当前尝试尚未产生事件' : '没有记录事件'
+          : taskEventSummary(last),
+        status: humanizeTaskStatus(last?.status ?? (attempt === task.attempt ? task.status : 'failed')),
+      }
+    })
+}
+
+function taskLifecycleFor(task: ExecutionTask): CampaignJobStatus[] {
+  if (task.kind === 'publication')
+    return ['queued', 'awaiting-owner', 'published']
+  if (task.kind === 'monitoring')
+    return ['queued', 'monitoring']
+  return ['queued', 'generating', 'recording', 'composing']
+}
+
+function isTaskStageSkipped(
+  task: ExecutionTask,
+  stage: CampaignJobStatus,
+): boolean {
+  if (stage !== 'generating' && stage !== 'recording')
+    return false
+  return task.skipStages.includes(stage)
+    || (task.kind === 'production'
+      && task.productionType === 'article'
+      && task.status !== 'recording'
+      && stage === 'recording')
+}
+
+function latestLifecycleIndex(
+  lifecycle: CampaignJobStatus[],
+  events: ExecutionTaskEvent[],
+): number {
+  return events.reduce((latest, event) => {
+    const candidates = [event.stage, event.toStatus, event.fromStatus, event.status]
+    const index = candidates
+      .map(status => status === undefined ? -1 : lifecycle.indexOf(status))
+      .find(index => index >= 0)
+    return index === undefined ? latest : Math.max(latest, index)
+  }, -1)
+}
+
+function terminalTask(status: CampaignJobStatus): boolean {
+  return status === 'cancelled' || status === 'failed'
+}
+
+function completedTask(task: ExecutionTask): boolean {
+  return task.kind === 'publication' && task.status === 'published'
 }
 
 export interface ChannelContentProjection {
@@ -323,10 +521,15 @@ export interface TaskProjection {
   contentId?: string
   contentTitle: string
   detail: string
+  attempts: TaskAttemptProjection[]
   events: Array<{
+    attempt?: number
     kind: string
     message: string
     sequence: number
+    stage?: CampaignJobStatus
+    status?: CampaignJobStatus
+    summary?: string
   }>
   kind: '制作' | '发布' | '监测'
   progress?: number
@@ -1027,6 +1230,7 @@ export const snapshot: WorkbenchSnapshot = {
       channel: 'bilibili',
       contentTitle: '快速排序演示视频',
       detail: '7 / 12 个动作已完成 · 预览帧已生成',
+      attempts: [{ attempt: 2, eventCount: 0, lastEvent: '演示数据未加载运行事件', status: '录制中' }],
       events: [],
       kind: '制作',
       progress: 58,
@@ -1049,6 +1253,7 @@ export const snapshot: WorkbenchSnapshot = {
       channel: 'x',
       contentTitle: 'Version update overview',
       detail: '等待渠道授权人登录、审核和最终点击',
+      attempts: [{ attempt: 1, eventCount: 0, lastEvent: '演示数据未加载运行事件', status: '等待人工' }],
       events: [],
       kind: '发布',
       status: 'awaiting-owner',
@@ -1068,6 +1273,7 @@ export const snapshot: WorkbenchSnapshot = {
       channel: 'bilibili',
       contentTitle: '快速排序演示视频',
       detail: '发布后 1 小时采集播放量、点赞和评论',
+      attempts: [{ attempt: 1, eventCount: 0, lastEvent: '演示数据未加载运行事件', status: '监测中' }],
       events: [],
       kind: '监测',
       status: 'monitoring',
