@@ -4,6 +4,7 @@ import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { ContentStudioRepository } from '../control-plane/service'
 import type {
   CreatePublishingActivityInput,
+  ExecutionTaskStore,
   Locale,
   ProjectChannelBinding,
   ProjectRecord,
@@ -19,6 +20,8 @@ import {
   RecordNotFoundError,
 } from '../control-plane/service'
 import { SqliteContentStudioRepository } from '../control-plane/sqlite'
+import { SqliteExecutionTaskStore } from '../jobs/sqlite'
+import { InMemoryExecutionTaskStore } from '../jobs/task'
 import { assertNoSensitiveKeys } from '../validation'
 
 const MAX_BODY_BYTES = 256 * 1024
@@ -39,6 +42,7 @@ export interface ContentStudioServerOptions {
   projectChannelBindings?: ProjectChannelBinding[]
   repository?: ContentStudioRepository
   snapshot: ProjectSnapshot
+  taskStore?: ExecutionTaskStore
 }
 
 export interface ContentStudioServerHandle {
@@ -46,6 +50,7 @@ export interface ContentStudioServerHandle {
   repository: ContentStudioRepository
   server: Server
   service: ContentStudioApplicationService
+  taskStore: ExecutionTaskStore
 }
 
 export function createContentStudioServer(
@@ -55,17 +60,24 @@ export function createContentStudioServer(
     ?? new SqliteContentStudioRepository(
       options.databasePath ?? '.content-studio/content-studio.sqlite',
     )
-  const service = new ContentStudioApplicationService(repository)
+  const taskStore = options.taskStore
+    ?? (options.repository === undefined
+      ? new SqliteExecutionTaskStore(
+          options.databasePath ?? '.content-studio/content-studio.sqlite',
+        )
+      : new InMemoryExecutionTaskStore())
+  const service = new ContentStudioApplicationService(repository, taskStore)
   registerInitialProject(service, repository, options)
   const server = createServer((request, response) => {
     void handleRequest(request, response, service, options.project.projectId)
   })
 
   return {
-    close: () => closeServer(server, repository),
+    close: () => closeServer(server, repository, taskStore),
     repository,
     server,
     service,
+    taskStore,
   }
 }
 
@@ -312,11 +324,14 @@ function sendJson(
 function closeServer(
   server: Server,
   repository: ContentStudioRepository,
+  taskStore: ExecutionTaskStore,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const closeRepository = (): void => {
       const close = (repository as ContentStudioRepository & { close?: () => void }).close
       close?.call(repository)
+      const closeTaskStore = (taskStore as ExecutionTaskStore & { close?: () => void }).close
+      closeTaskStore?.call(taskStore)
     }
     if (!server.listening) {
       closeRepository()

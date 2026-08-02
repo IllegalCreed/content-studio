@@ -9,6 +9,7 @@ import type {
   CreateChannelContentInput,
   CreateContentGroupInput,
   CreatePublishingActivityInput,
+  ExecutionTaskStore,
   MonitoringObservation,
   OwnerHandoff,
   ProjectAsset,
@@ -20,6 +21,7 @@ import type {
   PublicationReceipt,
   PublishingActivity,
 } from '../types'
+import { InMemoryExecutionTaskStore } from '../jobs/task'
 
 export class ProjectScopeError extends Error {
   constructor(projectId: string, recordId: string) {
@@ -461,7 +463,10 @@ implements ContentStudioRepository {
 }
 
 export class ContentStudioApplicationService {
-  constructor(private readonly repository: ContentStudioRepository) {}
+  constructor(
+    private readonly repository: ContentStudioRepository,
+    private readonly taskStore: ExecutionTaskStore = new InMemoryExecutionTaskStore(),
+  ) {}
 
   getProjectView(projectId: string): ContentStudioProjectView {
     const project = this.requireProject(projectId)
@@ -476,6 +481,7 @@ export class ContentStudioApplicationService {
       projectAssets: this.repository.listProjectAssets(projectId),
       projectChannelBindings: this.repository.listProjectChannelBindings(projectId),
       snapshot,
+      tasks: this.taskStore.listTasks(projectId),
     }
   }
 
@@ -506,10 +512,17 @@ export class ContentStudioApplicationService {
     this.requireProject(input.projectId)
     this.requireSnapshot(input.projectId, input.projectSnapshotId)
     this.assertEnabledChannels(input.projectId, input.channels)
-    return this.repository.saveActivity({
+    const activity = this.repository.saveActivity({
       ...input,
       version: 1,
     })
+    this.taskStore.createTask({
+      activityId: activity.activityId,
+      kind: 'production',
+      projectId: activity.projectId,
+      taskId: `production-${activity.activityId}`,
+    })
+    return activity
   }
 
   reviseActivity(input: ActivityRevisionInput): PublishingActivity {

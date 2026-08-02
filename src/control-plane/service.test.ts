@@ -171,6 +171,17 @@ describe('content studio application service', () => {
         },
       ],
       snapshot,
+      tasks: [
+        {
+          activityId: activity.activityId,
+          attempt: 1,
+          kind: 'production',
+          projectId: 'project-a',
+          skipStages: [],
+          status: 'queued',
+          taskId: `production-${activity.activityId}`,
+        },
+      ],
     })
   })
 

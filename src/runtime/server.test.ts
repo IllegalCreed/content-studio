@@ -111,6 +111,9 @@ describe('content studio local application server', () => {
       )
       expect(beforeResponse.status).toBe(200)
       expect((await beforeResponse.json()).activities).toEqual([])
+      expect((await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a`,
+      ).then(response => response.json())).tasks).toEqual([])
 
       const createResponse = await fetch(
         `${running.baseUrl}/api/v1/projects/project-a/activities`,
@@ -139,6 +142,18 @@ describe('content studio local application server', () => {
         projectId: 'project-a',
         version: 1,
       })
+
+      const taskResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a`,
+      )
+      expect((await taskResponse.json()).tasks).toEqual([
+        expect.objectContaining({
+          activityId: 'activity-a',
+          kind: 'production',
+          status: 'queued',
+          taskId: 'production-activity-a',
+        }),
+      ])
 
       const conflictResponse = await fetch(
         `${running.baseUrl}/api/v1/projects/project-a/activities`,

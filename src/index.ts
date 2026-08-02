@@ -11,6 +11,9 @@ export {
 } from './control-plane/service'
 export { SqliteContentStudioRepository } from './control-plane/sqlite'
 export {
+  SqliteExecutionTaskStore,
+} from './jobs/sqlite'
+export {
   createCampaignJob,
   transitionCampaignJob,
 } from './jobs/state'

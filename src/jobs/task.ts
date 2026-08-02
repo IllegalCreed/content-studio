@@ -6,6 +6,7 @@ import type {
   ExecutionTaskSkipStage,
   ExecutionTaskStatus,
   ExecutionTaskStore,
+  ExecutionTaskStoreState,
   ExecutionTaskTransitionOptions,
 } from '../types'
 import { CAMPAIGN_JOB_TRANSITIONS } from '../constants'
@@ -42,6 +43,27 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
   private readonly events = new Map<string, ExecutionTaskEvent[]>()
 
   private readonly tasks = new Map<string, ExecutionTask>()
+
+  exportState(): ExecutionTaskStoreState {
+    return {
+      events: [...this.events.values()].flatMap(events => events).map(clone),
+      tasks: this.listTasks(),
+    }
+  }
+
+  restoreState(state: ExecutionTaskStoreState): void {
+    this.events.clear()
+    this.tasks.clear()
+    for (const task of state.tasks)
+      this.tasks.set(taskKey(task.projectId, task.taskId), clone(task))
+    for (const event of state.events) {
+      const key = taskKey(event.projectId, event.taskId)
+      this.events.set(key, [
+        ...(this.events.get(key) ?? []),
+        clone(event),
+      ])
+    }
+  }
 
   createTask(input: CreateExecutionTaskInput): ExecutionTask {
     const key = taskKey(input.projectId, input.taskId)

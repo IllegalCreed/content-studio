@@ -2,10 +2,15 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import StatusRail from './components/StatusRail.vue'
 import VideoJobPanel from './components/VideoJobPanel.vue'
-import type { AssetProjection, CampaignProjection } from './model'
+import type {
+  AssetProjection,
+  CampaignProjection,
+  WorkbenchSnapshot,
+} from './model'
 import type {
   ChannelId,
   CreatePublishingActivityInput,
+  ExecutionTask,
   PublishingActivity,
 } from '@content-studio/core-types'
 import {
@@ -300,6 +305,8 @@ async function saveActivity(): Promise<void> {
   try {
     const activity = await workbenchRuntime.createActivity(input)
     snapshot.campaigns = [activityToCampaign(activity), ...snapshot.campaigns]
+    const projectView = await workbenchRuntime.project(snapshot.project.projectId)
+    applyProjectView(projectView)
     selectedCampaignId.value = activity.activityId
     activityComposerOpen.value = false
     activeModule.value = 'activities'
@@ -341,6 +348,47 @@ function activityToCampaign(activity: PublishingActivity): CampaignProjection {
   }
 }
 
+function taskToProjection(task: ExecutionTask): WorkbenchSnapshot['tasks'][number] {
+  const campaign = snapshot.campaigns.find(candidate => candidate.campaignId === task.activityId)
+  const channel = campaign?.channels[0] ?? 'github'
+  const account = snapshot.channels.find(candidate => candidate.channel === channel)?.alias
+    ?? '未绑定账号'
+  const activityTitle = campaign?.title ?? task.activityId
+  const contentTitle = campaign?.contentGroups[0]?.contents[0]?.title ?? '等待 AI 生成内容'
+  const statusLabel = humanizeStatus(task.status)
+  return {
+    accountAlias: account,
+    activityId: task.activityId,
+    activityTitle,
+    attempt: task.attempt,
+    channel,
+    contentTitle,
+    detail: task.status === 'queued'
+      ? '任务已创建，等待 AI 生成内容和拍摄大纲。'
+      : `当前阶段：${statusLabel}`,
+    kind: task.kind === 'production'
+      ? '制作'
+      : task.kind === 'publication'
+        ? '发布'
+        : '监测',
+    status: task.status,
+    steps: [
+      {
+        detail: task.status === 'queued' ? '尚未开始' : '已进入执行记录',
+        label: '准备活动内容',
+        status: task.status === 'queued' ? 'active' : 'done',
+      },
+      {
+        detail: task.status === 'queued' ? '等待前一步完成' : '等待后续应用服务接入',
+        label: '执行制作阶段',
+        status: task.status === 'queued' ? 'pending' : 'active',
+      },
+    ],
+    taskId: task.taskId,
+    title: task.kind === 'production' ? `制作：${activityTitle}` : `${task.kind}：${activityTitle}`,
+  }
+}
+
 onMounted(() => {
   if (import.meta.env.MODE !== 'test')
     void connectLocalRuntime()
@@ -350,8 +398,19 @@ async function connectLocalRuntime(): Promise<void> {
   try {
     const health = await workbenchRuntime.health()
     const projectView = await workbenchRuntime.project(snapshot.project.projectId)
-    currentSnapshotId.value = projectView.snapshot.snapshotId
     snapshot.runtimeConnected = health.status === 'ready'
+    applyProjectView(projectView)
+  }
+  catch (error: unknown) {
+    snapshot.runtimeConnected = false
+    runtimeError.value = error instanceof Error
+      ? error.message
+      : '本地运行时暂时不可用'
+  }
+}
+
+function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntime.project>>): void {
+    currentSnapshotId.value = projectView.snapshot.snapshotId
     snapshot.project = {
       ...snapshot.project,
       facts: projectView.snapshot.manifest.facts.map(fact =>
@@ -387,13 +446,13 @@ async function connectLocalRuntime(): Promise<void> {
         ),
       ),
     ]
-  }
-  catch (error: unknown) {
-    snapshot.runtimeConnected = false
-    runtimeError.value = error instanceof Error
-      ? error.message
-      : '本地运行时暂时不可用'
-  }
+    const runtimeTasks = projectView.tasks.map(taskToProjection)
+    snapshot.tasks = [
+      ...runtimeTasks,
+      ...snapshot.tasks.filter(task =>
+        !runtimeTasks.some(runtimeTask => runtimeTask.taskId === task.taskId),
+      ),
+    ]
 }
 </script>
 

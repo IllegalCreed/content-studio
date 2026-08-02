@@ -144,6 +144,7 @@ export interface ContentStudioProjectView {
   projectAssets: ProjectAsset[]
   projectChannelBindings: ProjectChannelBinding[]
   snapshot: ProjectSnapshot
+  tasks: ExecutionTask[]
 }
 
 export interface ProjectChannelBinding {
@@ -445,6 +446,11 @@ export interface ExecutionTaskEvent {
   taskId: string
   toStatus?: ExecutionTaskStatus
   schemaVersion: 1
+}
+
+export interface ExecutionTaskStoreState {
+  events: ExecutionTaskEvent[]
+  tasks: ExecutionTask[]
 }
 
 export interface ExecutionTaskStore {
