@@ -27,6 +27,7 @@ import type {
 import {
   humanizeActivityStatus,
   humanizeStatus,
+  runtimeReports,
   snapshot as snapshotSeed,
 } from './model'
 import { createWorkbenchRuntime } from './runtime'
@@ -844,6 +845,7 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
         !runtimeTasks.some(runtimeTask => runtimeTask.taskId === task.taskId),
       ),
     ]
+    snapshot.reports = runtimeReports(projectView)
 }
 
 async function refreshProjectView(): Promise<void> {
@@ -1662,8 +1664,8 @@ async function refreshProjectView(): Promise<void> {
       <template v-else-if="activeModule === 'reports'">
         <section id="reports" class="module-section">
           <div class="section-heading"><div><p class="eyebrow">项目空间 / 发布后监测</p><h2>项目报告</h2></div><span>按活动和渠道查看</span></div>
-          <p class="section-intro">报告不是活动里的另一个任务，而是发布回执和后续监测的结果投影。下面先用演示数据说明闭环；正式数据必须来自匹配的 marketing-ops 回执。</p>
-          <div class="report-list">
+          <p class="section-intro">报告不是活动里的另一个任务，而是发布回执和后续监测的结果投影。{{ snapshot.runtimeConnected ? '下面的数据来自当前项目的发布安排、回执和最新监测观测。' : '连接本地运行时后，这里会替换为真实回执和监测数据。' }}</p>
+          <div v-if="snapshot.reports.length > 0" class="report-list">
             <article v-for="report in snapshot.reports" :key="`${report.activityId}-${report.channel}`" class="report-card">
               <div class="detail-heading"><div><p class="eyebrow">{{ report.activityTitle }} · {{ report.contentType }} · {{ report.accountAlias }}</p><h3>{{ report.channel }}</h3></div><span class="task-status" :data-status="report.status">{{ report.status }}</span></div>
               <div class="report-metrics"><div v-for="metric in report.metrics" :key="metric.label"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong></div></div>
@@ -1672,6 +1674,7 @@ async function refreshProjectView(): Promise<void> {
               <button type="button" class="report-link" @click="selectCampaign(report.activityId)">查看所属活动 →</button>
             </article>
           </div>
+          <div v-else class="empty-state">当前项目还没有发布安排，完成内容制作后可在这里查看回执和监测数据。</div>
         </section>
       </template>
 
