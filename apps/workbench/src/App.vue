@@ -418,6 +418,7 @@ async function saveChannelContent(): Promise<void> {
   }
   const contentInput: CreateChannelContentInput = {
     activityId: selectedCampaign.value.campaignId,
+    artifactIds: [],
     body: contentForm.body,
     channel: contentForm.channel,
     contentGroupId: groupInput.contentGroupId,
@@ -494,6 +495,7 @@ function activityToCampaign(
         .filter(content => content.contentGroupId === group.contentGroupId)
         .map<ChannelContentProjection>(content => ({
           accountAlias: snapshot.channels.find(channel => channel.channel === content.channel)?.alias ?? undefined,
+          artifactIds: content.artifactIds,
           channel: content.channel,
           contentId: content.contentId,
           format: content.format === 'article' ? '文章' : '视频',

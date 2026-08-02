@@ -63,6 +63,7 @@ export interface TaskStepProjection {
 
 export interface ChannelContentProjection {
   accountAlias?: string
+  artifactIds?: string[]
   channel: ChannelId
   contentId: string
   format: '文章' | '视频'

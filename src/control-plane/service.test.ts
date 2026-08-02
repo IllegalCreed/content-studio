@@ -114,6 +114,7 @@ function createPublication(
     locale: 'en',
     projectId,
     title: 'Quick sort explained',
+    artifactIds: [],
   })
   const publication = service.createPublicationPlan({
     activityId: activity.activityId,
@@ -414,6 +415,7 @@ describe('content studio application service', () => {
       activityId: activity.activityId,
       contentGroupId: 'pack-group',
       contents: [{
+        artifactIds: [],
         body: 'A reviewable video draft',
         channel: 'youtube' as const,
         contentId: 'pack-content',
@@ -526,6 +528,7 @@ describe('content studio application service', () => {
       locale: 'en',
       projectId: 'project-a',
       title: 'Quick sort explained',
+      artifactIds: [],
     })
     const publication = service.createPublicationPlan({
       activityId: activity.activityId,
@@ -648,6 +651,7 @@ describe('content studio application service', () => {
       locale: 'en',
       projectId: 'project-a',
       title: 'Missing group',
+      artifactIds: [],
     })).toThrow(/not found/i)
     expect(() => service.createChannelContent({
       activityId: activityB.activityId,
@@ -659,6 +663,7 @@ describe('content studio application service', () => {
       locale: 'en',
       projectId: 'project-a',
       title: 'Wrong group',
+      artifactIds: [],
     })).toThrow(/belong to the activity/i)
     expect(() => service.createChannelContent({
       activityId: activityA.activityId,
@@ -670,6 +675,7 @@ describe('content studio application service', () => {
       locale: 'en',
       projectId: 'project-a',
       title: 'Wrong channel',
+      artifactIds: [],
     })).toThrow(/activity channel/i)
 
     expect(() => service.createPublicationPlan({
@@ -679,6 +685,98 @@ describe('content studio application service', () => {
       projectId: 'project-a',
       publicationId: 'publication-missing-content',
     })).toThrow(/not found/i)
+  })
+
+  it('binds channel content artifacts to the same activity and rejects duplicates', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'project-a')
+    enableYouTube(service, 'project-a')
+    const activityA = createActivity(service)
+    const activityB = createActivity(service, 'project-a', 'project-a-activity-b')
+    const groupA = service.createContentGroup({
+      activityId: activityA.activityId,
+      contentGroupId: 'artifact-group-a',
+      coreMessage: 'Explain the idea',
+      projectId: 'project-a',
+      title: 'Quick sort',
+    })
+    service.createActivityArtifact({
+      activityId: activityA.activityId,
+      artifactId: 'artifact-a',
+      kind: 'video-clip',
+      projectId: 'project-a',
+      relativePath: 'recordings/clip.webm',
+      sha256: 'a'.repeat(64),
+    })
+
+    // missing artifact
+    expect(() => service.createChannelContent({
+      activityId: activityA.activityId,
+      artifactIds: ['missing-artifact'],
+      body: 'Missing artifact',
+      channel: 'youtube',
+      contentGroupId: groupA.contentGroupId,
+      contentId: 'content-missing-artifact',
+      format: 'video',
+      locale: 'en',
+      projectId: 'project-a',
+      title: 'Missing artifact',
+    })).toThrow(/not found/i)
+
+    // artifact belongs to a different activity: give activity B its own
+    // legit group + channel so we isolate the artifact-ownership check
+    const groupB = service.createContentGroup({
+      activityId: activityB.activityId,
+      contentGroupId: 'artifact-group-b',
+      coreMessage: 'Other activity',
+      projectId: 'project-a',
+      title: 'Other activity',
+    })
+    expect(() => service.createChannelContent({
+      activityId: activityB.activityId,
+      artifactIds: ['artifact-a'],
+      body: 'Wrong activity artifact',
+      channel: 'youtube',
+      contentGroupId: groupB.contentGroupId,
+      contentId: 'content-cross-artifact',
+      format: 'video',
+      locale: 'en',
+      projectId: 'project-a',
+      title: 'Wrong activity artifact',
+    })).toThrow(/belong to the activity/i)
+
+    // duplicate artifact id within one content
+    expect(() => service.createChannelContent({
+      activityId: activityA.activityId,
+      artifactIds: ['artifact-a', 'artifact-a'],
+      body: 'Duplicate artifact',
+      channel: 'youtube',
+      contentGroupId: groupA.contentGroupId,
+      contentId: 'content-duplicate-artifact',
+      format: 'video',
+      locale: 'en',
+      projectId: 'project-a',
+      title: 'Duplicate artifact',
+    })).toThrow(/Duplicate channel content artifact/i)
+
+    // happy path: artifact in the same activity is recorded on the content
+    const content = service.createChannelContent({
+      activityId: activityA.activityId,
+      artifactIds: ['artifact-a'],
+      body: 'Happy path',
+      channel: 'youtube',
+      contentGroupId: groupA.contentGroupId,
+      contentId: 'content-with-artifact',
+      format: 'video',
+      locale: 'en',
+      projectId: 'project-a',
+      title: 'Happy path',
+    })
+    expect(content.artifactIds).toEqual(['artifact-a'])
+    const view = service.getProjectView('project-a')
+    expect(view.channelContents.find(item => item.contentId === 'content-with-artifact')?.artifactIds)
+      .toEqual(['artifact-a'])
   })
 
   it('rejects a publication receipt that does not match its saved plan', () => {
@@ -704,6 +802,7 @@ describe('content studio application service', () => {
       locale: 'en',
       projectId: 'project-a',
       title: 'Quick sort explained',
+      artifactIds: [],
     })
     const publication = service.createPublicationPlan({
       activityId: activity.activityId,
@@ -756,6 +855,7 @@ describe('content studio application service', () => {
       locale: 'en',
       projectId: 'project-a',
       title: 'Quick sort explained',
+      artifactIds: [],
     })
     const publication = service.createPublicationPlan({
       activityId: activity.activityId,
@@ -808,6 +908,7 @@ describe('content studio application service', () => {
       locale: 'en',
       projectId: 'project-a',
       title: 'Quick sort explained',
+      artifactIds: [],
     })
     const publication = service.createPublicationPlan({
       activityId: activity.activityId,
@@ -878,6 +979,7 @@ describe('content studio application service', () => {
       locale: 'en',
       projectId: 'project-a',
       title: 'Quick sort explained',
+      artifactIds: [],
     })
     const publication = service.createPublicationPlan({
       activityId: activity.activityId,

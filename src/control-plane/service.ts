@@ -678,6 +678,11 @@ export class ContentStudioApplicationService {
         locale: input.locale,
       },
     ])
+    this.assertChannelContentArtifacts(
+      input.projectId,
+      activity.activityId,
+      input.artifactIds,
+    )
     return this.repository.saveChannelContent({
       ...input,
       version: 1,
@@ -704,6 +709,11 @@ export class ContentStudioApplicationService {
       )) {
         throw new Error('Content pack channel and locale must match the activity')
       }
+      this.assertChannelContentArtifacts(
+        input.projectId,
+        input.activityId,
+        content.artifactIds,
+      )
     }
     this.assertEnabledChannels(
       input.projectId,
@@ -931,6 +941,27 @@ export class ContentStudioApplicationService {
       throw new Error(
         `Activity can only target enabled channel: ${missing.id}`,
       )
+    }
+  }
+
+  private assertChannelContentArtifacts(
+    projectId: string,
+    activityId: string,
+    artifactIds: readonly string[],
+  ): void {
+    const seen = new Set<string>()
+    for (const artifactId of artifactIds) {
+      if (seen.has(artifactId))
+        throw new Error(`Duplicate channel content artifact: ${artifactId}`)
+      seen.add(artifactId)
+      const artifact = this.repository.getActivityArtifact(projectId, artifactId)
+      if (artifact === undefined)
+        throw new RecordNotFoundError('Activity artifact', artifactId)
+      if (artifact.activityId !== activityId) {
+        throw new Error(
+          'Channel content artifacts must belong to the activity',
+        )
+      }
     }
   }
 

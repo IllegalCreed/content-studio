@@ -14,6 +14,7 @@ import {
 import {
   createContentStudioServer,
   parseCreateActivityInput,
+  parseCreateChannelContentInput,
 } from './server'
 
 function createProject(projectId = 'project-a'): {
@@ -113,6 +114,48 @@ describe('content studio local application server', () => {
         format: 'wide',
       },
     }, 'project-a')).toThrow(/video format/i)
+  })
+
+  it('parses channel content artifact ids, defaulting to empty and rejecting duplicates', () => {
+    const baseBody = {
+      activityId: 'activity-a',
+      body: 'A video script',
+      channel: 'github',
+      contentGroupId: 'group-a',
+      contentId: 'content-a',
+      format: 'article',
+      locale: 'en',
+      projectId: 'project-a',
+      title: 'A title',
+    }
+
+    // 缺省 artifactIds 默认为空数组
+    expect(parseCreateChannelContentInput(baseBody, 'project-a', 'activity-a', 'group-a'))
+      .toMatchObject({ artifactIds: [] })
+
+    // 显式提供时透传
+    expect(parseCreateChannelContentInput(
+      { ...baseBody, artifactIds: ['artifact-a'] },
+      'project-a',
+      'activity-a',
+      'group-a',
+    )).toMatchObject({ artifactIds: ['artifact-a'] })
+
+    // 非 kebab-case id 被拒
+    expect(() => parseCreateChannelContentInput(
+      { ...baseBody, artifactIds: ['Not Valid'] },
+      'project-a',
+      'activity-a',
+      'group-a',
+    )).toThrow(/kebab-case/i)
+
+    // 重复 id 被拒
+    expect(() => parseCreateChannelContentInput(
+      { ...baseBody, artifactIds: ['artifact-a', 'artifact-a'] },
+      'project-a',
+      'activity-a',
+      'group-a',
+    )).toThrow(/Duplicate artifactId/i)
   })
 
   it('serves a project-scoped view and creates an activity through the application service', async () => {

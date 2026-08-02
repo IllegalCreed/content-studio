@@ -96,6 +96,7 @@ describe('workbench runtime client', () => {
     })
     await runtime.createChannelContent({
       activityId: 'activity-a',
+      artifactIds: [],
       body: 'A short article.',
       channel: 'github',
       contentGroupId: 'group-a',

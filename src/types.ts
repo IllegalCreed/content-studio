@@ -203,6 +203,11 @@ export type ChannelContentFormat = 'article' | 'video'
 
 export interface ChannelContent {
   activityId: string
+  /**
+   * 本渠道内容引用的活动素材 ID。素材(ActivityArtifact)按 sha256 不可变,
+   * 多个渠道内容可以引用同一素材;引用只记录本活动内的素材,不跨项目、不跨活动。
+   */
+  artifactIds: string[]
   body: string
   channel: ChannelId
   contentGroupId: string

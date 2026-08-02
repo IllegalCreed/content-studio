@@ -451,6 +451,11 @@ function channelContentSchema(): Record<string, unknown> {
   return {
     properties: {
       activityId: { type: 'string' },
+      artifactIds: {
+        description: '引用本活动内的活动素材 ID,缺省为空数组',
+        items: { type: 'string' },
+        type: 'array',
+      },
       body: { type: 'string' },
       channel: { type: 'string' },
       contentGroupId: { type: 'string' },
@@ -483,6 +488,11 @@ function activityContentPackSchema(): Record<string, unknown> {
       contents: {
         items: {
           properties: {
+            artifactIds: {
+              description: '引用本活动内的活动素材 ID,缺省为空数组',
+              items: { type: 'string' },
+              type: 'array',
+            },
             body: { type: 'string' },
             channel: { type: 'string' },
             contentId: { type: 'string' },
@@ -615,6 +625,7 @@ function executeTool(
       const contents = value.contents.map((inputContent, index) => {
         const content = asRecord(inputContent, `contents[${index}]`)
         assertKeys(content, [
+          'artifactIds',
           'body',
           'channel',
           'contentId',
@@ -629,6 +640,7 @@ function executeTool(
           projectId,
         }, projectId, activityId, contentGroupId)
         return {
+          artifactIds: parsed.artifactIds,
           body: parsed.body,
           channel: parsed.channel,
           contentId: parsed.contentId,
@@ -647,6 +659,7 @@ function executeTool(
       const value = asRecord(input, 'channelContent')
       assertKeys(value, [
         'activityId',
+        'artifactIds',
         'body',
         'channel',
         'contentGroupId',

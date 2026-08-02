@@ -457,6 +457,7 @@ export function parseCreateChannelContentInput(
     throw new RequestError(400, `Unsupported channel: ${channel}`)
   return {
     activityId,
+    artifactIds: artifactIdsField(value.artifactIds),
     body: stringField(value.body, 'body'),
     channel: channel as CreateChannelContentInput['channel'],
     contentGroupId,
@@ -568,6 +569,21 @@ function identifierField(input: unknown, name: string): string {
   if (!IDENTIFIER_PATTERN.test(value))
     throw new RequestError(400, `${name} must use lowercase kebab-case`)
   return value
+}
+
+function artifactIdsField(input: unknown): string[] {
+  if (input === undefined)
+    return []
+  if (!Array.isArray(input))
+    throw new RequestError(400, 'artifactIds must be an array')
+  const ids = new Set<string>()
+  for (const item of input) {
+    const id = identifierField(item, 'artifactIds')
+    if (ids.has(id))
+      throw new RequestError(400, `Duplicate artifactId: ${id}`)
+    ids.add(id)
+  }
+  return [...ids]
 }
 
 function stringField(input: unknown, name: string): string {

@@ -113,6 +113,7 @@ describe('sQLite control-plane repository', () => {
       }
       const content: ChannelContent = {
         activityId: first.activity.activityId,
+        artifactIds: ['artifact-a'],
         body: 'A video script',
         channel: 'youtube',
         contentGroupId: group.contentGroupId,
