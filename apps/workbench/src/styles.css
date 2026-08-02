@@ -2340,6 +2340,69 @@ footer {
   margin-top: 0.75rem;
 }
 
+.project-channel-config {
+  margin-top: 0.75rem;
+}
+
+.project-channel-config .section-intro {
+  margin-top: 0.75rem;
+}
+
+.project-channel-config-grid {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.75fr) minmax(0, 1.75fr);
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.project-channel-list {
+  display: grid;
+  align-content: start;
+  gap: 0.35rem;
+}
+
+.project-channel-list button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.65rem;
+  align-items: center;
+  padding: 0.7rem;
+  border: 1px solid var(--stroke);
+  background: transparent;
+  text-align: left;
+}
+
+.project-channel-list button:hover,
+.project-channel-list button.selected {
+  border-color: #596233;
+  background: var(--panel-strong);
+}
+
+.project-channel-list button.selected {
+  box-shadow: inset 3px 0 var(--acid);
+}
+
+.project-channel-list button > span {
+  grid-column: 1 / -1;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.58rem;
+}
+
+.project-channel-list button strong {
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.project-channel-list button small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.channel-project-link {
+  background: rgb(0 0 0 / 10%);
+}
+
 .project-profile-card h3,
 .project-overview-grid h3 {
   margin: 0;
@@ -2639,7 +2702,8 @@ footer {
   .channel-overview-grid,
   .channel-detail-grid,
   .channel-account-detail,
-  .channel-binding-fields {
+  .channel-binding-fields,
+  .project-channel-config-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 
@@ -2672,6 +2736,7 @@ footer {
   .channel-detail-grid,
   .channel-account-detail,
   .channel-binding-fields,
+  .project-channel-config-grid,
   .report-metrics {
     grid-template-columns: 1fr;
   }

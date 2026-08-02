@@ -1307,6 +1307,63 @@ async function refreshProjectView(): Promise<void> {
               </div>
             </article>
           </div>
+
+          <section class="module-card project-channel-config" data-testid="project-channel-config">
+            <div class="module-card-heading">
+              <div><p class="eyebrow">项目空间 / 发布设置</p><h3>项目渠道配置</h3></div>
+              <span>{{ enabledChannels.length }} 个渠道已启用</span>
+            </div>
+            <p class="section-intro">这里决定当前项目实际使用哪些全局渠道，以及每个渠道对应的项目账号。发布活动只能选择已启用的渠道。</p>
+            <div class="project-channel-config-grid">
+              <div class="project-channel-list" role="list" aria-label="项目渠道配置列表">
+                <button
+                  v-for="channel in snapshot.channels"
+                  :key="channel.channel"
+                  type="button"
+                  :data-project-channel-id="channel.channel"
+                  :class="{ selected: channel.channel === selectedChannel.channel }"
+                  @click="selectChannel(channel.channel)"
+                >
+                  <span :class="channel.enabled ? 'ready' : 'muted-value'">{{ channel.enabled ? '已启用' : '未启用' }}</span>
+                  <strong>{{ channel.channel }}</strong>
+                  <small>{{ channel.alias ?? '未绑定项目账号' }}</small>
+                </button>
+              </div>
+              <div class="channel-binding-form">
+                <div class="channel-account-panel-heading">
+                  <div><p class="eyebrow">当前项目 · {{ selectedChannel.channel }}</p><strong>配置项目如何使用该渠道</strong></div>
+                  <small>只保存不透明账号引用</small>
+                </div>
+                <label class="channel-binding-toggle">
+                  <input v-model="channelBindingForm.enabled" type="checkbox" :disabled="!snapshot.runtimeConnected || channelBindingSaving" />
+                  <span>项目启用这个渠道</span>
+                </label>
+                <div class="channel-binding-fields">
+                  <label>
+                    <span>账号别名</span>
+                    <input v-model="channelBindingForm.accountAlias" type="text" maxlength="128" placeholder="例如：算法可视化视频账号" :disabled="!snapshot.runtimeConnected || channelBindingSaving" />
+                  </label>
+                  <label>
+                    <span>账号引用</span>
+                    <input v-model="channelBindingForm.accountRef" type="text" maxlength="128" placeholder="例如：account-youtube-main" :disabled="!snapshot.runtimeConnected || channelBindingSaving" />
+                  </label>
+                  <label>
+                    <span>交付方式</span>
+                    <select v-model="channelBindingForm.delivery" :disabled="!snapshot.runtimeConnected || channelBindingSaving">
+                      <option v-for="option in deliveryOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                    </select>
+                  </label>
+                </div>
+                <p v-if="channelBindingSaveError" class="form-error">{{ channelBindingSaveError }}</p>
+                <div class="form-actions">
+                  <small class="form-hint">保存项目配置不会登录渠道、读取凭据或触发发布。</small>
+                  <button data-testid="save-channel-binding" type="button" class="primary-button" :disabled="!snapshot.runtimeConnected || channelBindingSaving" @click="saveChannelBinding">
+                    {{ channelBindingSaving ? '保存中…' : '保存项目渠道配置' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
         </section>
       </template>
 
@@ -1731,37 +1788,15 @@ async function refreshProjectView(): Promise<void> {
                 <span>下一步</span><strong>{{ selectedChannelAccount.nextAction ?? '保持状态快照' }}</strong>
               </div>
             </div>
-            <div class="channel-binding-form">
+            <div class="channel-binding-form channel-project-link">
               <div class="channel-account-panel-heading">
-                <div><p class="eyebrow">项目渠道绑定</p><strong>这个项目如何使用该渠道</strong></div>
-                <small>只保存不透明账号引用</small>
+                <div><p class="eyebrow">项目级设置</p><strong>项目渠道配置不在全局目录中修改</strong></div>
+                <small>全局页只查看平台能力和状态</small>
               </div>
-              <label class="channel-binding-toggle">
-                <input v-model="channelBindingForm.enabled" type="checkbox" :disabled="!snapshot.runtimeConnected || channelBindingSaving" />
-                <span>项目启用这个渠道</span>
-              </label>
-              <div class="channel-binding-fields">
-                <label>
-                  <span>账号别名</span>
-                  <input v-model="channelBindingForm.accountAlias" type="text" maxlength="128" placeholder="例如：算法可视化视频账号" :disabled="!snapshot.runtimeConnected || channelBindingSaving" />
-                </label>
-                <label>
-                  <span>账号引用</span>
-                  <input v-model="channelBindingForm.accountRef" type="text" maxlength="128" placeholder="例如：account-youtube-main" :disabled="!snapshot.runtimeConnected || channelBindingSaving" />
-                </label>
-                <label>
-                  <span>交付方式</span>
-                  <select v-model="channelBindingForm.delivery" :disabled="!snapshot.runtimeConnected || channelBindingSaving">
-                    <option v-for="option in deliveryOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                  </select>
-                </label>
-              </div>
-              <p v-if="channelBindingSaveError" class="form-error">{{ channelBindingSaveError }}</p>
+              <p class="channel-boundary-note">每个项目的启用开关、账号引用和交付方式，请到当前项目的“项目概览”里配置。</p>
               <div class="form-actions">
-                <small class="form-hint">保存项目配置不会登录渠道、读取凭据或触发发布。</small>
-                <button data-testid="save-channel-binding" type="button" class="primary-button" :disabled="!snapshot.runtimeConnected || channelBindingSaving" @click="saveChannelBinding">
-                  {{ channelBindingSaving ? '保存中…' : '保存项目渠道配置' }}
-                </button>
+                <small class="form-hint">这里不会修改项目绑定。</small>
+                <button type="button" class="primary-button" @click="selectModule('project')">去项目配置</button>
               </div>
             </div>
             <div class="channel-detail-grid">

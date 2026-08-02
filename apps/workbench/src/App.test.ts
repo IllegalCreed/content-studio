@@ -69,8 +69,7 @@ describe('content studio workbench', () => {
     expect(wrapper.text()).toContain('发布助手状态')
     expect(wrapper.text()).toContain('全局规格')
     expect(wrapper.text()).toContain('项目账号')
-    expect(wrapper.text()).toContain('项目渠道绑定')
-    expect(wrapper.get('[data-testid="save-channel-binding"]').attributes()).toHaveProperty('disabled')
+    expect(wrapper.find('[data-testid="save-channel-binding"]').exists()).toBe(false)
     await wrapper.get('button[data-channel-id="github"]').trigger('click')
     expect(wrapper.text()).toContain('Algorithm Visualizer Docs')
     await wrapper.get('button[data-channel-account-id="github-algorithm-docs"]').trigger('click')
@@ -79,6 +78,10 @@ describe('content studio workbench', () => {
     expect(wrapper.get('.channel-detail-card').text()).toContain('需重新授权')
     await wrapper.get('button[data-channel-id="x"]').trigger('click')
     expect(wrapper.get('.channel-detail-card').text()).toContain('尚未读取渠道快照')
+
+    await wrapper.get('button[data-module="project"]').trigger('click')
+    expect(wrapper.get('[data-testid="project-channel-config"]').text()).toContain('项目渠道配置')
+    expect(wrapper.get('[data-testid="project-channel-config"] [data-testid="save-channel-binding"]').attributes()).toHaveProperty('disabled')
 
     await wrapper.get('button[data-module="assets"]').trigger('click')
     expect(wrapper.get('h1').text()).toContain('项目素材库')
