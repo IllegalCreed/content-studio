@@ -195,6 +195,7 @@ export interface PublishingActivity {
   status: ActivityStatus
   targetUrl: string
   topic: LocalizedText
+  videoPlanReviewStatus?: VideoPlanReviewStatus
   video?: CampaignVideo
   version: number
 }
@@ -208,6 +209,14 @@ export interface ActivityRevisionInput {
   projectId: string
   topic: LocalizedText
 }
+
+export interface ConfirmActivityVideoPlanInput {
+  activityId: string
+  baseVersion: number
+  projectId: string
+}
+
+export type VideoPlanReviewStatus = 'confirmed' | 'pending'
 
 export interface ContentGroup {
   activityId: string
@@ -408,6 +417,7 @@ export interface VideoPlan {
   format: VideoFormat
   outline?: VideoOutlineScene[]
   planVersion?: number
+  reviewStatus?: VideoPlanReviewStatus
   scenes: CompiledScene[]
   viewport: {
     height: number

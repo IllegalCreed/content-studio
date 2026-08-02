@@ -315,6 +315,7 @@ describe('content Studio local MCP server', () => {
           campaignId: 'quick-sort-launch',
           outline: [{ flowId: 'quick-sort' }],
           planVersion: 3,
+          reviewStatus: 'pending',
           scenes: [{ id: 'quick-sort', startPath: '/quick-sort' }],
         },
       },

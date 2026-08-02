@@ -1,6 +1,7 @@
 import type {
   CampaignJobStatus,
   ChannelId,
+  VideoFormat,
 } from '@content-studio/core-types'
 
 export interface ProjectProjection {
@@ -38,6 +39,20 @@ export interface VideoJobProjection {
   jobId: string
   previewLabel: string
   totalActions: number
+}
+
+export interface VideoPlanSceneProjection {
+  flowId: string
+  objective: string
+  startPath: string
+  title: string
+}
+
+export interface VideoPlanProjection {
+  format: VideoFormat
+  planVersion: number
+  reviewStatus: '已确认' | '待确认'
+  scenes: VideoPlanSceneProjection[]
 }
 
 export interface OwnerHandoffProjection {
@@ -168,9 +183,11 @@ export interface CampaignProjection {
   handoffs: OwnerHandoffProjection[]
   nextAction: string
   referencedAssets: string[]
+  version: number
   activityArtifacts: ActivityArtifactProjection[]
   activityStatus: ActivityStatusProjection
   topic: string
+  videoPlan: VideoPlanProjection | null
   title: string
   videoJob: VideoJobProjection | null
 }
@@ -262,6 +279,20 @@ export const snapshot: WorkbenchSnapshot = {
       activityStatus: '进行中',
       topic: '让第一次接触算法的用户看懂快速排序。',
       title: '快速排序可视化指南',
+      version: 1,
+      videoPlan: {
+        format: 'portrait',
+        planVersion: 2,
+        reviewStatus: '待确认',
+        scenes: [
+          {
+            flowId: 'quick-sort',
+            objective: '展示分区步骤，让用户看懂比较和交换。',
+            startPath: '/quick-sort',
+            title: '快速排序 · 分区过程',
+          },
+        ],
+      },
       videoJob: {
         attempt: 2,
         completedActions: 7,
@@ -367,6 +398,8 @@ export const snapshot: WorkbenchSnapshot = {
       activityStatus: '已规划',
       topic: '让用户快速了解 Algorithm Visualizer 的本次版本更新。',
       title: '版本更新发布',
+      version: 1,
+      videoPlan: null,
       videoJob: {
         attempt: 1,
         completedActions: 9,

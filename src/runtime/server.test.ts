@@ -472,6 +472,86 @@ describe('content studio local application server', () => {
     }
   })
 
+  it('confirms a stored activity video plan through the local runtime', async () => {
+    const { project, snapshot: baseSnapshot } = createProject()
+    const snapshot: ProjectSnapshot = {
+      ...baseSnapshot,
+      manifest: {
+        ...baseSnapshot.manifest,
+        captureFlows: [{
+          id: 'quick-sort',
+          startPath: '/quick-sort',
+          steps: [{ durationMs: 100, kind: 'capture', label: 'algorithm' }],
+          title: {
+            'en': 'Quick sort',
+            'zh-CN': '快速排序',
+          },
+        }],
+      },
+    }
+    const handle = createContentStudioServer({
+      project,
+      projectChannelBindings: [{
+        channel: 'youtube',
+        delivery: 'owner-assisted',
+        enabled: true,
+        projectId: project.projectId,
+      }],
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    const activity = handle.service.createActivity({
+      activityId: 'video-activity',
+      campaignId: 'video-campaign',
+      channels: [{ id: 'youtube', locale: 'en' }],
+      goal: 'education',
+      projectId: project.projectId,
+      projectSnapshotId: snapshot.snapshotId,
+      status: 'draft',
+      targetUrl: 'https://project-a.example.com/quick-sort',
+      topic: {
+        'en': 'Quick sort',
+        'zh-CN': '快速排序',
+      },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        outline: [{
+          flowId: 'quick-sort',
+          objective: {
+            'en': 'Show the partition step',
+            'zh-CN': '展示分区步骤',
+          },
+          title: {
+            'en': 'Partition the array',
+            'zh-CN': '数组分区',
+          },
+        }],
+        planVersion: 2,
+      },
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const response = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/activities/${activity.activityId}/video-plan/confirm`,
+        {
+          body: JSON.stringify({ baseVersion: activity.version }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        version: 2,
+        videoPlanReviewStatus: 'confirmed',
+      })
+    }
+    finally {
+      await running.close()
+    }
+  })
+
   it('rejects a body that attempts to carry credentials', async () => {
     const { project, snapshot } = createProject()
     const handle = createContentStudioServer({

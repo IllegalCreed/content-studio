@@ -8,6 +8,7 @@ import type {
   ActivityContentPack,
   ActivityRevisionInput,
   ChannelContent,
+  ConfirmActivityVideoPlanInput,
   ContentGroup,
   ContentStudioProjectView,
   ContentStudioReport,
@@ -556,6 +557,9 @@ export class ContentStudioApplicationService {
     this.assertEnabledChannels(input.projectId, input.channels)
     const activity = this.repository.saveActivity({
       ...input,
+      ...(input.video === undefined
+        ? { videoPlanReviewStatus: undefined }
+        : { videoPlanReviewStatus: 'pending' as const }),
       version: 1,
     })
     this.taskStore.createTask({
@@ -633,7 +637,7 @@ export class ContentStudioApplicationService {
     if (activity.video === undefined)
       throw new Error(`Activity ${activityId} does not define a video plan`)
     const snapshot = this.requireSnapshot(projectId, activity.projectSnapshotId)
-    return compileVideoPlan(snapshot.manifest, {
+    const plan = compileVideoPlan(snapshot.manifest, {
       channels: activity.channels,
       campaignId: activity.campaignId,
       goal: activity.goal,
@@ -644,6 +648,10 @@ export class ContentStudioApplicationService {
       topic: activity.topic,
       video: activity.video,
     })
+    return {
+      ...plan,
+      reviewStatus: activity.videoPlanReviewStatus ?? 'pending',
+    }
   }
 
   listTaskEvents(projectId: string, taskId: string): ExecutionTaskEvent[] {
@@ -662,6 +670,26 @@ export class ContentStudioApplicationService {
       ...current,
       topic: input.topic,
       version: current.version + 1,
+    })
+  }
+
+  confirmActivityVideoPlan(
+    input: ConfirmActivityVideoPlanInput,
+  ): PublishingActivity {
+    const current = this.requireActivity(input.projectId, input.activityId)
+    if (current.version !== input.baseVersion) {
+      throw new Error(
+        `Activity ${input.activityId} has moved past version ${input.baseVersion}`,
+      )
+    }
+    if (current.video === undefined)
+      throw new Error(`Activity ${input.activityId} does not define a video plan`)
+    if (current.videoPlanReviewStatus === 'confirmed')
+      return current
+    return this.repository.saveActivity({
+      ...current,
+      version: current.version + 1,
+      videoPlanReviewStatus: 'confirmed',
     })
   }
 

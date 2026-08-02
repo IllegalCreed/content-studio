@@ -7,9 +7,11 @@ import type {
   CampaignProjection,
   ChannelContentProjection,
   ContentGroupProjection,
+  VideoPlanProjection,
   WorkbenchSnapshot,
 } from './model'
 import type {
+  CaptureFlow,
   ChannelContent,
   ChannelId,
   ContentGroup,
@@ -135,8 +137,11 @@ const contentComposerOpen = ref(false)
 const contentSaving = ref(false)
 const contentSaveError = ref<string | null>(null)
 const runtimeTaskIds = ref<Set<string>>(new Set())
+const runtimeActivityIds = ref<Set<string>>(new Set())
 const taskActionError = ref<string | null>(null)
 const taskActionPending = ref<'cancel' | 'record' | 'retry' | 'start' | null>(null)
+const videoPlanActionError = ref<string | null>(null)
+const videoPlanActionPending = ref(false)
 const activityForm = reactive<{
   channel: ChannelId
   topic: string
@@ -169,6 +174,17 @@ const selectedCampaign = computed(() =>
   snapshot.campaigns.find(
     campaign => campaign.campaignId === selectedCampaignId.value,
   ) ?? snapshot.campaigns[0]!,
+)
+
+const selectedCampaignIsRuntime = computed(() =>
+  runtimeActivityIds.value.has(selectedCampaign.value.campaignId),
+)
+
+const canConfirmSelectedVideoPlan = computed(() =>
+  snapshot.runtimeConnected
+  && selectedCampaignIsRuntime.value
+  && selectedCampaign.value.videoPlan?.reviewStatus === '待确认'
+  && !videoPlanActionPending.value,
 )
 
 const selectedTask = computed(() =>
@@ -335,6 +351,29 @@ async function retrySelectedTask(): Promise<void> {
   await changeSelectedTask('retry')
 }
 
+async function confirmSelectedVideoPlan(): Promise<void> {
+  if (!canConfirmSelectedVideoPlan.value || selectedCampaign.value.videoPlan === null)
+    return
+  videoPlanActionPending.value = true
+  videoPlanActionError.value = null
+  try {
+    await workbenchRuntime.confirmActivityVideoPlan(
+      snapshot.project.projectId,
+      selectedCampaign.value.campaignId,
+      selectedCampaign.value.version,
+    )
+    await refreshProjectView()
+  }
+  catch (error: unknown) {
+    videoPlanActionError.value = error instanceof Error
+      ? error.message
+      : '拍摄大纲确认失败'
+  }
+  finally {
+    videoPlanActionPending.value = false
+  }
+}
+
 async function changeSelectedTask(action: 'cancel' | 'record' | 'retry' | 'start'): Promise<void> {
   if (taskActionPending.value !== null || !selectedTaskIsRuntime.value)
     return
@@ -485,6 +524,7 @@ function activityToCampaign(
   activity: PublishingActivity,
   contentGroups: ContentGroup[] = [],
   channelContents: ChannelContent[] = [],
+  captureFlows: CaptureFlow[] = [],
 ): CampaignProjection {
   const topic = activity.topic['zh-CN'] ?? activity.topic.en
   const groups = contentGroups
@@ -506,6 +546,9 @@ function activityToCampaign(
       coreMessage: group.coreMessage,
       title: group.title,
     }))
+  const videoPlan = activity.video === undefined
+    ? null
+    : createVideoPlanProjection(activity, captureFlows)
   return {
     activityArtifacts: [],
     activityStatus: activity.status === 'active'
@@ -529,7 +572,33 @@ function activityToCampaign(
     referencedAssets: [],
     title: topic,
     topic,
+    version: activity.version,
+    videoPlan,
     videoJob: null,
+  }
+}
+
+function createVideoPlanProjection(
+  activity: PublishingActivity,
+  captureFlows: CaptureFlow[],
+): VideoPlanProjection {
+  const video = activity.video!
+  const flowById = new Map(captureFlows.map(flow => [flow.id, flow]))
+  const outlineByFlowId = new Map((video.outline ?? []).map(scene => [scene.flowId, scene]))
+  return {
+    format: video.format,
+    planVersion: video.planVersion ?? activity.version,
+    reviewStatus: activity.videoPlanReviewStatus === 'confirmed' ? '已确认' : '待确认',
+    scenes: video.flowIds.map((flowId) => {
+      const flow = flowById.get(flowId)
+      const outline = outlineByFlowId.get(flowId)
+      return {
+        flowId,
+        objective: outline?.objective['zh-CN'] ?? outline?.objective.en ?? '按项目流程执行该场景。',
+        startPath: flow?.startPath ?? '未登记路径',
+        title: outline?.title['zh-CN'] ?? outline?.title.en ?? flow?.title['zh-CN'] ?? flow?.title.en ?? flowId,
+      }
+    }),
   }
 }
 
@@ -635,6 +704,7 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
         activity,
         projectView.contentGroups,
         projectView.channelContents,
+        projectView.snapshot.manifest.captureFlows,
       ),
     )
     snapshot.campaigns = [
@@ -645,6 +715,7 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
         ),
       ),
     ]
+    runtimeActivityIds.value = new Set(projectView.activities.map(activity => activity.activityId))
     runtimeTaskIds.value = new Set(projectView.tasks.map(task => task.taskId))
     const runtimeTasks = projectView.tasks.map(task =>
       taskToProjection(task, projectView.taskEvents[task.taskId] ?? []),
@@ -1099,6 +1170,52 @@ async function refreshProjectView(): Promise<void> {
                 <span class="activity-topic">{{ selectedCampaign.topic }}</span>
               </div>
               <StatusRail :status="selectedCampaign.executionStatus" />
+              <section
+                v-if="selectedCampaign.videoPlan"
+                class="shooting-plan-card"
+                data-testid="shooting-plan"
+              >
+                <div class="shooting-plan-heading">
+                  <div>
+                    <p class="eyebrow">制作计划</p>
+                    <h3>拍摄大纲</h3>
+                  </div>
+                  <span class="plan-review-status" :data-status="selectedCampaign.videoPlan.reviewStatus">
+                    {{ selectedCampaign.videoPlan.reviewStatus }}
+                  </span>
+                </div>
+                <div class="shooting-plan-meta">
+                  <span>第 {{ selectedCampaign.videoPlan.planVersion }} 版</span>
+                  <span>{{ selectedCampaign.videoPlan.format }} · {{ selectedCampaign.videoPlan.scenes.length }} 个场景</span>
+                </div>
+                <ol class="shooting-plan-scenes">
+                  <li v-for="(scene, index) in selectedCampaign.videoPlan.scenes" :key="scene.flowId">
+                    <span>{{ String(index + 1).padStart(2, '0') }}</span>
+                    <div>
+                      <strong>{{ scene.title }}</strong>
+                      <small>{{ scene.objective }}</small>
+                      <code>{{ scene.flowId }} · {{ scene.startPath }}</code>
+                    </div>
+                  </li>
+                </ol>
+                <div class="shooting-plan-actions">
+                  <p>
+                    <span v-if="videoPlanActionError" class="task-action-error">{{ videoPlanActionError }}</span>
+                    <span v-else-if="!selectedCampaignIsRuntime">演示活动只读，真实活动确认后会写入本地版本。</span>
+                    <span v-else-if="selectedCampaign.videoPlan.reviewStatus === '已确认'">已确认，后续录制沿用这个版本。</span>
+                    <span v-else>确认后才能把这版大纲交给制作任务执行。</span>
+                  </p>
+                  <button
+                    type="button"
+                    class="primary-button"
+                    data-testid="confirm-video-plan"
+                    :disabled="!canConfirmSelectedVideoPlan"
+                    @click="confirmSelectedVideoPlan"
+                  >
+                    {{ videoPlanActionPending ? '确认中…' : selectedCampaign.videoPlan.reviewStatus === '已确认' ? '已确认' : '确认拍摄大纲' }}
+                  </button>
+                </div>
+              </section>
               <div class="content-type-grid">
                 <div><span>文章内容</span><strong>{{ selectedCampaignContentCounts.article }}</strong><small>按渠道分别生成</small></div>
                 <div><span>视频内容</span><strong>{{ selectedCampaignContentCounts.video }}</strong><small>资源变体待制作</small></div>

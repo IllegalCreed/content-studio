@@ -69,6 +69,7 @@ function records(projectId: string): {
       'en': 'A topic',
       'zh-CN': '主题',
     },
+    videoPlanReviewStatus: 'pending',
     video: {
       flowIds: ['quick-sort'],
       format: 'landscape',
@@ -95,6 +96,7 @@ describe('sQLite control-plane repository', () => {
           'en': 'A revised topic',
           'zh-CN': '修订主题',
         },
+        videoPlanReviewStatus: 'confirmed',
         version: 2,
       })
       const binding: ProjectChannelBinding = {
@@ -216,6 +218,7 @@ describe('sQLite control-plane repository', () => {
           topic: {
             en: 'A revised topic',
           },
+          videoPlanReviewStatus: 'confirmed',
           version: 2,
         })
       expect(reopenedRepository.listProjectChannelBindings('project-a'))

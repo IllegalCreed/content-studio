@@ -1533,6 +1533,120 @@ footer {
   border-bottom: 1px solid var(--stroke);
 }
 
+.shooting-plan-card {
+  margin-top: 1.5rem;
+  padding: 1.1rem;
+  border: 1px solid #596233;
+  background: linear-gradient(135deg, rgb(217 255 67 / 5%), transparent 55%), #151713;
+}
+
+.shooting-plan-heading,
+.shooting-plan-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.shooting-plan-heading h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.plan-review-status {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--stroke);
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6rem;
+}
+
+.plan-review-status[data-status='待确认'] {
+  color: #f6c985;
+  border-color: rgb(245 179 76 / 40%);
+}
+
+.plan-review-status[data-status='已确认'] {
+  color: var(--acid);
+  border-color: #596233;
+}
+
+.shooting-plan-meta {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6rem;
+}
+
+.shooting-plan-scenes {
+  display: grid;
+  gap: 0.45rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shooting-plan-scenes li {
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  gap: 0.7rem;
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--stroke);
+}
+
+.shooting-plan-scenes li > span {
+  color: var(--acid);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+}
+
+.shooting-plan-scenes strong,
+.shooting-plan-scenes small,
+.shooting-plan-scenes code {
+  display: block;
+}
+
+.shooting-plan-scenes strong {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.shooting-plan-scenes small {
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.shooting-plan-scenes code {
+  margin-top: 0.3rem;
+  color: #aeb596;
+  font-size: 0.58rem;
+}
+
+.shooting-plan-actions {
+  align-items: center;
+  margin-top: 0.65rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--stroke);
+}
+
+.shooting-plan-actions p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.shooting-plan-actions button {
+  flex: 0 0 auto;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.68rem;
+}
+
 .activity-topic {
   color: var(--muted);
   font-size: 0.76rem;
@@ -2315,6 +2429,11 @@ footer {
   .asset-detail-list,
   .artifact-list {
     grid-template-columns: 1fr;
+  }
+
+  .shooting-plan-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .channel-overview-grid,

@@ -220,6 +220,33 @@ async function handleRequest(
 
     if (
       request.method === 'POST'
+      && segments.length === 8
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'activities'
+      && segments[6] === 'video-plan'
+      && segments[7] === 'confirm'
+    ) {
+      const projectId = identifierField(
+        decodeSegment(segments[3]!),
+        'projectId',
+      )
+      const activityId = identifierField(
+        decodeSegment(segments[5]!),
+        'activityId',
+      )
+      const input = parseConfirmActivityVideoPlanInput(await readJsonBody(request))
+      sendJson(response, 200, service.confirmActivityVideoPlan({
+        activityId,
+        baseVersion: input.baseVersion,
+        projectId,
+      }))
+      return
+    }
+
+    if (
+      request.method === 'POST'
       && segments.length === 7
       && segments[0] === 'api'
       && segments[1] === 'v1'
@@ -380,6 +407,19 @@ function parseRecordProductionInput(input: unknown): {
   return {
     baseUrl: httpUrlField(value.baseUrl, 'baseUrl'),
     projectOrigin: httpUrlField(value.projectOrigin, 'projectOrigin'),
+  }
+}
+
+function parseConfirmActivityVideoPlanInput(input: unknown): { baseVersion: number } {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'confirm video plan')
+  const supportedKeys = new Set(['baseVersion'])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key))
+      throw new RequestError(400, `confirm video plan contains unsupported field: ${key}`)
+  }
+  return {
+    baseVersion: positiveIntegerField(value.baseVersion, 'baseVersion'),
   }
 }
 

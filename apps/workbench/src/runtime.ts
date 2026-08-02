@@ -29,6 +29,11 @@ export interface RecordTaskResult {
 
 export interface WorkbenchRuntime {
   cancelTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
+  confirmActivityVideoPlan: (
+    projectId: string,
+    activityId: string,
+    baseVersion: number,
+  ) => Promise<PublishingActivity>
   createChannelContent: (input: CreateChannelContentInput) => Promise<ChannelContent>
   createContentGroup: (input: CreateContentGroupInput) => Promise<ContentGroup>
   createActivity: (input: CreatePublishingActivityInput) => Promise<PublishingActivity>
@@ -64,6 +69,13 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
     cancelTask: (projectId, taskId) => request<ExecutionTask>(
       `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/cancel`,
       { method: 'POST' },
+    ),
+    confirmActivityVideoPlan: (projectId, activityId, baseVersion) => request<PublishingActivity>(
+      `/projects/${encodeURIComponent(projectId)}/activities/${encodeURIComponent(activityId)}/video-plan/confirm`,
+      {
+        body: JSON.stringify({ baseVersion }),
+        method: 'POST',
+      },
     ),
     createChannelContent: input => request<ChannelContent>(
       `/projects/${encodeURIComponent(input.projectId)}/activities/${encodeURIComponent(input.activityId)}/content-groups/${encodeURIComponent(input.contentGroupId)}/contents`,

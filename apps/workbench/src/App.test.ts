@@ -37,6 +37,10 @@ describe('content studio workbench', () => {
     expect(wrapper.get('h1').text()).toContain('发布活动')
     expect(wrapper.text()).toContain('内容组与渠道内容')
     expect(wrapper.text()).toContain('关联执行任务')
+    expect(wrapper.get('[data-testid="shooting-plan"]').text()).toContain('拍摄大纲')
+    expect(wrapper.get('[data-testid="shooting-plan"]').text()).toContain('第 2 版')
+    expect(wrapper.get('[data-testid="shooting-plan"]').text()).toContain('待确认')
+    expect(wrapper.get('[data-testid="confirm-video-plan"]').attributes()).toHaveProperty('disabled')
     await wrapper.get('button[data-campaign-id="release-notes"]').trigger('click')
 
     expect(wrapper.text()).toContain('版本更新发布')

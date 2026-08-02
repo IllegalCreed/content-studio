@@ -329,6 +329,7 @@ describe('content studio application service', () => {
         'en': 'Quick sort',
         'zh-CN': '快速排序',
       },
+      videoPlanReviewStatus: 'confirmed',
       video: {
         flowIds: ['quick-sort'],
         format: 'landscape',
@@ -346,6 +347,23 @@ describe('content studio application service', () => {
         }],
       },
     })
+
+    expect(activity.videoPlanReviewStatus).toBe('pending')
+    const confirmedActivity = service.confirmActivityVideoPlan({
+      activityId: activity.activityId,
+      baseVersion: activity.version,
+      projectId: 'video-project',
+    })
+    expect(confirmedActivity).toMatchObject({
+      activityId: activity.activityId,
+      version: activity.version + 1,
+      videoPlanReviewStatus: 'confirmed',
+    })
+    expect(() => service.confirmActivityVideoPlan({
+      activityId: activity.activityId,
+      baseVersion: activity.version,
+      projectId: 'video-project',
+    })).toThrow(/moved past version/i)
 
     expect(activity.video).toEqual({
       flowIds: ['quick-sort'],
@@ -370,6 +388,7 @@ describe('content studio application service', () => {
         format: 'landscape',
         outline: [{ flowId: 'quick-sort' }],
         planVersion: 2,
+        reviewStatus: 'confirmed',
         scenes: [{ id: 'quick-sort', startPath: '/quick-sort' }],
       })
 

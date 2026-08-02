@@ -117,4 +117,25 @@ describe('workbench runtime client', () => {
       expect.objectContaining({ method: 'POST' }),
     )
   })
+
+  it('confirms an activity video plan with optimistic concurrency', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        version: 2,
+        videoPlanReviewStatus: 'confirmed',
+      }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const runtime = createWorkbenchRuntime('/api/v1')
+    const result = await runtime.confirmActivityVideoPlan('project-a', 'activity-a', 1)
+    expect(result).toMatchObject({ videoPlanReviewStatus: 'confirmed' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/project-a/activities/activity-a/video-plan/confirm',
+      expect.objectContaining({
+        body: JSON.stringify({ baseVersion: 1 }),
+        method: 'POST',
+      }),
+    )
+  })
 })
