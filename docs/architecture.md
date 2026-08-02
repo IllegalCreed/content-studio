@@ -50,11 +50,18 @@ Content Studio 拥有：
 
 `marketing-ops` 独立拥有：
 
-- 已注册项目身份和规范渠道配置；
+- 渠道适配器、账号配置和授权隔离范围；
 - 外部 campaign 授权和渠道策略；
 - 发布、回复、删除、运行时健康和配额；
 - 人工辅助发布协调；
 - 外部写入回执和授权监测。
+
+这里要区分两个“项目”概念。Content Studio 的项目是产品业务对象，拥有活动、内容、
+素材和任务；`marketing-ops` 不应拥有这套业务层级。当前 `marketing-ops` 为了隔离
+渠道策略、目标来源和回执，仍使用名为 `Project Profile` 的技术配置，并要求调用携带
+`projectId`。这个 `projectId` 只能视为兼容期的运行范围/审计句柄，不能反向成为
+Content Studio 项目、活动或素材的事实来源。后续公共契约应逐步改成账号引用和发布
+上下文驱动，保留隔离能力但避免把技术配置误解成业务项目。
 
 Content Studio 可以显示 `marketing-ops` 的新鲜状态，但不能从项目配置、AI
 生成内容、发布安排或人工接管推断或扩大授权。
@@ -108,13 +115,19 @@ Content Studio Plugin 是 AI 宿主入口，只包含 Skills、MCP 连接和 MCP
 
 应用服务通过固定、有类型的客户端边界调用它：
 
-1. 每次调用解析一个明确且稳定的 `projectId`；
-2. 写入前获取该项目最新渠道状态；
-3. 只传递项目 renderer 生成的版本化发布包和窄素材引用；
-4. 重试保持活动标识和幂等键；
+1. Content Studio 先从项目渠道绑定解析明确的 `channelAccountRef`；
+2. 写入前获取该账号和渠道的最新健康、策略与授权状态；
+3. 只传递 renderer 生成的版本化发布包、窄素材引用和必要的发布上下文；
+4. 重试保持活动/发布安排标识和幂等键；
 5. 只有匹配且持久化的发布回执才能更新发布投影。
 
-安装、启动、健康检查、项目绑定、AI 生成或人工接管都不产生发布授权。渠道配置
+兼容现有 `marketing-ops` 时，客户端仍可能同时传递 `projectId`，用于技术隔离和
+回执关联；这不表示 `marketing-ops` 负责创建或管理 Content Studio 项目。目标边界
+是：Content Studio 决定“哪个项目的哪个活动要发到哪个渠道、使用哪个账号”，
+`marketing-ops` 只读取账号配置并执行已授权的自动或人工辅助发布，然后返回回执和
+授权范围内的监测结果。它不生成内容、不管理素材，也不创建制作任务。
+
+安装、启动、健康检查、账号绑定、AI 生成或人工接管都不产生发布授权。渠道配置
 只能通过 `marketing-ops` 的本地交互式流程完成，Content Studio、MCP 参数和日志
 都不能接触凭据或浏览器会话。
 
@@ -245,9 +258,11 @@ OpenTelemetry。模型与渠道凭据继续由外部部署/授权系统管理，
 状态来自新鲜的 `marketing-ops` 快照或回执。
 
 项目可以绑定多个不同渠道，但同一项目同一渠道只能有一个活动可用账号。账号身份由
-`marketing-ops` 授权边界管理，Content Studio 只保存不透明的 `channelAccountRef`、脱敏别名和必要的状态投影，不保存密码、token、
-cookie、浏览器 Profile 或支付信息。更换账号应生成新的绑定版本；历史发布回执仍保留
-当时使用的账号引用，不能被后来的项目配置改写。
+`marketing-ops` 的全局账号目录和授权边界管理；Content Studio 只保存不透明的
+`channelAccountRef`、脱敏别名和必要的状态投影，不保存密码、token、cookie、浏览器
+Profile 或支付信息。一个渠道可以在 `marketing-ops` 中配置多个账号，项目绑定其中
+一个，活动只选择渠道。更换账号应生成新的绑定版本；历史发布回执仍保留当时使用的
+账号引用，不能被后来的项目配置改写。
 
 现有 19 渠道清单及 `automatic-candidate`、`owner-assisted`、
 `content-only` 分类仍是 Content Studio 的静态能力元数据，不代表实际授权。

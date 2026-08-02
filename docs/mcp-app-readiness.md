@@ -76,8 +76,10 @@ OpenAI 当前文档已经提供 Plugin 公共提交、审核、批准和发布�
 源码或原始素材，也不执行 Playwright、FFmpeg 或渠道登录。
 
 本地 runtime 默认包含固定兼容版本的 `marketing-ops`。用户不安装第二个
-`marketing-ops` Plugin；Content Studio 通过独立、有类型、项目范围的运行时边界
-调用它。随附安装、健康检查和渠道就绪都不能代替当前活动对应的外部写入授权。
+`marketing-ops` Plugin；Content Studio 通过独立、有类型的账号引用与发布上下文边界
+调用它。兼容期可以附带 Content Studio `projectId` 作为技术隔离句柄，但这不把
+Content Studio 的项目、活动和素材交给 `marketing-ops` 管理。随附安装、健康检查和
+渠道就绪都不能代替当前活动对应的外部写入授权。
 
 完整安装器、安全与部署形态见
 [开源、本地优先与安装分发](local-first-distribution.md)。

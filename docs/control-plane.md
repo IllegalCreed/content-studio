@@ -38,14 +38,16 @@ Content Studio 默认以开源本地运行时保存项目、活动、素材、�
 普通用户通过统一安装器获得 Content Studio 服务及固定兼容版本的
 `marketing-ops`，不需要安装第二个 Plugin。
 
-`marketing-ops` 仍拥有独立项目档案、渠道配置、策略、授权、外部写入和权威发布
-回执。两者不共享凭据存储；Content Studio 只通过有类型的项目范围客户端读取
-新鲜状态、提交已验证的发布包并接收匹配回执。
+`marketing-ops` 仍拥有独立的渠道运行配置、账号目录、策略、授权、外部写入和权威
+发布回执。当前实现把这类技术隔离配置称为 Project Profile，并在兼容期要求
+`projectId`；它不是 Content Studio 的业务项目，也不拥有活动、内容、素材或制作任务。
+两者不共享凭据存储；Content Studio 通过有类型的账号引用/发布包客户端读取新鲜状态、
+提交已验证的发布包并接收匹配回执。
 
 依赖安装与能力状态分开表达：
 
 ```text
-not-installed → installed → healthy → project-configured
+not-installed → installed → healthy → channel-runtime-configured
                                       → channel-ready
 ```
 

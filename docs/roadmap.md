@@ -377,7 +377,7 @@ V0.4 的完成标准是：一个视频渠道内容可以从脚本和录制片段
 
 ## V0.5 — marketing-ops 发布协作与监测
 
-本阶段开始把 `marketing-ops` 当成 Content Studio 总路线中的独立配套子项目：先
+本阶段开始把 `marketing-ops` 当成 Content Studio 总路线中的独立配套运行时：先
 接入真实状态和有类型客户端，再扩展账号、发布回执和监测，不把渠道写入逻辑复制到
 core 或 Vue。详细的 M0—M6 子路线、当前“项目每渠道唯一账号绑定尚未接入”的事实和验收
 标准见 [marketing-ops 扩展路线](marketing-ops-roadmap.md)。
@@ -385,10 +385,12 @@ core 或 Vue。详细的 M0—M6 子路线、当前“项目每渠道唯一账�
 ### 先接入状态，再接入写入
 
 - [ ] 定义 `marketing-ops` 版本兼容矩阵和有类型客户端。
-- [ ] 明确当前公共契约为项目范围的单渠道唯一身份；外部授权系统可以管理多个账号，但
-      同一项目同一渠道只绑定一个活动可用账号。活动只传渠道，发布流程解析并记录
-      `channelAccountRef`；在账号级状态和回执落地前，UI 不把演示数据当成可执行发布能力。
-- [ ] `content-studio doctor` 检查其安装、版本、健康和项目档案状态。
+- [ ] 明确 Content Studio 项目范围的单渠道唯一账号绑定；`marketing-ops` 维护全局多账号
+      目录，活动只传渠道，Content Studio 发布流程解析并记录 `channelAccountRef`。
+      兼容期的 `projectId` 只作为 `marketing-ops` 技术隔离句柄；在账号级状态和回执落地
+      前，UI 不把演示数据当成可执行发布能力。
+- [ ] `content-studio doctor` 检查其安装、版本、健康和渠道运行配置状态，不把
+      `marketing-ops` 的技术 Profile 展示成 Content Studio 业务项目。
 - [ ] 未配置渠道时保持内容制作可用，把发布显示为未配置或被阻塞。
 - [ ] 读取项目最新渠道状态和策略，不使用本地 UI 状态推断授权。
 - [ ] 把文章、视频和资源变体编译为项目范围发布包。
