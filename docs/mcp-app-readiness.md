@@ -164,9 +164,12 @@ Studio 只接收结构化的文章/视频版本，做项目范围、活动渠道
 `start_production_task` 目前只推进本地制作任务的 `queued → generating`，作为 Worker
 消费任务的明确入口。核心层随后提供了 `runProductionTask` 执行器：它只接受匹配的项目
 origin、窄范围输出目录和受控录制器依赖，并根据真实录制回执推进 `recording → composing`
-或结束当前尝试。它通过应用服务调用，实际 Worker 仍需把它绑定到
-`recordWithPlaywright`、项目预览适配器和后续 FFmpeg 组合步骤。外部渠道操作仍保持在
-独立的 `marketing-ops` 信任边界内。
+或结束当前尝试。它通过应用服务调用，实际 Worker 仍需接入项目预览适配器和后续 FFmpeg
+组合步骤。外部渠道操作仍保持在独立的 `marketing-ops` 信任边界内。
+
+核心层现在提供 `runProductionTaskWithPlaywright` 这个明确绑定：调用方给出项目预览
+origin、编译好的 `VideoPlan` 和窄输出目录后，才会调用内置录制器。它不读取凭据、不扫描
+项目目录，也不接受任意脚本或选择器；Worker 调度和项目预览适配器仍由本地 runtime 负责。
 
 本地 HTTP 工作台复用同一个控制面，排队中的制作任务可以调用项目范围的 `start` 路由
 推进到 `generating`；这一步不会启动浏览器，也不会伪造录制回执。任务取消、重试和事件

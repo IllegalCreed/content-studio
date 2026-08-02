@@ -13,6 +13,7 @@ import {
   MAX_RECORDING_ATTEMPTS,
 } from '../constants'
 import { validateOutputDirectory } from '../output/write'
+import { recordWithPlaywright } from '../recording/playwright'
 import {
   TaskNotFoundError,
   TaskStateError,
@@ -114,6 +115,25 @@ export async function runProductionTask(
     receipt: result.receipt,
     task: finalTask,
   }
+}
+
+/**
+ * Runs a production task with the built-in semantic Playwright recorder.
+ *
+ * The caller still has to provide an explicit preview URL and compiled plan;
+ * this helper does not discover projects, launch arbitrary code, or infer
+ * credentials. A project-specific preview adapter can keep using
+ * `recordProjectWithPlaywright` to obtain that URL before calling this helper.
+ */
+export function runProductionTaskWithPlaywright(
+  store: ExecutionTaskStore,
+  input: ProductionTaskInput,
+  options: ProductionTaskDependencies['options'] = {},
+): Promise<ProductionTaskResult> {
+  return runProductionTask(store, input, {
+    options,
+    record: recordWithPlaywright,
+  })
 }
 
 function validateProjectOrigin(baseUrlInput: string, projectOriginInput: string): string {

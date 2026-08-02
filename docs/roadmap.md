@@ -218,8 +218,13 @@ MCP 不启动浏览器、不执行渠道写入，不接收凭据、任意路径�
 同日制作执行器切片已验证：`runProductionTask` 会先检查任务类型、任务状态、项目 origin、
 输出目录和重试次数，再把任务推进到 `recording`，调用受控录制器，并根据真实录制回执推进到
 `composing`、`cancelled` 或 `failed`。录制器通过依赖注入传入，因此测试不需要启动浏览器；
-应用服务现在是这条执行器的唯一控制面入口；实际 Worker 仍需在后续切片中把它绑定到
-`recordWithPlaywright` 和项目预览适配器。
+应用服务现在是这条执行器的唯一控制面入口；实际 Worker 的调度、项目预览适配器和产物
+落库仍需在后续切片中接入。
+
+内置绑定已补齐：`runProductionTaskWithPlaywright` 会把同一条任务执行器接到已有的
+语义 Playwright 录制器。调用者仍必须明确提供项目预览 origin、已编译 `VideoPlan` 和
+窄输出目录；它不会自动发现项目、读取凭据或执行任意项目代码。Worker 调度、预览适配器
+和回执写入活动产物仍待接入。
 
 本地工作台也已接入同一个应用服务入口：排队中的制作任务显示“开始制作”操作，调用
 `POST /api/v1/projects/:projectId/tasks/:taskId/start` 后只推进到 `generating`，并刷新

@@ -4,9 +4,14 @@ import type {
   RecordingJobResult,
   VideoPlan,
 } from '../types'
-import { describe, expect, it } from 'vitest'
-import { runProductionTask } from './production'
+import { describe, expect, it, vi } from 'vitest'
+import { recordWithPlaywright } from '../recording/playwright'
+import { runProductionTask, runProductionTaskWithPlaywright } from './production'
 import { InMemoryExecutionTaskStore } from './task'
+
+vi.mock('../recording/playwright', () => ({
+  recordWithPlaywright: vi.fn(),
+}))
 
 const projectId = 'algorithm-visualizer'
 const taskId = 'production-demo'
@@ -171,5 +176,26 @@ describe('production task executor', () => {
       { record },
     )).rejects.toThrow(/maxAttempts/i)
     expect(store.getTask(projectId, taskId)?.status).toBe('generating')
+  })
+
+  it('binds the production executor to the Playwright recorder explicitly', async () => {
+    const store = createStore()
+    vi.mocked(recordWithPlaywright).mockResolvedValueOnce(createReceipt('succeeded'))
+
+    await expect(runProductionTaskWithPlaywright(
+      store,
+      createInput(),
+      { actionTimeoutMs: 2000, headless: true },
+    )).resolves.toMatchObject({ task: { status: 'composing' } })
+
+    expect(recordWithPlaywright).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseUrl: 'https://example.com',
+        jobId: taskId,
+        plan,
+        projectId,
+      }),
+      { actionTimeoutMs: 2000, headless: true },
+    )
   })
 })

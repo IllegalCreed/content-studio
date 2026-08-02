@@ -15,6 +15,7 @@ export {
   type ProductionTaskInput,
   type ProductionTaskResult,
   runProductionTask,
+  runProductionTaskWithPlaywright,
 } from './jobs/production'
 export {
   SqliteExecutionTaskStore,
