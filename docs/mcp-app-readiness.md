@@ -161,6 +161,9 @@ Content Studio 保留更细的内部流水线状态，同时通过适配器映�
 Studio 只接收结构化的文章/视频版本，做项目范围、活动渠道、语言、重复版本和敏感字段
 校验，然后保存到本地应用服务。这样不会把某个模型供应商或 API 密钥写进 core。
 
+`start_production_task` 目前只推进本地制作任务的 `queued → generating`，作为 Worker
+消费任务的明确入口；浏览器录制、FFmpeg 和外部渠道操作仍由后续受控执行器负责。
+
 MCP Tasks 没有 `tasks/list`。全局和项目任务面板必须继续使用经过业务授权的领域
 查询，例如：
 

@@ -361,6 +361,17 @@ function toolDefinitions(): Array<Record<string, unknown>> {
       annotations: {
         destructiveHint: false,
         openWorldHint: false,
+        readOnlyHint: false,
+      },
+      description: '启动项目制作任务的生成阶段；不会启动浏览器，也不会声称录制已完成。',
+      inputSchema: taskSchema(),
+      name: 'start_production_task',
+      title: '启动制作任务',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
         readOnlyHint: true,
       },
       description: '读取项目中一条任务及其追加式事件。',
@@ -643,6 +654,8 @@ function executeTool(
       const value = scopedRecord(input, options.projectId, ['projectId'])
       return options.service.getProjectView(value.projectId).tasks
     }
+    case 'start_production_task':
+      return startMcpProductionTask(input, options)
     case 'get_task':
       return getTask(input, options)
     case 'cancel_task':
@@ -668,6 +681,16 @@ function getTask(
     events: options.service.listTaskEvents(value.projectId, taskId),
     task,
   }
+}
+
+function startMcpProductionTask(
+  input: unknown,
+  options: ContentStudioMcpServerOptions,
+): Record<string, unknown> {
+  const handle = parseTaskHandle(input, options, false)
+  const task = options.service.startProductionTask(handle.projectId, handle.taskId)
+  const events = options.service.listTaskEvents(handle.projectId, handle.taskId)
+  return toMcpTask(task, events)
 }
 
 function changeTask(

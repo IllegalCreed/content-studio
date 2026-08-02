@@ -568,6 +568,14 @@ export class ContentStudioApplicationService {
     return this.taskStore.retryTask(projectId, taskId)
   }
 
+  startProductionTask(projectId: string, taskId: string): ExecutionTask {
+    this.requireProject(projectId)
+    const task = this.taskStore.getTask(projectId, taskId)
+    if (task !== undefined && task.kind !== 'production')
+      throw new Error('Only production tasks can be started by this operation')
+    return this.taskStore.transitionTask(projectId, taskId, 'generating')
+  }
+
   listTaskEvents(projectId: string, taskId: string): ExecutionTaskEvent[] {
     this.requireProject(projectId)
     return this.taskStore.listEvents(projectId, taskId)

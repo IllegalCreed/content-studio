@@ -629,6 +629,27 @@ describe('content Studio local MCP server', () => {
         },
       },
     })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 40,
+      method: 'tools/call',
+      params: {
+        name: 'start_production_task',
+        arguments: {
+          projectId,
+          taskId: 'production-content-pack-demo',
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          internalStatus: 'generating',
+          status: 'working',
+        },
+      },
+    })
   })
 
   it('maps owner input, failure, and completion states without allowing MCP to invent them', async () => {

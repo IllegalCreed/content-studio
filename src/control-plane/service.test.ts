@@ -210,6 +210,10 @@ describe('content studio application service', () => {
     const activity = createActivity(service)
     const taskId = `production-${activity.activityId}`
 
+    expect(service.startProductionTask('project-a', taskId)).toMatchObject({
+      attempt: 1,
+      status: 'generating',
+    })
     expect(service.cancelTask('project-a', taskId)).toMatchObject({
       attempt: 1,
       status: 'cancelled',
@@ -219,7 +223,7 @@ describe('content studio application service', () => {
       status: 'queued',
     })
     expect(service.listTaskEvents('project-a', taskId).map(event => event.kind))
-      .toEqual(['task-created', 'attempt-cancelled', 'attempt-retried'])
+      .toEqual(['task-created', 'status-changed', 'attempt-cancelled', 'attempt-retried'])
   })
 
   it('saves an activity content pack after preflighting all channel versions', () => {
