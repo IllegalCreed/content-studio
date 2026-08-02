@@ -92,6 +92,9 @@ export interface ProjectManifest {
   tagline: LocalizedText
   facts: ProjectFact[]
   captureFlows: CaptureFlow[]
+  sourceAccess?: ProjectAccessMode
+  captureMode?: ProjectCaptureMode
+  repeatability?: ProjectRepeatability
 }
 
 export interface CampaignChannel {

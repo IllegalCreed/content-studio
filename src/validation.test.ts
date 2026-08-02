@@ -78,6 +78,40 @@ describe('manifest validation', () => {
     expect(validateCampaign(campaign, project)).toEqual(campaign)
   })
 
+  it('accepts explicit source-owned and web-assisted integration modes', () => {
+    const sourceOwned = validateProjectManifest({
+      ...project,
+      sourceAccess: 'source-owned',
+      captureMode: 'deterministic',
+      repeatability: 'high',
+    })
+    const webAssisted = validateProjectManifest({
+      ...project,
+      sourceAccess: 'web-assisted',
+      captureMode: 'assisted',
+      repeatability: 'low',
+    })
+
+    expect(sourceOwned).toMatchObject({
+      sourceAccess: 'source-owned',
+      captureMode: 'deterministic',
+      repeatability: 'high',
+    })
+    expect(webAssisted).toMatchObject({
+      sourceAccess: 'web-assisted',
+      captureMode: 'assisted',
+      repeatability: 'low',
+    })
+  })
+
+  it('rejects a web-assisted project that claims deterministic capture', () => {
+    expect(() => validateProjectManifest({
+      ...project,
+      sourceAccess: 'web-assisted',
+      captureMode: 'deterministic',
+    })).toThrow(/web-assisted.*deterministic/i)
+  })
+
   it('fails closed for non-HTTPS public URLs and unknown capture flows', () => {
     expect(() =>
       validateProjectManifest({

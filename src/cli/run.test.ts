@@ -354,4 +354,66 @@ describe('content-studio CLI', () => {
       })
     }
   })
+
+  it('fails closed instead of sending web-assisted projects to Playwright', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
+    const projectPath = join(temporaryDirectory, 'project.json')
+    const campaignPath = join(temporaryDirectory, 'campaign.json')
+    const recordingInputs: unknown[] = []
+
+    try {
+      await writeFile(projectPath, JSON.stringify({
+        ...project,
+        captureMode: 'assisted',
+        sourceAccess: 'web-assisted',
+        captureFlows: [{
+          id: 'demo',
+          startPath: '/demo',
+          steps: [{ kind: 'capture', label: 'demo' }],
+          title: {
+            'en': 'Demo',
+            'zh-CN': '演示',
+          },
+        }],
+      }), 'utf8')
+      await writeFile(campaignPath, JSON.stringify({
+        ...campaign,
+        video: {
+          flowIds: ['demo'],
+          format: 'landscape',
+        },
+      }), 'utf8')
+
+      await expect(runCli(
+        [
+          'record',
+          '--project',
+          projectPath,
+          '--campaign',
+          campaignPath,
+          '--base-url',
+          'https://algo.illegalscreed.cn',
+          '--out',
+          join(temporaryDirectory, 'recording'),
+        ],
+        {
+          cwd: temporaryDirectory,
+          write: () => undefined,
+        },
+        {
+          record: async (input) => {
+            recordingInputs.push(input)
+            throw new Error('recorder must not run')
+          },
+        },
+      )).rejects.toThrow(/source-owned deterministic/i)
+      expect(recordingInputs).toHaveLength(0)
+    }
+    finally {
+      await rm(temporaryDirectory, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
 })

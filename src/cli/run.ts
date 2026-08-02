@@ -17,6 +17,7 @@ import { generateStudioBundle } from '../bundle/generate'
 import { CHANNEL_BLUEPRINTS } from '../constants'
 import { createContentStudioMcpServer, serveMcpStdio } from '../mcp/server'
 import { writeStudioBundle } from '../output/write'
+import { createProjectRecord } from '../project/record'
 import { recordWithPlaywright } from '../recording/playwright'
 import { createContentStudioApplication, createContentStudioServer } from '../runtime/server'
 import { validateCampaign, validateProjectManifest } from '../validation'
@@ -125,6 +126,8 @@ export async function runCli(
   if (command === 'record') {
     if (campaign.video === undefined)
       throw new Error('Campaign does not define a video plan')
+    if (project.sourceAccess === 'web-assisted' || project.captureMode === 'assisted')
+      throw new Error('content-studio record only supports source-owned deterministic projects')
 
     const baseUrl = requireOption(options, 'base-url')
     const attempts = parseAttempts(options.get('attempts'))
@@ -318,14 +321,7 @@ function createApplicationOptions(
     snapshotId: `${project.projectId}-snapshot-1`,
     version: 1,
   }
-  const projectRecord: ProjectRecord = {
-    captureMode: 'deterministic',
-    currentSnapshotId: snapshot.snapshotId,
-    name: project.name,
-    projectId: project.projectId,
-    repeatability: 'high',
-    sourceAccess: 'source-owned',
-  }
+  const projectRecord: ProjectRecord = createProjectRecord(project, snapshot.snapshotId)
   const projectChannelBindings: ProjectChannelBinding[] = campaign === undefined
     ? []
     : campaign.channels.map(channel => ({

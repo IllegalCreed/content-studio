@@ -602,7 +602,12 @@ export class ContentStudioApplicationService {
     >,
     dependencies: ProductionTaskDependencies,
   ): Promise<ProductionTaskResult> {
-    this.requireProject(projectId)
+    const project = this.requireProject(projectId)
+    if (project.sourceAccess !== 'source-owned' || project.captureMode !== 'deterministic') {
+      throw new Error(
+        'The built-in recorder only supports source-owned deterministic projects',
+      )
+    }
     const task = this.taskStore.getTask(projectId, taskId)
     if (task === undefined)
       throw new RecordNotFoundError('Task', taskId)

@@ -19,6 +19,11 @@ function registerProject(
   service: ContentStudioApplicationService,
   projectId: string,
   captureFlows: CaptureFlow[] = [],
+  integration: Pick<ProjectRecord, 'captureMode' | 'repeatability' | 'sourceAccess'> = {
+    captureMode: 'deterministic',
+    repeatability: 'high',
+    sourceAccess: 'source-owned',
+  },
 ): { project: ProjectRecord, snapshot: ProjectSnapshot } {
   const snapshot: ProjectSnapshot = {
     manifest: {
@@ -34,18 +39,19 @@ function registerProject(
         'en': projectId,
         'zh-CN': projectId,
       },
+      ...integration,
     },
     projectId,
     snapshotId: `${projectId}-snapshot-1`,
     version: 1,
   }
   const project: ProjectRecord = {
-    captureMode: 'deterministic',
+    captureMode: integration.captureMode,
     currentSnapshotId: snapshot.snapshotId,
     name: projectId,
     projectId,
-    repeatability: 'high',
-    sourceAccess: 'source-owned',
+    repeatability: integration.repeatability,
+    sourceAccess: integration.sourceAccess,
   }
   service.registerProject(project, snapshot)
   return { project, snapshot }
@@ -403,6 +409,54 @@ describe('content studio application service', () => {
         format: 'landscape',
       },
     })).toThrow(/capture flow/i)
+
+    const assistedRepository = new InMemoryContentStudioRepository()
+    const assistedService = new ContentStudioApplicationService(assistedRepository)
+    registerProject(
+      assistedService,
+      'assisted-project',
+      [flow],
+      {
+        captureMode: 'assisted',
+        repeatability: 'low',
+        sourceAccess: 'web-assisted',
+      },
+    )
+    enableYouTube(assistedService, 'assisted-project')
+    const assistedActivity = assistedService.createActivity({
+      activityId: 'assisted-activity',
+      campaignId: 'assisted-campaign',
+      channels: [{ id: 'youtube', locale: 'en' }],
+      goal: 'education',
+      projectId: 'assisted-project',
+      projectSnapshotId: 'assisted-project-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://assisted-project.example.com/quick-sort',
+      topic: {
+        'en': 'Assisted',
+        'zh-CN': '辅助',
+      },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+      },
+    })
+    const assistedTaskId = `production-${assistedActivity.activityId}`
+    assistedService.startProductionTask('assisted-project', assistedTaskId)
+    expect(() => assistedService.runActivityProductionTask(
+      'assisted-project',
+      assistedTaskId,
+      {
+        baseUrl: 'https://assisted-project.example.com',
+        outputDirectory: '/tmp/content-studio-assisted-project',
+        projectOrigin: 'https://assisted-project.example.com',
+      },
+      {
+        record: async () => {
+          throw new Error('recorder must not run')
+        },
+      },
+    )).toThrow(/source-owned deterministic/i)
   })
 
   it('saves an activity content pack after preflighting all channel versions', () => {

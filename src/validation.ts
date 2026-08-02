@@ -5,8 +5,11 @@ import type {
   ChannelId,
   Locale,
   LocalizedText,
+  ProjectAccessMode,
+  ProjectCaptureMode,
   ProjectFact,
   ProjectManifest,
+  ProjectRepeatability,
   SemanticLocator,
 } from './types'
 import { CHANNEL_BLUEPRINTS } from './constants'
@@ -37,6 +40,22 @@ export function validateProjectManifest(input: unknown): ProjectManifest {
     tagline: parseLocalizedText(value.tagline, locales, 'tagline'),
     facts: parseFacts(value.facts, locales),
     captureFlows: parseCaptureFlows(value.captureFlows, locales),
+    ...(value.sourceAccess === undefined
+      ? {}
+      : { sourceAccess: parseProjectSourceAccess(value.sourceAccess) }),
+    ...(value.captureMode === undefined
+      ? {}
+      : { captureMode: parseProjectCaptureMode(value.captureMode) }),
+    ...(value.repeatability === undefined
+      ? {}
+      : { repeatability: parseProjectRepeatability(value.repeatability) }),
+  }
+
+  if (
+    manifest.sourceAccess === 'web-assisted'
+    && manifest.captureMode === 'deterministic'
+  ) {
+    throw new Error('web-assisted projects cannot use deterministic captureMode')
   }
 
   return manifest
@@ -376,6 +395,24 @@ function parseCampaignVideo(
     flowIds,
     format: format as NonNullable<CampaignSpec['video']>['format'],
   }
+}
+
+function parseProjectSourceAccess(input: unknown): ProjectAccessMode {
+  if (input !== 'source-owned' && input !== 'web-assisted')
+    throw new Error(`Unsupported project sourceAccess: ${String(input)}`)
+  return input
+}
+
+function parseProjectCaptureMode(input: unknown): ProjectCaptureMode {
+  if (input !== 'deterministic' && input !== 'assisted')
+    throw new Error(`Unsupported project captureMode: ${String(input)}`)
+  return input
+}
+
+function parseProjectRepeatability(input: unknown): ProjectRepeatability {
+  if (input !== 'high' && input !== 'conditional' && input !== 'low')
+    throw new Error(`Unsupported project repeatability: ${String(input)}`)
+  return input
 }
 
 function assertUnique(values: string[], name: string): void {

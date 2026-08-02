@@ -41,6 +41,7 @@ export {
   serveMcpStdio,
 } from './mcp/server'
 export { writeStudioBundle } from './output/write'
+export { createProjectRecord } from './project/record'
 export {
   createRecorderArtifact,
   prepareAttemptDirectory,

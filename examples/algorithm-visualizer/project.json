@@ -4,6 +4,9 @@
   "name": "Algorithm Visualizer",
   "canonicalUrl": "https://algo.illegalscreed.cn/",
   "repositoryUrl": "https://github.com/IllegalCreed/algorithms-visualization",
+  "sourceAccess": "source-owned",
+  "captureMode": "deterministic",
+  "repeatability": "high",
   "locales": [
     "zh-CN",
     "en"

@@ -132,6 +132,11 @@ repeatability: high | conditional | low
 Content Studio 不应在任务运行中悄悄把有源模式降级为无源模式。模式变化需要新的
 项目能力确认、重新生成录制计划，并在回执中记录。
 
+当前项目清单已经可以显式声明 `sourceAccess`、`captureMode` 和
+`repeatability`。历史清单省略这些字段时仍按兼容规则解释为
+`source-owned`、`deterministic`、`high`；声明 `web-assisted` 时不能同时声明
+`deterministic`，避免把无源项目误当成可确定性重放的项目。
+
 ## 对任务和回执的影响
 
 有源模式可以正常使用完整的：
