@@ -174,6 +174,7 @@ export interface PublishingActivity {
   status: ActivityStatus
   targetUrl: string
   topic: LocalizedText
+  video?: CampaignVideo
   version: number
 }
 

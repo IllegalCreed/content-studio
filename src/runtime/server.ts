@@ -12,6 +12,7 @@ import type {
   ProjectChannelBinding,
   ProjectRecord,
   ProjectSnapshot,
+  VideoFormat,
 } from '../types'
 import { Buffer } from 'node:buffer'
 import { createServer } from 'node:http'
@@ -44,6 +45,7 @@ const ACTIVITY_STATUSES = new Set([
   'planned',
 ])
 const CONTENT_FORMATS = new Set<ChannelContentFormat>(['article', 'video'])
+const VIDEO_FORMATS = new Set<VideoFormat>(['landscape', 'portrait', 'square'])
 
 export interface ContentStudioServerOptions {
   databasePath?: string
@@ -333,6 +335,7 @@ export function parseCreateActivityInput(
     status: statusField(value.status),
     targetUrl,
     topic: localizedTextField(value.topic, 'topic'),
+    ...(value.video === undefined ? {} : { video: videoField(value.video) }),
   }
 }
 
@@ -439,6 +442,24 @@ function statusField(input: unknown): CreatePublishingActivityInput['status'] {
   if (!ACTIVITY_STATUSES.has(value))
     throw new RequestError(400, `Unsupported activity status: ${value}`)
   return value as CreatePublishingActivityInput['status']
+}
+
+function videoField(input: unknown): NonNullable<CreatePublishingActivityInput['video']> {
+  const value = asRecord(input, 'video')
+  if (!Array.isArray(value.flowIds) || value.flowIds.length === 0)
+    throw new RequestError(400, 'video.flowIds must be a non-empty array')
+  const flowIds = value.flowIds.map((flowId, index) =>
+    identifierField(flowId, `video.flowIds[${index}]`),
+  )
+  if (new Set(flowIds).size !== flowIds.length)
+    throw new RequestError(400, 'video.flowIds must not contain duplicates')
+  const format = stringField(value.format, 'video.format')
+  if (!VIDEO_FORMATS.has(format as VideoFormat))
+    throw new RequestError(400, `Unsupported video format: ${format}`)
+  return {
+    flowIds,
+    format: format as VideoFormat,
+  }
 }
 
 function httpsUrlField(input: unknown, name: string): string {

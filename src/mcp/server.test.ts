@@ -29,7 +29,15 @@ const manifest: ProjectManifest = {
     'zh-CN': '学习算法。',
   },
   facts: [],
-  captureFlows: [],
+  captureFlows: [{
+    id: 'quick-sort',
+    startPath: '/quick-sort',
+    steps: [{ kind: 'capture', label: 'algorithm' }],
+    title: {
+      'en': 'Quick sort',
+      'zh-CN': '快速排序',
+    },
+  }],
 }
 
 const project: ProjectRecord = {
@@ -241,6 +249,10 @@ describe('content Studio local MCP server', () => {
             'en': 'Explain quick sort',
             'zh-CN': '讲解快速排序',
           },
+          video: {
+            flowIds: ['quick-sort'],
+            format: 'landscape',
+          },
         },
       },
     })
@@ -249,6 +261,10 @@ describe('content Studio local MCP server', () => {
         isError: false,
         structuredContent: {
           activityId: 'quick-sort-launch',
+          video: {
+            flowIds: ['quick-sort'],
+            format: 'landscape',
+          },
         },
       },
     })

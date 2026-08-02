@@ -1,4 +1,5 @@
 import type {
+  CaptureFlow,
   ContentStudioReport,
   MonitoringObservation,
   OwnerHandoff,
@@ -17,11 +18,12 @@ import {
 function registerProject(
   service: ContentStudioApplicationService,
   projectId: string,
+  captureFlows: CaptureFlow[] = [],
 ): { project: ProjectRecord, snapshot: ProjectSnapshot } {
   const snapshot: ProjectSnapshot = {
     manifest: {
       canonicalUrl: `https://${projectId}.example.com/`,
-      captureFlows: [],
+      captureFlows,
       facts: [],
       locales: ['en'],
       name: projectId,
@@ -286,6 +288,76 @@ describe('content studio application service', () => {
     expect(result.task.status).toBe('composing')
     expect(service.listTaskEvents('project-a', taskId).map(event => event.status))
       .toEqual(['queued', 'generating', 'recording', 'composing'])
+  })
+
+  it('keeps an activity video plan tied to the project snapshot', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    const flow: CaptureFlow = {
+      id: 'quick-sort',
+      startPath: '/quick-sort',
+      steps: [{
+        durationMs: 100,
+        kind: 'capture',
+        label: 'algorithm',
+      }],
+      title: {
+        'en': 'Quick sort',
+        'zh-CN': '快速排序',
+      },
+    }
+    registerProject(service, 'video-project', [flow])
+    enableYouTube(service, 'video-project')
+
+    const activity = service.createActivity({
+      activityId: 'video-activity',
+      campaignId: 'video-campaign',
+      channels: [{ id: 'youtube', locale: 'en' }],
+      goal: 'education',
+      projectId: 'video-project',
+      projectSnapshotId: 'video-project-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://video-project.example.com/quick-sort',
+      topic: {
+        'en': 'Quick sort',
+        'zh-CN': '快速排序',
+      },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+      },
+    })
+
+    expect(activity.video).toEqual({
+      flowIds: ['quick-sort'],
+      format: 'landscape',
+    })
+    expect(service.getActivityVideoPlan('video-project', activity.activityId))
+      .toMatchObject({
+        campaignId: 'video-campaign',
+        durationMs: 100,
+        format: 'landscape',
+        scenes: [{ id: 'quick-sort', startPath: '/quick-sort' }],
+      })
+
+    expect(() => service.createActivity({
+      activityId: 'invalid-video-activity',
+      campaignId: 'invalid-video-campaign',
+      channels: [{ id: 'youtube', locale: 'en' }],
+      goal: 'education',
+      projectId: 'video-project',
+      projectSnapshotId: 'video-project-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://video-project.example.com/quick-sort',
+      topic: {
+        'en': 'Invalid',
+        'zh-CN': '无效',
+      },
+      video: {
+        flowIds: ['missing-flow'],
+        format: 'landscape',
+      },
+    })).toThrow(/capture flow/i)
   })
 
   it('saves an activity content pack after preflighting all channel versions', () => {

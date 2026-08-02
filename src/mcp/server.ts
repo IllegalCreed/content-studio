@@ -296,6 +296,18 @@ function toolDefinitions(): Array<Record<string, unknown>> {
             required: ['en', 'zh-CN'],
             type: 'object',
           },
+          video: {
+            properties: {
+              flowIds: {
+                items: { type: 'string' },
+                minItems: 1,
+                type: 'array',
+              },
+              format: { enum: ['landscape', 'portrait', 'square'], type: 'string' },
+            },
+            required: ['flowIds', 'format'],
+            type: 'object',
+          },
         },
         required: [
           'activityId',
@@ -558,6 +570,7 @@ function executeTool(
         'status',
         'targetUrl',
         'topic',
+        'video',
       ], 'activity')
       const activity = parseCreateActivityInput(input, options.projectId)
       return options.service.createActivity(activity)

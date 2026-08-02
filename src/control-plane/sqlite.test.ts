@@ -69,6 +69,10 @@ function records(projectId: string): {
       'en': 'A topic',
       'zh-CN': '主题',
     },
+    video: {
+      flowIds: ['quick-sort'],
+      format: 'landscape',
+    },
     version: 1,
   }
   return { activity, project, snapshot }

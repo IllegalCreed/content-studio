@@ -29,9 +29,11 @@ import type {
   PublicationPlan,
   PublicationReceipt,
   PublishingActivity,
+  VideoPlan,
 } from '../types'
 import { runProductionTask as executeProductionTask } from '../jobs/production'
 import { InMemoryExecutionTaskStore } from '../jobs/task'
+import { compileVideoPlan } from '../video/compile'
 
 export class ProjectScopeError extends Error {
   constructor(projectId: string, recordId: string) {
@@ -549,7 +551,8 @@ export class ContentStudioApplicationService {
     input: CreatePublishingActivityInput,
   ): PublishingActivity {
     this.requireProject(input.projectId)
-    this.requireSnapshot(input.projectId, input.projectSnapshotId)
+    const snapshot = this.requireSnapshot(input.projectId, input.projectSnapshotId)
+    this.assertActivityVideo(input.video, snapshot)
     this.assertEnabledChannels(input.projectId, input.channels)
     const activity = this.repository.saveActivity({
       ...input,
@@ -588,6 +591,24 @@ export class ContentStudioApplicationService {
   ): Promise<ProductionTaskResult> {
     this.requireProject(input.projectId)
     return executeProductionTask(this.taskStore, input, dependencies)
+  }
+
+  getActivityVideoPlan(projectId: string, activityId: string): VideoPlan {
+    const activity = this.requireActivity(projectId, activityId)
+    if (activity.video === undefined)
+      throw new Error(`Activity ${activityId} does not define a video plan`)
+    const snapshot = this.requireSnapshot(projectId, activity.projectSnapshotId)
+    return compileVideoPlan(snapshot.manifest, {
+      channels: activity.channels,
+      campaignId: activity.campaignId,
+      goal: activity.goal,
+      highlights: [],
+      schemaVersion: 1,
+      tags: [],
+      targetUrl: activity.targetUrl,
+      topic: activity.topic,
+      video: activity.video,
+    })
   }
 
   listTaskEvents(projectId: string, taskId: string): ExecutionTaskEvent[] {
@@ -888,6 +909,25 @@ export class ContentStudioApplicationService {
       throw new Error(
         `Activity can only target enabled channel: ${missing.id}`,
       )
+    }
+  }
+
+  private assertActivityVideo(
+    video: PublishingActivity['video'],
+    snapshot: ProjectSnapshot,
+  ): void {
+    if (video === undefined)
+      return
+    if (video.flowIds.length === 0)
+      throw new Error('Activity video requires at least one capture flow')
+    if (new Set(video.flowIds).size !== video.flowIds.length)
+      throw new Error('Activity video flow ids must be unique')
+    if (!['landscape', 'portrait', 'square'].includes(video.format))
+      throw new Error(`Unsupported activity video format: ${video.format}`)
+    const flowIds = new Set(snapshot.manifest.captureFlows.map(flow => flow.id))
+    for (const flowId of video.flowIds) {
+      if (!flowIds.has(flowId))
+        throw new Error(`Activity video references unknown capture flow: ${flowId}`)
     }
   }
 }

@@ -11,6 +11,7 @@ import {
 } from '../control-plane/service'
 import {
   createContentStudioServer,
+  parseCreateActivityInput,
 } from './server'
 
 function createProject(projectId = 'project-a'): {
@@ -67,6 +68,51 @@ async function listen(server: ReturnType<typeof createContentStudioServer>['serv
 }
 
 describe('content studio local application server', () => {
+  it('parses an optional activity video plan without accepting arbitrary fields', () => {
+    expect(parseCreateActivityInput({
+      activityId: 'activity-a',
+      campaignId: 'campaign-a',
+      channels: [{ id: 'github', locale: 'en' }],
+      goal: 'education',
+      projectId: 'project-a',
+      projectSnapshotId: 'project-a-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://project-a.example.com/guide',
+      topic: {
+        'en': 'A guide',
+        'zh-CN': '一篇指南',
+      },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+      },
+    }, 'project-a')).toMatchObject({
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+      },
+    })
+
+    expect(() => parseCreateActivityInput({
+      activityId: 'activity-a',
+      campaignId: 'campaign-a',
+      channels: [{ id: 'github', locale: 'en' }],
+      goal: 'education',
+      projectId: 'project-a',
+      projectSnapshotId: 'project-a-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://project-a.example.com/guide',
+      topic: {
+        'en': 'A guide',
+        'zh-CN': '一篇指南',
+      },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'wide',
+      },
+    }, 'project-a')).toThrow(/video format/i)
+  })
+
   it('serves a project-scoped view and creates an activity through the application service', async () => {
     const { project, snapshot } = createProject()
     const binding: ProjectChannelBinding = {
