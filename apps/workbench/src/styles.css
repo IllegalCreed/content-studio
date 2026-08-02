@@ -1407,7 +1407,7 @@ footer {
   font-weight: 500;
 }
 
-.module-card-heading button {
+.module-card-heading button:not(.primary-button) {
   padding: 0.45rem 0;
   color: var(--acid);
   border: 0;

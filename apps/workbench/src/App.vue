@@ -1284,7 +1284,7 @@ async function refreshProjectView(): Promise<void> {
 
           <div class="project-overview-grid project-overview-grid-lower">
             <article class="module-card">
-              <div class="module-card-heading"><div><p class="eyebrow">项目配置投影</p><h3>渠道和素材</h3></div><button type="button" @click="selectModule('channels')">查看渠道</button></div>
+              <div class="module-card-heading"><div><p class="eyebrow">项目配置投影</p><h3>渠道和素材</h3></div><button type="button" data-testid="project-view-channels" class="primary-button" @click="selectModule('channels')">查看渠道</button></div>
               <div class="project-summary-lines">
                 <div><span>已启用渠道</span><strong>{{ enabledChannels.length }} / {{ snapshot.channelBlueprintCount }}</strong></div>
                 <div><span>账号绑定</span><strong>{{ projectAccounts.length }} 个</strong></div>
@@ -1297,7 +1297,7 @@ async function refreshProjectView(): Promise<void> {
               </div>
             </article>
             <article class="module-card">
-              <div class="module-card-heading"><div><p class="eyebrow">发布活动</p><h3>{{ snapshot.campaigns.length }} 个主题</h3></div><button type="button" @click="selectModule('activities')">进入活动</button></div>
+              <div class="module-card-heading"><div><p class="eyebrow">发布活动</p><h3>{{ snapshot.campaigns.length }} 个主题</h3></div><button type="button" data-testid="project-view-activities" class="primary-button" @click="selectModule('activities')">进入活动</button></div>
               <div class="module-list compact-list">
                 <button v-for="campaign in snapshot.campaigns" :key="campaign.campaignId" type="button" @click="selectCampaign(campaign.campaignId)">
                   <span class="list-status">{{ humanizeActivityStatus(campaign.activityStatus) }} · {{ activityTaskSummary(campaign.campaignId) }}</span>

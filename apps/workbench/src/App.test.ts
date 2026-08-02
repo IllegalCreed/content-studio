@@ -82,6 +82,8 @@ describe('content studio workbench', () => {
     await wrapper.get('button[data-module="project"]').trigger('click')
     expect(wrapper.get('[data-testid="project-channel-config"]').text()).toContain('项目渠道配置')
     expect(wrapper.get('[data-testid="project-channel-config"] [data-testid="save-channel-binding"]').attributes()).toHaveProperty('disabled')
+    expect(wrapper.get('[data-testid="project-view-channels"]').classes()).toContain('primary-button')
+    expect(wrapper.get('[data-testid="project-view-activities"]').classes()).toContain('primary-button')
 
     await wrapper.get('button[data-module="assets"]').trigger('click')
     expect(wrapper.get('h1').text()).toContain('项目素材库')
