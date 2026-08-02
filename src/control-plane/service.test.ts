@@ -239,6 +239,7 @@ describe('content studio application service', () => {
 
     expect(service.getProjectView('project-a')).toEqual({
       activities: [activity],
+      activityArtifacts: [],
       channelContents: [],
       contentGroups: [],
       ownerHandoffs: [],
@@ -663,6 +664,9 @@ describe('content studio application service', () => {
       sha256: 'a'.repeat(64),
     })
 
+    expect(service.getProjectView('project-a').activityArtifacts).toEqual([
+      expect.objectContaining({ artifactId: 'artifact-1' }),
+    ])
     expect(repository.listProjectAssets('project-a')).toEqual([])
     service.promoteActivityArtifact({
       artifactId: 'artifact-1',

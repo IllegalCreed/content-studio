@@ -161,6 +161,7 @@ export interface ProjectSnapshot {
 
 export interface ContentStudioProjectView {
   activities: PublishingActivity[]
+  activityArtifacts: ActivityArtifact[]
   channelContents: ChannelContent[]
   contentGroups: ContentGroup[]
   monitoringObservations: MonitoringObservation[]

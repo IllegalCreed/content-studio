@@ -1,4 +1,5 @@
 import type {
+  ActivityArtifact,
   CampaignJobStatus,
   ChannelId,
   ContentStudioProjectView,
@@ -115,6 +116,92 @@ export function runtimeReports(
   })
 }
 
+export function runtimeActivityArtifacts(
+  projectView: ContentStudioProjectView,
+): ActivityArtifactProjection[] {
+  return activityArtifactProjections(projectView.activityArtifacts)
+}
+
+export function activityArtifactProjections(
+  artifacts: ActivityArtifact[],
+): ActivityArtifactProjection[] {
+  return artifacts.map(artifact => ({
+    activityId: artifact.activityId,
+    artifactId: artifact.artifactId,
+    kind: activityArtifactKindLabel(artifact.kind),
+    name: fileName(artifact.relativePath),
+    size: '未记录',
+    status: '已登记',
+  }))
+}
+
+export function runtimeProjectAssets(
+  projectView: ContentStudioProjectView,
+): AssetProjection[] {
+  const activityById = new Map(
+    projectView.activities.map(activity => [
+      activity.activityId,
+      activity.topic['zh-CN'] ?? activity.topic.en ?? activity.activityId,
+    ]),
+  )
+  const artifactActivityById = new Map(
+    projectView.activityArtifacts.map(artifact => [artifact.artifactId, artifact.activityId]),
+  )
+  const assetReferences = new Map<string, Set<string>>()
+  const addReference = (assetId: string, activityId: string): void => {
+    const references = assetReferences.get(assetId) ?? new Set<string>()
+    const title = activityById.get(activityId)
+    if (title !== undefined)
+      references.add(title)
+    assetReferences.set(assetId, references)
+  }
+  for (const content of projectView.channelContents) {
+    for (const artifactId of content.artifactIds) {
+      const activityId = artifactActivityById.get(artifactId) ?? content.activityId
+      addReference(artifactId, activityId)
+    }
+  }
+  for (const asset of projectView.projectAssets) {
+    if (asset.sourceArtifactId !== undefined) {
+      const sourceReferences = assetReferences.get(asset.sourceArtifactId)
+      if (sourceReferences !== undefined)
+        assetReferences.set(asset.assetId, new Set(sourceReferences))
+    }
+  }
+
+  return projectView.projectAssets.map(asset => ({
+    assetId: asset.assetId,
+    kind: asset.kind,
+    name: fileName(asset.relativePath),
+    referencedBy: [...(assetReferences.get(asset.assetId) ?? new Set<string>())],
+    retention: '长期保留',
+    size: '未记录',
+    source: asset.sourceArtifactId === undefined ? '项目登记' : '活动产物晋升',
+    version: `v${asset.version}`,
+  }))
+}
+
+function activityArtifactKindLabel(
+  kind: ContentStudioProjectView['activityArtifacts'][number]['kind'],
+): ActivityArtifactProjection['kind'] {
+  return kind === 'article-version'
+    ? '文章版本'
+    : kind === 'preview-frame'
+      ? '预览帧'
+      : kind === 'video-clip'
+        ? '视频片段'
+        : kind === 'video'
+          ? '视频'
+          : kind === 'image'
+            ? '图片'
+            : '音频'
+}
+
+function fileName(relativePath: string): string {
+  const segments = relativePath.split(/[\\/]/u)
+  return segments.at(-1) || relativePath
+}
+
 function defaultReportMetrics(format: 'article' | 'video' | undefined): ReportProjection['metrics'] {
   const keys: ObservationMetric[] = format === 'video'
     ? ['views', 'likes', 'comments', 'favorites']
@@ -221,10 +308,10 @@ export interface AssetProjection {
 export interface ActivityArtifactProjection {
   activityId: string
   artifactId: string
-  kind: '文章版本' | '图片' | '预览帧' | '视频片段' | '视频'
+  kind: '文章版本' | '图片' | '音频' | '预览帧' | '视频片段' | '视频'
   name: string
   size: string
-  status: '中间产物' | '最终产物'
+  status: '中间产物' | '最终产物' | '已登记'
 }
 
 export interface TaskProjection {

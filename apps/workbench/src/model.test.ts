@@ -1,6 +1,10 @@
 import type { ContentStudioProjectView } from '@content-studio/core-types'
 import { describe, expect, it } from 'vitest'
-import { runtimeReports } from './model'
+import {
+  runtimeActivityArtifacts,
+  runtimeProjectAssets,
+  runtimeReports,
+} from './model'
 
 function projectView(overrides: Partial<ContentStudioProjectView> = {}): ContentStudioProjectView {
   return {
@@ -13,9 +17,10 @@ function projectView(overrides: Partial<ContentStudioProjectView> = {}): Content
       projectSnapshotId: 'snapshot-a',
       status: 'active',
       targetUrl: 'https://project-a.example.com',
-      topic: { en: 'A guide', 'zh-CN': '一篇指南' },
+      topic: { 'en': 'A guide', 'zh-CN': '一篇指南' },
       version: 1,
     }],
+    activityArtifacts: [],
     channelContents: [{
       activityId: 'activity-a',
       artifactIds: [],
@@ -67,7 +72,7 @@ function projectView(overrides: Partial<ContentStudioProjectView> = {}): Content
         projectId: 'project-a',
         repositoryUrl: 'https://github.com/example/project-a',
         schemaVersion: 1,
-        tagline: { en: 'Project A', 'zh-CN': '项目 A' },
+        tagline: { 'en': 'Project A', 'zh-CN': '项目 A' },
       },
       projectId: 'project-a',
       snapshotId: 'snapshot-a',
@@ -156,5 +161,60 @@ describe('runtime report projection', () => {
       }],
     }))
     expect(failedReport).toMatchObject({ status: '发布失败' })
+  })
+
+  it('projects registered activity artifacts and promoted project assets without inventing file sizes', () => {
+    const view = projectView({
+      activityArtifacts: [{
+        activityId: 'activity-a',
+        artifactId: 'artifact-a',
+        kind: 'video-clip',
+        projectId: 'project-a',
+        relativePath: '.content-studio/activity-a/clip.webm',
+        sha256: 'a'.repeat(64),
+        version: 2,
+      }],
+      channelContents: [{
+        activityId: 'activity-a',
+        artifactIds: ['artifact-a'],
+        body: 'A guide',
+        channel: 'github',
+        contentGroupId: 'group-a',
+        contentId: 'content-a',
+        format: 'article',
+        locale: 'en',
+        projectId: 'project-a',
+        title: 'A guide',
+        version: 1,
+      }],
+      projectAssets: [{
+        assetId: 'asset-a',
+        kind: 'video',
+        projectId: 'project-a',
+        relativePath: 'assets/clip.webm',
+        sha256: 'b'.repeat(64),
+        sourceArtifactId: 'artifact-a',
+        version: 1,
+      }],
+    })
+
+    expect(runtimeActivityArtifacts(view)).toEqual([{
+      activityId: 'activity-a',
+      artifactId: 'artifact-a',
+      kind: '视频片段',
+      name: 'clip.webm',
+      size: '未记录',
+      status: '已登记',
+    }])
+    expect(runtimeProjectAssets(view)).toEqual([{
+      assetId: 'asset-a',
+      kind: 'video',
+      name: 'clip.webm',
+      referencedBy: ['一篇指南'],
+      retention: '长期保留',
+      size: '未记录',
+      source: '活动产物晋升',
+      version: 'v1',
+    }])
   })
 })

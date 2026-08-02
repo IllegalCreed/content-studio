@@ -547,6 +547,12 @@ export class ContentStudioApplicationService {
     const tasks = this.taskStore.listTasks(projectId)
     return {
       activities,
+      activityArtifacts: latestById(
+        activities.flatMap(activity =>
+          this.repository.listActivityArtifacts(projectId, activity.activityId),
+        ),
+        artifact => artifact.artifactId,
+      ),
       channelContents: latestById(
         this.repository.listChannelContents(projectId),
         content => content.contentId,

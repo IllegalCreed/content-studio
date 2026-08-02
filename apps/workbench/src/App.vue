@@ -20,13 +20,18 @@ import type {
   CreateContentGroupInput,
   ExecutionTask,
   ExecutionTaskEvent,
+  ActivityArtifact,
   OwnerHandoff,
+  ProjectAsset,
   PublicationPlan,
   PublishingActivity,
 } from '@content-studio/core-types'
 import {
+  activityArtifactProjections,
   humanizeActivityStatus,
   humanizeStatus,
+  runtimeActivityArtifacts,
+  runtimeProjectAssets,
   runtimeReports,
   snapshot as snapshotSeed,
 } from './model'
@@ -227,9 +232,21 @@ const canRetrySelectedTask = computed(() =>
   && ['cancelled', 'failed'].includes(selectedTask.value.status),
 )
 
+const emptyAsset: AssetProjection = {
+  assetId: 'no-project-asset',
+  kind: 'image',
+  name: '暂无项目素材',
+  referencedBy: [],
+  retention: '可回收',
+  size: '未记录',
+  source: '暂无登记',
+  version: '—',
+}
+
 const selectedAsset = computed(() =>
   snapshot.projectAssets.find(asset => asset.assetId === selectedAssetId.value)
-  ?? snapshot.projectAssets[0]!,
+  ?? snapshot.projectAssets[0]
+  ?? emptyAsset,
 )
 
 const visibleTasks = computed(() =>
@@ -586,6 +603,8 @@ function activityToCampaign(
   channelContents: ChannelContent[] = [],
   captureFlows: CaptureFlow[] = [],
   ownerHandoffs: OwnerHandoff[] = [],
+  activityArtifacts: ActivityArtifact[] = [],
+  projectAssets: ProjectAsset[] = [],
 ): CampaignProjection {
   const topic = activity.topic['zh-CN'] ?? activity.topic.en
   const groups = contentGroups
@@ -610,8 +629,18 @@ function activityToCampaign(
   const videoPlan = activity.video === undefined
     ? null
     : createVideoPlanProjection(activity, captureFlows)
+  const referencedAssetIds = new Set(
+    channelContents
+      .filter(content => content.activityId === activity.activityId)
+      .flatMap(content => content.artifactIds)
+      .filter(artifactId => projectAssets.some(asset =>
+        asset.assetId === artifactId || asset.sourceArtifactId === artifactId,
+      )),
+  )
   return {
-    activityArtifacts: [],
+    activityArtifacts: activityArtifactProjections(
+      activityArtifacts.filter(artifact => artifact.activityId === activity.activityId),
+    ),
     activityStatus: activity.status === 'active'
       ? '进行中'
       : activity.status === 'planned'
@@ -621,7 +650,7 @@ function activityToCampaign(
           : activity.status === 'archived'
             ? '已归档'
             : '草稿',
-    assets: 0,
+    assets: referencedAssetIds.size,
     campaignId: activity.activityId,
     channels: activity.channels.map(channel => channel.id),
     contentGroups: groups,
@@ -642,7 +671,7 @@ function activityToCampaign(
     nextAction: groups.length > 0
       ? '渠道内容已保存，下一步进入制作任务。'
       : '等待 AI 生成内容和拍摄大纲。',
-    referencedAssets: [],
+    referencedAssets: [...referencedAssetIds],
     title: topic,
     topic,
     version: activity.version,
@@ -824,8 +853,20 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
         projectView.channelContents,
         projectView.snapshot.manifest.captureFlows,
         projectView.ownerHandoffs,
+        projectView.activityArtifacts,
+        projectView.projectAssets,
       ),
     )
+    snapshot.projectAssets = runtimeProjectAssets(projectView)
+    snapshot.activityArtifacts = runtimeActivityArtifacts(projectView)
+    snapshot.storage = {
+      ...snapshot.storage,
+      activityArtifacts: snapshot.activityArtifacts.length,
+      cacheSize: '未统计',
+      projectAssets: snapshot.projectAssets.length,
+      projectSize: '未统计',
+      retention: '按项目配置',
+    }
     snapshot.campaigns = [
       ...runtimeCampaigns,
       ...snapshot.campaigns.filter(campaign =>
