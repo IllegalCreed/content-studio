@@ -290,7 +290,7 @@ describe('content studio application service', () => {
       .toEqual(['queued', 'generating', 'recording', 'composing'])
   })
 
-  it('keeps an activity video plan tied to the project snapshot', () => {
+  it('keeps an activity video plan tied to the project snapshot', async () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)
     const flow: CaptureFlow = {
@@ -339,6 +339,50 @@ describe('content studio application service', () => {
         format: 'landscape',
         scenes: [{ id: 'quick-sort', startPath: '/quick-sort' }],
       })
+
+    const taskId = `production-${activity.activityId}`
+    service.startProductionTask('video-project', taskId)
+    const receipt: RecorderAttemptReceipt = {
+      artifactDirectory: '/tmp/content-studio-video-plan-test/attempt-1',
+      artifacts: [],
+      attempt: 1,
+      campaignId: activity.campaignId,
+      completedActions: 1,
+      completedScenes: 1,
+      jobId: taskId,
+      logs: {
+        consoleErrors: 0,
+        consoleWarnings: 0,
+        entries: [],
+        pageErrors: 0,
+      },
+      outcome: 'succeeded',
+      planSha256: 'video-plan-test',
+      projectId: 'video-project',
+      receiptVersion: 1,
+      totalActions: 1,
+      totalScenes: 1,
+    }
+    const recorderInputs: Array<{ plan: unknown }> = []
+    await expect(service.runActivityProductionTask(
+      'video-project',
+      taskId,
+      {
+        baseUrl: 'https://video-project.example.com',
+        outputDirectory: '/tmp/content-studio-video-plan-test',
+        projectOrigin: 'https://video-project.example.com',
+      },
+      {
+        record: async (input) => {
+          recorderInputs.push({ plan: input.plan })
+          return { attempts: [receipt], receipt }
+        },
+      },
+    )).resolves.toMatchObject({ task: { status: 'composing' } })
+    expect(recorderInputs[0]?.plan).toMatchObject({
+      campaignId: 'video-campaign',
+      scenes: [{ id: 'quick-sort' }],
+    })
 
     expect(() => service.createActivity({
       activityId: 'invalid-video-activity',

@@ -593,6 +593,28 @@ export class ContentStudioApplicationService {
     return executeProductionTask(this.taskStore, input, dependencies)
   }
 
+  runActivityProductionTask(
+    projectId: string,
+    taskId: string,
+    input: Pick<
+      ProductionTaskInput,
+      'baseUrl' | 'maxAttempts' | 'outputDirectory' | 'projectOrigin' | 'signal'
+    >,
+    dependencies: ProductionTaskDependencies,
+  ): Promise<ProductionTaskResult> {
+    this.requireProject(projectId)
+    const task = this.taskStore.getTask(projectId, taskId)
+    if (task === undefined)
+      throw new RecordNotFoundError('Task', taskId)
+    const plan = this.getActivityVideoPlan(projectId, task.activityId)
+    return executeProductionTask(this.taskStore, {
+      ...input,
+      plan,
+      projectId,
+      taskId,
+    }, dependencies)
+  }
+
   getActivityVideoPlan(projectId: string, activityId: string): VideoPlan {
     const activity = this.requireActivity(projectId, activityId)
     if (activity.video === undefined)
