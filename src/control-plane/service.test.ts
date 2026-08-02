@@ -291,6 +291,50 @@ describe('content studio application service', () => {
     })).toThrow(/already exists/i)
   })
 
+  it('updates an existing project channel binding without creating a second channel entry', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'project-a')
+    enableYouTube(service, 'project-a')
+
+    const updated = service.updateProjectChannelBinding({
+      accountAlias: '算法可视化备用账号',
+      accountRef: 'account-youtube-backup',
+      channel: 'youtube',
+      delivery: 'owner-assisted',
+      enabled: false,
+      projectId: 'project-a',
+    })
+
+    expect(updated).toMatchObject({
+      accountAlias: '算法可视化备用账号',
+      accountRef: 'account-youtube-backup',
+      enabled: false,
+    })
+    expect(repository.listProjectChannelBindings('project-a')).toEqual([updated])
+    expect(() => service.updateProjectChannelBinding({
+      channel: 'github',
+      delivery: 'automatic-candidate',
+      enabled: true,
+      projectId: 'project-a',
+    })).toThrow(/not found/i)
+  })
+
+  it('saves a new project channel binding when a global channel has not been configured yet', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'project-a')
+
+    const binding = service.setProjectChannelBinding({
+      channel: 'github',
+      delivery: 'automatic-candidate',
+      enabled: true,
+      projectId: 'project-a',
+    })
+
+    expect(repository.listProjectChannelBindings('project-a')).toEqual([binding])
+  })
+
   it('cancels and retries only the project task through the application service', () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)

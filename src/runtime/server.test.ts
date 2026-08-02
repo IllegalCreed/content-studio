@@ -20,6 +20,7 @@ import {
   parsePromoteActivityArtifactInput,
   parseRecordMonitoringObservationInput,
   parseRecordPublicationReceiptInput,
+  parseUpdateProjectChannelBindingInput,
 } from './server'
 
 function createProject(projectId = 'project-a'): {
@@ -175,6 +176,60 @@ describe('content studio local application server', () => {
       'activity-a',
       'group-a',
     )).toThrow(/Duplicate artifactId/i)
+  })
+
+  it('parses a project channel binding update without accepting credentials or unknown fields', () => {
+    expect(parseUpdateProjectChannelBindingInput({
+      accountAlias: '项目视频账号',
+      accountRef: 'account-youtube-main',
+      delivery: 'owner-assisted',
+      enabled: true,
+    }, 'project-a', 'youtube')).toEqual({
+      accountAlias: '项目视频账号',
+      accountRef: 'account-youtube-main',
+      channel: 'youtube',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId: 'project-a',
+    })
+    expect(parseUpdateProjectChannelBindingInput({
+      delivery: 'content-only',
+      enabled: false,
+    }, 'project-a', 'youtube')).toEqual({
+      channel: 'youtube',
+      delivery: 'content-only',
+      enabled: false,
+      projectId: 'project-a',
+    })
+    expect(() => parseUpdateProjectChannelBindingInput({
+      accountRef: 'not an opaque ref',
+      delivery: 'owner-assisted',
+      enabled: true,
+    }, 'project-a', 'youtube')).toThrow(/opaque/i)
+    expect(() => parseUpdateProjectChannelBindingInput({
+      accountAlias: '\u0001',
+      delivery: 'owner-assisted',
+      enabled: true,
+    }, 'project-a', 'youtube')).toThrow(/control characters/i)
+    expect(() => parseUpdateProjectChannelBindingInput({
+      delivery: 'unsupported',
+      enabled: true,
+    }, 'project-a', 'youtube')).toThrow(/delivery/i)
+    expect(() => parseUpdateProjectChannelBindingInput({
+      delivery: 'owner-assisted',
+      enabled: 'true',
+    }, 'project-a', 'youtube')).toThrow(/boolean/i)
+    expect(() => parseUpdateProjectChannelBindingInput({
+      accountRef: 'account-youtube-main',
+      delivery: 'owner-assisted',
+      enabled: true,
+      password: 'not-allowed',
+    }, 'project-a', 'youtube')).toThrow(/sensitive/i)
+    expect(() => parseUpdateProjectChannelBindingInput({
+      delivery: 'owner-assisted',
+      enabled: true,
+      unknown: true,
+    }, 'project-a', 'youtube')).toThrow(/unsupported/i)
   })
 
   it('parses a pending owner handoff without accepting unsafe or completed state', () => {
@@ -748,6 +803,67 @@ describe('content studio local application server', () => {
     }
     finally {
       await running.close()
+    }
+  })
+
+  it('updates one project channel binding and returns the persisted projection', async () => {
+    const { project, snapshot } = createProject()
+    const binding: ProjectChannelBinding = {
+      accountAlias: '主账号',
+      accountRef: 'account-github-main',
+      channel: 'github',
+      delivery: 'automatic-candidate',
+      enabled: true,
+      projectId: project.projectId,
+    }
+    const handle = createContentStudioServer({
+      project,
+      projectChannelBindings: [binding],
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const updateResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/channel-bindings/github`,
+        {
+          body: JSON.stringify({
+            accountAlias: '文档账号',
+            accountRef: 'account-github-docs',
+            delivery: 'owner-assisted',
+            enabled: false,
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(updateResponse.status).toBe(200)
+      expect(await updateResponse.json()).toEqual({
+        accountAlias: '文档账号',
+        accountRef: 'account-github-docs',
+        channel: 'github',
+        delivery: 'owner-assisted',
+        enabled: false,
+        projectId: 'project-a',
+      })
+
+      const projectResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a`,
+      )
+      expect(projectResponse.status).toBe(200)
+      expect((await projectResponse.json()).projectChannelBindings).toEqual([{
+        accountAlias: '文档账号',
+        accountRef: 'account-github-docs',
+        channel: 'github',
+        delivery: 'owner-assisted',
+        enabled: false,
+        projectId: 'project-a',
+      }])
+    }
+    finally {
+      await running.close()
+      handle.close()
     }
   })
 

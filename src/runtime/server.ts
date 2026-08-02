@@ -6,10 +6,12 @@ import type { ProductionTaskDependencies } from '../jobs/production'
 import type {
   ActivityArtifact,
   ChannelContentFormat,
+  ChannelId,
   CreateActivityArtifactInput,
   CreateChannelContentInput,
   CreateContentGroupInput,
   CreatePublishingActivityInput,
+  DeliveryMode,
   ExecutionTaskStore,
   Locale,
   MonitoringObservation,
@@ -59,6 +61,11 @@ const ACTIVITY_STATUSES = new Set([
   'planned',
 ])
 const CONTENT_FORMATS = new Set<ChannelContentFormat>(['article', 'video'])
+const DELIVERY_MODES = new Set<DeliveryMode>([
+  'automatic-candidate',
+  'content-only',
+  'owner-assisted',
+])
 const VIDEO_FORMATS = new Set<VideoFormat>(['landscape', 'portrait', 'square'])
 const OBSERVATION_METRICS = new Set<ObservationMetric>([
   'clicks',
@@ -211,6 +218,31 @@ async function handleRequest(
     ) {
       const projectId = decodeSegment(segments[3]!)
       sendJson(response, 200, service.getProjectView(projectId))
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 6
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'channel-bindings'
+    ) {
+      const requestProjectId = identifierField(
+        decodeSegment(segments[3]!),
+        'projectId',
+      )
+      const channel = channelIdField(
+        decodeSegment(segments[5]!),
+        'channel',
+      )
+      const input = parseUpdateProjectChannelBindingInput(
+        await readJsonBody(request),
+        requestProjectId,
+        channel,
+      )
+      sendJson(response, 200, service.setProjectChannelBinding(input))
       return
     }
 
@@ -622,6 +654,35 @@ export function parseCreateActivityInput(
     targetUrl,
     topic: localizedTextField(value.topic, 'topic'),
     ...(value.video === undefined ? {} : { video: videoField(value.video) }),
+  }
+}
+
+export function parseUpdateProjectChannelBindingInput(
+  input: unknown,
+  projectId: string,
+  channel: ChannelId,
+): ProjectChannelBinding {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'project channel binding')
+  const supportedKeys = new Set(['accountAlias', 'accountRef', 'delivery', 'enabled'])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key))
+      throw new RequestError(400, `Unsupported project channel binding field: ${key}`)
+  }
+  const delivery = stringField(value.delivery, 'delivery')
+  if (!DELIVERY_MODES.has(delivery as DeliveryMode))
+    throw new RequestError(400, `Unsupported delivery mode: ${delivery}`)
+  if (typeof value.enabled !== 'boolean')
+    throw new RequestError(400, 'enabled must be a boolean')
+  const accountAlias = optionalTextField(value.accountAlias, 'accountAlias')
+  const accountRef = optionalAccountRefField(value.accountRef)
+  return {
+    ...(accountAlias === undefined ? {} : { accountAlias }),
+    ...(accountRef === undefined ? {} : { accountRef }),
+    channel,
+    delivery: delivery as DeliveryMode,
+    enabled: value.enabled,
+    projectId,
   }
 }
 
@@ -1090,6 +1151,13 @@ function identifierField(input: unknown, name: string): string {
   return value
 }
 
+function channelIdField(input: unknown, name: string): ChannelId {
+  const value = stringField(input, name)
+  if (!(value in CHANNEL_BLUEPRINTS))
+    throw new RequestError(400, `Unsupported channel: ${value}`)
+  return value as ChannelId
+}
+
 function artifactIdsField(input: unknown): string[] {
   if (input === undefined)
     return []
@@ -1146,6 +1214,28 @@ function stringField(input: unknown, name: string): string {
   if (typeof input !== 'string' || input.trim() === '')
     throw new RequestError(400, `${name} must be a non-empty string`)
   return input.trim()
+}
+
+function optionalTextField(input: unknown, name: string): string | undefined {
+  if (input === undefined)
+    return undefined
+  const value = stringField(input, name)
+  if (
+    value.length > 128
+    || [...value].some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)
+  ) {
+    throw new RequestError(400, `${name} is too long or contains control characters`)
+  }
+  return value
+}
+
+function optionalAccountRefField(input: unknown): string | undefined {
+  if (input === undefined)
+    return undefined
+  const value = stringField(input, 'accountRef')
+  if (!/^\w[\w.:-]{0,127}$/u.test(value))
+    throw new RequestError(400, 'accountRef must be an opaque account reference')
+  return value
 }
 
 function positiveIntegerField(input: unknown, name: string): number {

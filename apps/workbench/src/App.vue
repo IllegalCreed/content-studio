@@ -7,6 +7,7 @@ import type {
   ActivityArtifactProjection,
   CampaignProjection,
   ChannelContentProjection,
+  ChannelProjection,
   ContentGroupProjection,
   VideoPlanProjection,
   WorkbenchSnapshot,
@@ -24,6 +25,7 @@ import type {
   ActivityArtifact,
   OwnerHandoff,
   ProjectAsset,
+  ProjectChannelBinding,
   PublicationPlan,
   PublishingActivity,
 } from '@content-studio/core-types'
@@ -149,6 +151,8 @@ const publicationPlanActionError = ref<string | null>(null)
 const publicationPlanActionPending = ref<string | null>(null)
 const assetPromotionError = ref<string | null>(null)
 const assetPromotionPending = ref<string | null>(null)
+const channelBindingSaving = ref(false)
+const channelBindingSaveError = ref<string | null>(null)
 const runtimeTaskIds = ref<Set<string>>(new Set())
 const runtimeActivityIds = ref<Set<string>>(new Set())
 const taskActionError = ref<string | null>(null)
@@ -177,6 +181,26 @@ const contentForm = reactive<{
   locale: 'zh-CN',
   title: '',
 })
+const channelBindingForm = reactive<{
+  accountAlias: string
+  accountRef: string
+  delivery: ProjectChannelBinding['delivery']
+  enabled: boolean
+}>({
+  accountAlias: snapshot.channels[0]?.alias ?? '',
+  accountRef: snapshot.channels[0]?.defaultAccountId ?? '',
+  delivery: 'owner-assisted',
+  enabled: snapshot.channels[0]?.enabled ?? false,
+})
+
+const deliveryOptions: Array<{
+  label: ChannelProjection['delivery']
+  value: ProjectChannelBinding['delivery']
+}> = [
+  { label: '全自动候选', value: 'automatic-candidate' },
+  { label: '人工辅助', value: 'owner-assisted' },
+  { label: '仅生成内容', value: 'content-only' },
+]
 
 const currentModule = computed(() =>
   moduleDefinitions.find(module => module.id === activeModule.value)
@@ -452,10 +476,55 @@ async function changeSelectedTask(action: 'cancel' | 'record' | 'retry' | 'start
 function selectChannel(channelId: ChannelId): void {
   selectedChannelId.value = channelId
   selectedChannelAccountId.value = snapshot.channels.find(channel => channel.channel === channelId)?.defaultAccountId ?? null
+  syncChannelBindingForm()
 }
 
 function selectChannelAccount(accountId: string): void {
   selectedChannelAccountId.value = accountId
+}
+
+function syncChannelBindingForm(): void {
+  const channel = selectedChannel.value
+  channelBindingForm.accountAlias = channel.alias ?? ''
+  channelBindingForm.accountRef = channel.defaultAccountId ?? ''
+  channelBindingForm.delivery = channel.delivery === '全自动候选'
+    ? 'automatic-candidate'
+    : channel.delivery === '仅生成内容'
+      ? 'content-only'
+      : 'owner-assisted'
+  channelBindingForm.enabled = channel.enabled
+}
+
+async function saveChannelBinding(): Promise<void> {
+  if (!snapshot.runtimeConnected || channelBindingSaving.value)
+    return
+  channelBindingSaving.value = true
+  channelBindingSaveError.value = null
+  const input: ProjectChannelBinding = {
+    channel: selectedChannel.value.channel,
+    delivery: channelBindingForm.delivery,
+    enabled: channelBindingForm.enabled,
+    projectId: snapshot.project.projectId,
+    ...(channelBindingForm.accountAlias.trim() === ''
+      ? {}
+      : { accountAlias: channelBindingForm.accountAlias.trim() }),
+    ...(channelBindingForm.accountRef.trim() === ''
+      ? {}
+      : { accountRef: channelBindingForm.accountRef.trim() }),
+  }
+  try {
+    await workbenchRuntime.saveProjectChannelBinding(input)
+    await refreshProjectView()
+    syncChannelBindingForm()
+  }
+  catch (error: unknown) {
+    channelBindingSaveError.value = error instanceof Error
+      ? error.message
+      : '项目渠道配置保存失败'
+  }
+  finally {
+    channelBindingSaving.value = false
+  }
 }
 
 function openActivityComposer(): void {
@@ -938,6 +1007,7 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
       ),
     ]
     snapshot.reports = runtimeReports(projectView)
+    syncChannelBindingForm()
 }
 
 async function refreshProjectView(): Promise<void> {
@@ -1672,6 +1742,39 @@ async function refreshProjectView(): Promise<void> {
                 <span>账号状态来源</span><strong>{{ selectedChannelAccount.statusSource === 'marketing-ops' ? 'marketing-ops 只读快照' : '项目配置（尚未查询）' }}</strong>
                 <span>适配器</span><strong>{{ selectedChannelAccount.adapterReady ? '已就绪' : '未就绪' }}</strong>
                 <span>下一步</span><strong>{{ selectedChannelAccount.nextAction ?? '保持状态快照' }}</strong>
+              </div>
+            </div>
+            <div class="channel-binding-form">
+              <div class="channel-account-panel-heading">
+                <div><p class="eyebrow">项目渠道绑定</p><strong>这个项目如何使用该渠道</strong></div>
+                <small>只保存不透明账号引用</small>
+              </div>
+              <label class="channel-binding-toggle">
+                <input v-model="channelBindingForm.enabled" type="checkbox" :disabled="!snapshot.runtimeConnected || channelBindingSaving" />
+                <span>项目启用这个渠道</span>
+              </label>
+              <div class="channel-binding-fields">
+                <label>
+                  <span>账号别名</span>
+                  <input v-model="channelBindingForm.accountAlias" type="text" maxlength="128" placeholder="例如：算法可视化视频账号" :disabled="!snapshot.runtimeConnected || channelBindingSaving" />
+                </label>
+                <label>
+                  <span>账号引用</span>
+                  <input v-model="channelBindingForm.accountRef" type="text" maxlength="128" placeholder="例如：account-youtube-main" :disabled="!snapshot.runtimeConnected || channelBindingSaving" />
+                </label>
+                <label>
+                  <span>交付方式</span>
+                  <select v-model="channelBindingForm.delivery" :disabled="!snapshot.runtimeConnected || channelBindingSaving">
+                    <option v-for="option in deliveryOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                  </select>
+                </label>
+              </div>
+              <p v-if="channelBindingSaveError" class="form-error">{{ channelBindingSaveError }}</p>
+              <div class="form-actions">
+                <small class="form-hint">保存项目配置不会登录渠道、读取凭据或触发发布。</small>
+                <button data-testid="save-channel-binding" type="button" class="primary-button" :disabled="!snapshot.runtimeConnected || channelBindingSaving" @click="saveChannelBinding">
+                  {{ channelBindingSaving ? '保存中…' : '保存项目渠道配置' }}
+                </button>
               </div>
             </div>
             <div class="channel-detail-grid">

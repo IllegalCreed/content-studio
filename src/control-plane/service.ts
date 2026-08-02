@@ -67,6 +67,12 @@ export interface ContentStudioRepository {
   saveProjectChannelBinding: (
     binding: ProjectChannelBinding,
   ) => ProjectChannelBinding
+  updateProjectChannelBinding: (
+    binding: ProjectChannelBinding,
+  ) => ProjectChannelBinding
+  setProjectChannelBinding: (
+    binding: ProjectChannelBinding,
+  ) => ProjectChannelBinding
   saveProjectSnapshot: (snapshot: ProjectSnapshot) => ProjectSnapshot
   saveOwnerHandoff: (handoff: OwnerHandoff) => OwnerHandoff
   savePublicationPlan: (plan: PublicationPlan) => PublicationPlan
@@ -181,6 +187,24 @@ implements ContentStudioRepository {
     const key = `${binding.projectId}:${binding.channel}`
     if (this.projectChannelBindings.has(key))
       throw new RecordConflictError(key, 1)
+    this.projectChannelBindings.set(key, clone(binding))
+    return clone(binding)
+  }
+
+  updateProjectChannelBinding(
+    binding: ProjectChannelBinding,
+  ): ProjectChannelBinding {
+    const key = `${binding.projectId}:${binding.channel}`
+    if (!this.projectChannelBindings.has(key))
+      throw new RecordNotFoundError('ProjectChannelBinding', key)
+    this.projectChannelBindings.set(key, clone(binding))
+    return clone(binding)
+  }
+
+  setProjectChannelBinding(
+    binding: ProjectChannelBinding,
+  ): ProjectChannelBinding {
+    const key = `${binding.projectId}:${binding.channel}`
     this.projectChannelBindings.set(key, clone(binding))
     return clone(binding)
   }
@@ -597,6 +621,29 @@ export class ContentStudioApplicationService {
   ): ProjectChannelBinding {
     this.requireProject(binding.projectId)
     return this.repository.saveProjectChannelBinding(binding)
+  }
+
+  updateProjectChannelBinding(
+    binding: ProjectChannelBinding,
+  ): ProjectChannelBinding {
+    this.requireProject(binding.projectId)
+    const existing = this.repository
+      .listProjectChannelBindings(binding.projectId)
+      .some(candidate => candidate.channel === binding.channel)
+    if (!existing) {
+      throw new RecordNotFoundError(
+        'ProjectChannelBinding',
+        `${binding.projectId}:${binding.channel}`,
+      )
+    }
+    return this.repository.updateProjectChannelBinding(binding)
+  }
+
+  setProjectChannelBinding(
+    binding: ProjectChannelBinding,
+  ): ProjectChannelBinding {
+    this.requireProject(binding.projectId)
+    return this.repository.setProjectChannelBinding(binding)
   }
 
   createActivity(

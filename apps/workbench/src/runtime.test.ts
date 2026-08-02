@@ -31,6 +31,44 @@ describe('workbench runtime client', () => {
     )
   })
 
+  it('saves a project channel binding through the local runtime', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        accountAlias: '项目视频账号',
+        accountRef: 'account-youtube-main',
+        channel: 'youtube',
+        delivery: 'owner-assisted',
+        enabled: true,
+        projectId: 'project-a',
+      }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const runtime = createWorkbenchRuntime('/api/v1')
+    await expect(runtime.saveProjectChannelBinding({
+      accountAlias: '项目视频账号',
+      accountRef: 'account-youtube-main',
+      channel: 'youtube',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId: 'project-a',
+    })).resolves.toMatchObject({ channel: 'youtube', enabled: true })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/project-a/channel-bindings/youtube',
+      expect.objectContaining({
+        body: JSON.stringify({
+          accountAlias: '项目视频账号',
+          accountRef: 'account-youtube-main',
+          channel: 'youtube',
+          delivery: 'owner-assisted',
+          enabled: true,
+          projectId: 'project-a',
+        }),
+        method: 'POST',
+      }),
+    )
+  })
+
   it('turns a non-success response into a readable error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: 'blocked' }), { status: 403 }),

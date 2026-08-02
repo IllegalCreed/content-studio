@@ -10,6 +10,7 @@ import type {
   ExecutionTask,
   ExecutionTaskEvent,
   ProjectAsset,
+  ProjectChannelBinding,
   PromoteActivityArtifactInput,
   PublicationPlan,
   PublishingActivity,
@@ -55,6 +56,7 @@ export interface WorkbenchRuntime {
   retryTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
   startTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
   taskEvents: (projectId: string, taskId: string) => Promise<ExecutionTaskEvent[]>
+  saveProjectChannelBinding: (binding: ProjectChannelBinding) => Promise<ProjectChannelBinding>
 }
 
 export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
@@ -149,6 +151,13 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
     taskEvents: (projectId, taskId) => request<{ events: ExecutionTaskEvent[] }>(
       `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/events`,
     ).then(result => result.events),
+    saveProjectChannelBinding: binding => request<ProjectChannelBinding>(
+      `/projects/${encodeURIComponent(binding.projectId)}/channel-bindings/${encodeURIComponent(binding.channel)}`,
+      {
+        body: JSON.stringify(binding),
+        method: 'POST',
+      },
+    ),
   }
 }
 

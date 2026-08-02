@@ -80,6 +80,50 @@ function records(projectId: string): {
 }
 
 describe('sQLite control-plane repository', () => {
+  it('replaces a project channel binding and persists the new account after reopen', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-sqlite-binding-'))
+    const databasePath = join(temporaryDirectory, 'state.sqlite')
+
+    try {
+      const firstRepository = new SqliteContentStudioRepository(databasePath)
+      const binding: ProjectChannelBinding = {
+        accountAlias: '主账号',
+        accountRef: 'account-youtube-main',
+        channel: 'youtube',
+        delivery: 'owner-assisted',
+        enabled: true,
+        projectId: 'project-a',
+      }
+      firstRepository.saveProjectChannelBinding(binding)
+      const updated = {
+        ...binding,
+        accountAlias: '备用账号',
+        accountRef: 'account-youtube-backup',
+        enabled: false,
+      }
+
+      expect(firstRepository.updateProjectChannelBinding(updated)).toEqual(updated)
+      const newlyConfigured = {
+        channel: 'github' as const,
+        delivery: 'automatic-candidate' as const,
+        enabled: true,
+        projectId: 'project-a',
+      }
+      expect(firstRepository.setProjectChannelBinding(newlyConfigured)).toEqual(newlyConfigured)
+      firstRepository.close()
+
+      const reopenedRepository = new SqliteContentStudioRepository(databasePath)
+      expect(reopenedRepository.listProjectChannelBindings('project-a')).toEqual([
+        newlyConfigured,
+        updated,
+      ])
+      reopenedRepository.close()
+    }
+    finally {
+      await rm(temporaryDirectory, { recursive: true, force: true })
+    }
+  })
+
   it('保留项目、活动和历史版本，重开进程后仍可读取', async () => {
     const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-sqlite-'))
     const databasePath = join(temporaryDirectory, 'state.sqlite')

@@ -142,6 +142,62 @@ export class SqliteContentStudioRepository
     )
   }
 
+  override updateProjectChannelBinding(
+    binding: ProjectChannelBinding,
+  ): ProjectChannelBinding {
+    const saved = super.updateProjectChannelBinding(binding)
+    const recordType = CONTENT_STUDIO_RECORD_TYPES.projectChannelBinding
+    const recordIdValue = recordId(recordType, saved)
+    this.database
+      .prepare(`
+        DELETE FROM content_studio_records
+        WHERE record_type = ? AND record_id = ?
+      `)
+      .run(recordType, recordIdValue)
+    this.database
+      .prepare(`
+        INSERT INTO content_studio_records
+          (record_type, record_id, version, project_id, payload)
+        VALUES (?, ?, ?, ?, ?)
+      `)
+      .run(
+        recordType,
+        recordIdValue,
+        recordVersion(saved),
+        saved.projectId,
+        JSON.stringify(saved),
+      )
+    return saved
+  }
+
+  override setProjectChannelBinding(
+    binding: ProjectChannelBinding,
+  ): ProjectChannelBinding {
+    const saved = super.setProjectChannelBinding(binding)
+    const recordType = CONTENT_STUDIO_RECORD_TYPES.projectChannelBinding
+    const recordIdValue = recordId(recordType, saved)
+    this.database
+      .prepare(`
+        DELETE FROM content_studio_records
+        WHERE record_type = ? AND record_id = ?
+      `)
+      .run(recordType, recordIdValue)
+    this.database
+      .prepare(`
+        INSERT INTO content_studio_records
+          (record_type, record_id, version, project_id, payload)
+        VALUES (?, ?, ?, ?, ?)
+      `)
+      .run(
+        recordType,
+        recordIdValue,
+        recordVersion(saved),
+        saved.projectId,
+        JSON.stringify(saved),
+      )
+    return saved
+  }
+
   override saveProjectSnapshot(snapshot: ProjectSnapshot): ProjectSnapshot {
     return this.persist(
       CONTENT_STUDIO_RECORD_TYPES.projectSnapshot,

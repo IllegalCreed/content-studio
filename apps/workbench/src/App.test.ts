@@ -69,6 +69,8 @@ describe('content studio workbench', () => {
     expect(wrapper.text()).toContain('发布助手状态')
     expect(wrapper.text()).toContain('全局规格')
     expect(wrapper.text()).toContain('项目账号')
+    expect(wrapper.text()).toContain('项目渠道绑定')
+    expect(wrapper.get('[data-testid="save-channel-binding"]').attributes()).toHaveProperty('disabled')
     await wrapper.get('button[data-channel-id="github"]').trigger('click')
     expect(wrapper.text()).toContain('Algorithm Visualizer Docs')
     await wrapper.get('button[data-channel-account-id="github-algorithm-docs"]').trigger('click')

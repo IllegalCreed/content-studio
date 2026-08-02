@@ -2153,6 +2153,56 @@ footer {
   font-size: 0.68rem;
 }
 
+.channel-binding-form {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px dashed #596233;
+  background: rgb(217 255 67 / 3%);
+}
+
+.channel-binding-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.9rem;
+  color: var(--ink);
+  font-size: 0.72rem;
+}
+
+.channel-binding-toggle input {
+  accent-color: var(--acid);
+}
+
+.channel-binding-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.8rem;
+}
+
+.channel-binding-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.channel-binding-fields input,
+.channel-binding-fields select {
+  min-height: 2.25rem;
+  padding: 0.5rem 0.6rem;
+  color: var(--ink);
+  border: 1px solid var(--stroke);
+  background: #10130f;
+  font: inherit;
+}
+
+.channel-binding-form .form-actions {
+  align-items: center;
+  justify-content: space-between;
+}
+
 .channel-account-detail {
   display: grid;
   grid-template-columns: 0.8fr 1.2fr 0.8fr 1.2fr 0.8fr 2fr;
@@ -2533,7 +2583,8 @@ footer {
 
   .channel-overview-grid,
   .channel-detail-grid,
-  .channel-account-detail {
+  .channel-account-detail,
+  .channel-binding-fields {
     grid-template-columns: repeat(2, 1fr);
   }
 
@@ -2565,6 +2616,7 @@ footer {
   .channel-overview-grid,
   .channel-detail-grid,
   .channel-account-detail,
+  .channel-binding-fields,
   .report-metrics {
     grid-template-columns: 1fr;
   }
