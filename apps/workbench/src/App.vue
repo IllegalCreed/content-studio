@@ -143,10 +143,10 @@ const taskActionPending = ref<'cancel' | 'record' | 'retry' | 'start' | null>(nu
 const videoPlanActionError = ref<string | null>(null)
 const videoPlanActionPending = ref(false)
 const activityForm = reactive<{
-  channel: ChannelId
+  channels: ChannelId[]
   topic: string
 }>({
-  channel: 'github',
+  channels: ['github'],
   topic: '',
 })
 const contentForm = reactive<{
@@ -268,9 +268,16 @@ const selectedCampaignContentCounts = computed(() => {
   const contents = selectedCampaign.value.contentGroups.flatMap(group => group.contents)
   return {
     article: contents.filter(content => content.format === '文章').length,
+    artifacts: contents.reduce((total, content) => total + (content.artifactIds?.length ?? 0), 0),
     video: contents.filter(content => content.format === '视频').length,
   }
 })
+
+const selectedCampaignTaskCounts = computed(() => ({
+  production: selectedCampaignTasks.value.filter(task => task.kind === '制作').length,
+  publication: selectedCampaignTasks.value.filter(task => task.kind === '发布').length,
+  monitoring: selectedCampaignTasks.value.filter(task => task.kind === '监测').length,
+}))
 
 const ownerHandoffs = computed(() =>
   snapshot.campaigns.flatMap(campaign =>
@@ -298,6 +305,18 @@ const taskCounts = computed(() => ({
 const pendingTaskCount = computed(() =>
   snapshot.tasks.filter(task => task.status !== 'published').length,
 )
+
+function activityTaskSummary(activityId: string): string {
+  const tasks = snapshot.tasks.filter(task => task.activityId === activityId)
+  if (tasks.length === 0)
+    return '尚未生成任务'
+  const counts = {
+    制作: tasks.filter(task => task.kind === '制作').length,
+    发布: tasks.filter(task => task.kind === '发布').length,
+    监测: tasks.filter(task => task.kind === '监测').length,
+  }
+  return `${counts.制作} 制作 · ${counts.发布} 发布 · ${counts.监测} 监测`
+}
 
 function selectModule(moduleId: ModuleId): void {
   activeModule.value = moduleId
@@ -415,7 +434,7 @@ function selectChannelAccount(accountId: string): void {
 }
 
 function openActivityComposer(): void {
-  activityForm.channel = enabledChannels.value[0]?.channel ?? 'github'
+  activityForm.channels = enabledChannels.value.slice(0, 1).map(channel => channel.channel)
   activityForm.topic = ''
   activitySaveError.value = null
   activityComposerOpen.value = true
@@ -482,15 +501,18 @@ async function saveChannelContent(): Promise<void> {
 }
 
 async function saveActivity(): Promise<void> {
-  if (!snapshot.runtimeConnected || activityForm.topic.trim() === '')
+  if (!snapshot.runtimeConnected || activityForm.topic.trim() === '' || activityForm.channels.length === 0) {
+    if (activityForm.channels.length === 0)
+      activitySaveError.value = '至少选择一个项目渠道'
     return
+  }
   activitySaving.value = true
   activitySaveError.value = null
   const activityId = `activity-${Date.now()}`
   const input: CreatePublishingActivityInput = {
     activityId,
     campaignId: activityId,
-    channels: [{ id: activityForm.channel, locale: 'zh-CN' }],
+    channels: activityForm.channels.map(channel => ({ id: channel, locale: 'zh-CN' })),
     goal: 'education',
     projectId: snapshot.project.projectId,
     projectSnapshotId: currentSnapshotId.value,
@@ -607,12 +629,31 @@ function taskToProjection(
   events: ExecutionTaskEvent[] = [],
 ): WorkbenchSnapshot['tasks'][number] {
   const campaign = snapshot.campaigns.find(candidate => candidate.campaignId === task.activityId)
-  const channel = campaign?.channels[0] ?? 'github'
+  const channel = task.channel ?? campaign?.channels[0] ?? 'github'
   const account = snapshot.channels.find(candidate => candidate.channel === channel)?.alias
     ?? '未绑定账号'
   const activityTitle = campaign?.title ?? task.activityId
-  const contentTitle = campaign?.contentGroups[0]?.contents[0]?.title ?? '等待 AI 生成内容'
+  const contentTitle = campaign?.contentGroups
+    .flatMap(group => group.contents)
+    .find(content => content.contentId === task.contentId)?.title
+    ?? '等待 AI 生成内容'
   const statusLabel = humanizeStatus(task.status)
+  const stepLabels = task.kind === 'production'
+    ? task.productionType === 'article'
+      ? ['生成文章草稿', '校对渠道版本', '生成文章成品']
+      : ['生成脚本与拍摄大纲', '录制视频素材', '组装视频成品']
+    : task.kind === 'publication'
+      ? ['准备发布包', '等待授权人确认', '保存发布回执']
+      : ['建立监测计划', '采集渠道指标', '生成活动报告']
+  const activeStepIndex = task.status === 'queued' || task.status === 'generating'
+    ? 0
+    : task.status === 'recording'
+      ? 1
+      : task.status === 'composing' || task.status === 'awaiting-owner'
+        ? 2
+        : task.status === 'published'
+          ? stepLabels.length
+          : 0
   return {
     accountAlias: account,
     activityId: task.activityId,
@@ -634,18 +675,21 @@ function taskToProjection(
         ? '发布'
         : '监测',
     status: task.status,
-    steps: [
-      {
-        detail: task.status === 'queued' ? '尚未开始' : '已进入执行记录',
-        label: '准备活动内容',
-        status: task.status === 'queued' ? 'active' : 'done',
-      },
-      {
-        detail: task.status === 'queued' ? '等待前一步完成' : '等待后续应用服务接入',
-        label: '执行制作阶段',
-        status: task.status === 'queued' ? 'pending' : 'active',
-      },
-    ],
+    steps: stepLabels.map((label, index) => ({
+      detail: index < activeStepIndex
+        ? '已完成'
+        : index === activeStepIndex
+          ? `当前阶段：${statusLabel}`
+          : '等待前一阶段完成',
+      label,
+      status: task.status === 'failed' || task.status === 'cancelled'
+        ? index === activeStepIndex ? 'blocked' : 'pending'
+        : index < activeStepIndex
+          ? 'done'
+          : index === activeStepIndex
+            ? 'active'
+            : 'pending',
+    })),
     taskId: task.taskId,
     title: task.kind === 'production' ? `制作：${activityTitle}` : `${task.kind}：${activityTitle}`,
   }
@@ -691,6 +735,9 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
       version: `v${projectView.snapshot.version}`,
       canonicalUrl: projectView.snapshot.manifest.canonicalUrl,
     }
+    const bindingByChannel = new Map(
+      projectView.projectChannelBindings.map(binding => [binding.channel, binding]),
+    )
     const enabledChannels = new Set(
       projectView.projectChannelBindings
         .filter(binding => binding.enabled)
@@ -698,6 +745,25 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
     )
     snapshot.channels.forEach((channel) => {
       channel.enabled = enabledChannels.has(channel.channel)
+      const binding = bindingByChannel.get(channel.channel)
+      if (binding === undefined)
+        return
+      const accountId = binding.accountRef ?? null
+      channel.alias = binding.accountAlias ?? null
+      channel.defaultAccountId = accountId
+      channel.accounts = accountId === null && binding.accountAlias === undefined
+        ? []
+        : [{
+            accountId: accountId ?? `${projectView.project.projectId}:${channel.channel}`,
+            adapterReady: false,
+            alias: binding.accountAlias ?? '项目账号',
+            assignedProjects: [projectView.project.projectId],
+            channel: channel.channel,
+            health: '未配置',
+            isDefault: true,
+            nextAction: '由 marketing-ops 完成授权状态检查',
+            statusSource: '项目配置',
+          }]
     })
     const runtimeCampaigns = projectView.activities.map(activity =>
       activityToCampaign(
@@ -915,7 +981,7 @@ async function refreshProjectView(): Promise<void> {
                 :data-campaign-id="campaign.campaignId"
                 @click="selectCampaign(campaign.campaignId)"
               >
-                <span class="list-status">{{ humanizeActivityStatus(campaign.activityStatus) }} · {{ humanizeStatus(campaign.executionStatus) }}</span>
+                <span class="list-status">{{ humanizeActivityStatus(campaign.activityStatus) }} · {{ activityTaskSummary(campaign.campaignId) }}</span>
                 <strong>{{ campaign.title }}</strong>
                 <small>{{ campaign.channels.length }} 个渠道 · {{ campaign.activityArtifacts.length }} 个活动产物</small>
               </button>
@@ -1041,7 +1107,7 @@ async function refreshProjectView(): Promise<void> {
               <div class="module-card-heading"><div><p class="eyebrow">发布活动</p><h3>{{ snapshot.campaigns.length }} 个主题</h3></div><button type="button" @click="selectModule('activities')">进入活动</button></div>
               <div class="module-list compact-list">
                 <button v-for="campaign in snapshot.campaigns" :key="campaign.campaignId" type="button" @click="selectCampaign(campaign.campaignId)">
-                  <span class="list-status">{{ humanizeActivityStatus(campaign.activityStatus) }} · {{ humanizeStatus(campaign.executionStatus) }}</span>
+                  <span class="list-status">{{ humanizeActivityStatus(campaign.activityStatus) }} · {{ activityTaskSummary(campaign.campaignId) }}</span>
                   <strong>{{ campaign.title }}</strong>
                   <small>{{ campaign.topic }}</small>
                 </button>
@@ -1072,14 +1138,14 @@ async function refreshProjectView(): Promise<void> {
                 活动主题
                 <input v-model="activityForm.topic" required placeholder="例如：用动画理解快速排序的分区过程" />
               </label>
-              <label>
-                首个目标渠道
-                <select v-model="activityForm.channel">
-                  <option v-for="channel in enabledChannels" :key="channel.channel" :value="channel.channel">
-                    {{ channel.channel }}
-                  </option>
-                </select>
-              </label>
+                <fieldset class="channel-choice-field">
+                  <legend>目标渠道（可多选）</legend>
+                  <label v-for="channel in enabledChannels" :key="channel.channel" class="channel-choice">
+                    <input v-model="activityForm.channels" type="checkbox" :value="channel.channel" />
+                    <span><strong>{{ channel.channel }}</strong><small>{{ channel.alias ?? '项目账号待绑定' }}</small></span>
+                  </label>
+                  <small v-if="enabledChannels.length === 0" class="form-hint">请先在渠道管理中启用项目渠道。</small>
+                </fieldset>
             </div>
             <p v-if="activitySaveError" class="form-error">{{ activitySaveError }}</p>
             <div class="form-actions">
@@ -1150,7 +1216,7 @@ async function refreshProjectView(): Promise<void> {
                 :class="{ selected: campaign.campaignId === selectedCampaign.campaignId }"
                 @click="selectedCampaignId = campaign.campaignId"
               >
-                <span class="campaign-status" :data-status="campaign.executionStatus">{{ humanizeActivityStatus(campaign.activityStatus) }}</span>
+                <span class="campaign-status" :data-status="campaign.activityStatus">{{ humanizeActivityStatus(campaign.activityStatus) }}</span>
                 <strong>{{ campaign.title }}</strong>
                 <small>{{ campaign.channels.length }} 个渠道 · {{ campaign.activityArtifacts.length }} 个活动产物</small>
                 <span class="arrow">↗</span>
@@ -1169,7 +1235,15 @@ async function refreshProjectView(): Promise<void> {
                 <span class="task-status">{{ humanizeActivityStatus(selectedCampaign.activityStatus) }}</span>
                 <span class="activity-topic">{{ selectedCampaign.topic }}</span>
               </div>
-              <StatusRail :status="selectedCampaign.executionStatus" />
+              <div class="activity-structure-note">
+                <span>活动状态只描述主题本身</span>
+                <strong>任务阶段请在任务面板查看</strong>
+              </div>
+              <div class="activity-execution-summary" aria-label="活动执行记录摘要">
+                <div><span>制作任务</span><strong>{{ selectedCampaignTaskCounts.production }}</strong></div>
+                <div><span>发布任务</span><strong>{{ selectedCampaignTaskCounts.publication }}</strong></div>
+                <div><span>监测任务</span><strong>{{ selectedCampaignTaskCounts.monitoring }}</strong></div>
+              </div>
               <section
                 v-if="selectedCampaign.videoPlan"
                 class="shooting-plan-card"
@@ -1217,9 +1291,10 @@ async function refreshProjectView(): Promise<void> {
                 </div>
               </section>
               <div class="content-type-grid">
-                <div><span>文章内容</span><strong>{{ selectedCampaignContentCounts.article }}</strong><small>按渠道分别生成</small></div>
-                <div><span>视频内容</span><strong>{{ selectedCampaignContentCounts.video }}</strong><small>资源变体待制作</small></div>
-                <div><span>渠道</span><strong>{{ selectedCampaign.channels.length }}</strong><small>项目已启用范围内</small></div>
+                <div><span>文章成品</span><strong>{{ selectedCampaignContentCounts.article }}</strong><small>按渠道分别生成</small></div>
+                <div><span>视频成品</span><strong>{{ selectedCampaignContentCounts.video }}</strong><small>素材组装后发布</small></div>
+                <div><span>活动素材</span><strong>{{ selectedCampaignContentCounts.artifacts }}</strong><small>引用的项目或活动产物</small></div>
+                <div><span>目标渠道</span><strong>{{ selectedCampaign.channels.length }}</strong><small>账号由项目绑定</small></div>
               </div>
               <div class="detail-footer">
                 <div><span>下一步</span><p>{{ selectedCampaign.nextAction }}</p></div>
@@ -1230,7 +1305,7 @@ async function refreshProjectView(): Promise<void> {
               <div class="activity-detail-grid">
                 <div>
                   <div class="module-card-heading">
-                    <p class="eyebrow">内容组与渠道内容</p>
+                    <p class="eyebrow">内容素材与渠道成品</p>
                     <button type="button" :disabled="!snapshot.runtimeConnected" @click="openContentComposer">
                       {{ snapshot.runtimeConnected ? '新增渠道内容' : '等待运行时' }}
                     </button>
@@ -1242,7 +1317,7 @@ async function refreshProjectView(): Promise<void> {
                       <small>{{ group.coreMessage }}</small>
                       <ul>
                         <li v-for="content in group.contents" :key="content.contentId">
-                          <span>{{ content.format }} · {{ content.channel }} · {{ content.accountAlias ?? '待绑定账号' }}</span>
+                          <span>{{ content.format }}成品 · {{ content.channel }} · {{ content.accountAlias ?? '项目账号待绑定' }}</span>
                           <strong>{{ content.title }}</strong>
                           <small>{{ content.locale }} · {{ content.status }}</small>
                         </li>
@@ -1263,13 +1338,13 @@ async function refreshProjectView(): Promise<void> {
               </div>
               <div class="activity-artifacts-row">
                 <div>
-                  <p class="eyebrow">引用的项目素材</p>
+                  <p class="eyebrow">活动引用的素材</p>
                   <div class="chip-list">
                     <span v-for="assetId in selectedCampaign.referencedAssets" :key="assetId">{{ snapshot.projectAssets.find(asset => asset.assetId === assetId)?.name ?? assetId }}</span>
                   </div>
                 </div>
                 <div>
-                  <p class="eyebrow">活动产物</p>
+                  <p class="eyebrow">活动生成的素材与成品</p>
                   <div class="chip-list">
                     <span v-for="artifact in selectedCampaign.activityArtifacts" :key="artifact.artifactId">{{ artifact.name }} · {{ artifact.status }}</span>
                   </div>
@@ -1323,6 +1398,7 @@ async function refreshProjectView(): Promise<void> {
               <p class="task-detail-context">{{ selectedTask.activityTitle }} → {{ selectedTask.contentTitle }} → {{ selectedTask.channel }} → {{ selectedTask.accountAlias }}</p>
               <p class="task-detail-copy">{{ selectedTask.detail }}</p>
               <div v-if="selectedTask.progress !== undefined" class="progress-track"><span :style="{ width: `${selectedTask.progress}%` }" /></div>
+              <StatusRail :status="selectedTask.status" />
               <ol class="task-step-list" aria-label="任务步骤">
                 <li v-for="step in selectedTask.steps" :key="step.label" :data-step-status="step.status">
                   <span class="step-marker" />

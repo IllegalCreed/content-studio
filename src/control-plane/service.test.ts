@@ -132,6 +132,33 @@ function createPublication(
   return { activity, publication }
 }
 
+function createProductionContent(
+  service: ContentStudioApplicationService,
+  activity: ReturnType<typeof createActivity>,
+  format: 'article' | 'video' = 'video',
+): string {
+  const group = service.createContentGroup({
+    activityId: activity.activityId,
+    contentGroupId: `${activity.activityId}-content-group`,
+    coreMessage: 'Explain the idea',
+    projectId: activity.projectId,
+    title: '内容组',
+  })
+  const content = service.createChannelContent({
+    activityId: activity.activityId,
+    artifactIds: [],
+    body: 'Content body',
+    channel: 'youtube',
+    contentGroupId: group.contentGroupId,
+    contentId: `${activity.activityId}-content`,
+    format,
+    locale: 'en',
+    projectId: activity.projectId,
+    title: 'Content',
+  })
+  return content.contentId
+}
+
 describe('content studio application service', () => {
   it('denies cross-project reads instead of returning another project record', () => {
     const repository = new InMemoryContentStudioRepository()
@@ -161,6 +188,48 @@ describe('content studio application service', () => {
     ])
   })
 
+  it('creates production work only after content identifies its channel target', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'project-a')
+    enableYouTube(service, 'project-a')
+    const activity = createActivity(service)
+
+    expect(service.getProjectView('project-a').tasks).toEqual([])
+
+    const group = service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'project-a-content-group',
+      coreMessage: 'Explain the idea',
+      projectId: 'project-a',
+      title: '内容组',
+    })
+    const content = service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: [],
+      body: 'A video script',
+      channel: 'youtube',
+      contentGroupId: group.contentGroupId,
+      contentId: 'project-a-video-content',
+      format: 'video',
+      locale: 'en',
+      projectId: 'project-a',
+      title: 'Video content',
+    })
+
+    expect(service.getProjectView('project-a').tasks).toEqual([
+      expect.objectContaining({
+        activityId: activity.activityId,
+        channel: 'youtube',
+        contentId: content.contentId,
+        kind: 'production',
+        productionType: 'video',
+        status: 'queued',
+        taskId: `production-${content.contentId}`,
+      }),
+    ])
+  })
+
   it('returns one project-scoped view for the local control surface', () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)
@@ -182,34 +251,38 @@ describe('content studio application service', () => {
           projectId: 'project-a',
         },
       ],
-      taskEvents: {
-        [`production-${activity.activityId}`]: [
-          {
-            attempt: 1,
-            eventId: `production-${activity.activityId}:1`,
-            kind: 'task-created',
-            message: 'Task created',
-            projectId: 'project-a',
-            sequence: 1,
-            status: 'queued',
-            taskId: `production-${activity.activityId}`,
-            schemaVersion: 1,
-          },
-        ],
-      },
+      taskEvents: {},
       snapshot,
-      tasks: [
-        {
-          activityId: activity.activityId,
-          attempt: 1,
-          kind: 'production',
-          projectId: 'project-a',
-          skipStages: [],
-          status: 'queued',
-          taskId: `production-${activity.activityId}`,
-        },
-      ],
+      tasks: [],
     })
+  })
+
+  it('keeps one explicit project account binding per channel', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'project-a')
+
+    const binding = service.bindProjectChannel({
+      accountAlias: '算法可视化账号',
+      accountRef: 'project-a:youtube:owner-account',
+      channel: 'youtube',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId: 'project-a',
+    })
+
+    expect(binding).toMatchObject({
+      accountAlias: '算法可视化账号',
+      accountRef: 'project-a:youtube:owner-account',
+      channel: 'youtube',
+      projectId: 'project-a',
+    })
+    expect(() => service.bindProjectChannel({
+      channel: 'youtube',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId: 'project-a',
+    })).toThrow(/already exists/i)
   })
 
   it('cancels and retries only the project task through the application service', () => {
@@ -218,7 +291,8 @@ describe('content studio application service', () => {
     registerProject(service, 'project-a')
     enableYouTube(service, 'project-a')
     const activity = createActivity(service)
-    const taskId = `production-${activity.activityId}`
+    const contentId = createProductionContent(service, activity)
+    const taskId = `production-${contentId}`
 
     expect(service.startProductionTask('project-a', taskId)).toMatchObject({
       attempt: 1,
@@ -242,7 +316,8 @@ describe('content studio application service', () => {
     registerProject(service, 'project-a')
     enableYouTube(service, 'project-a')
     const activity = createActivity(service)
-    const taskId = `production-${activity.activityId}`
+    const contentId = createProductionContent(service, activity)
+    const taskId = `production-${contentId}`
     service.startProductionTask('project-a', taskId)
 
     const receipt: RecorderAttemptReceipt = {
@@ -392,7 +467,8 @@ describe('content studio application service', () => {
         scenes: [{ id: 'quick-sort', startPath: '/quick-sort' }],
       })
 
-    const taskId = `production-${activity.activityId}`
+    const contentId = createProductionContent(service, activity)
+    const taskId = `production-${contentId}`
     service.startProductionTask('video-project', taskId)
     const receipt: RecorderAttemptReceipt = {
       artifactDirectory: '/tmp/content-studio-video-plan-test/attempt-1',
@@ -496,7 +572,8 @@ describe('content studio application service', () => {
         format: 'landscape',
       },
     })
-    const assistedTaskId = `production-${assistedActivity.activityId}`
+    const assistedContentId = createProductionContent(assistedService, assistedActivity)
+    const assistedTaskId = `production-${assistedContentId}`
     assistedService.startProductionTask('assisted-project', assistedTaskId)
     expect(() => assistedService.runActivityProductionTask(
       'assisted-project',
@@ -647,6 +724,16 @@ describe('content studio application service', () => {
       publicationId: 'publication-1',
     })
 
+    expect(service.getProjectView('project-a').tasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        channel: 'youtube',
+        contentId: content.contentId,
+        kind: 'publication',
+        status: 'queued',
+        taskId: `publication-${publication.publicationId}`,
+      }),
+    ]))
+
     expect(() =>
       service.recordPublicationReceipt({
         activityId: activity.activityId,
@@ -675,6 +762,27 @@ describe('content studio application service', () => {
       publicationId: publication.publicationId,
       status: 'published',
     })
+    expect(service.getProjectView('project-a').tasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'publication',
+        status: 'published',
+        taskId: `publication-${publication.publicationId}`,
+      }),
+      expect.objectContaining({
+        kind: 'monitoring',
+        status: 'queued',
+        taskId: `monitoring-${publication.publicationId}`,
+      }),
+    ]))
+    expect(service.recordPublicationReceipt({
+      activityId: activity.activityId,
+      channel: 'youtube',
+      externalReceiptId: 'receipt-1-repeat',
+      projectId: 'project-a',
+      publicationId: publication.publicationId,
+      receiptId: 'receipt-1-repeat',
+      status: 'published',
+    })).toMatchObject({ status: 'published' })
   })
 
   it('rejects mismatched ownership and duplicate immutable records', () => {
@@ -1063,6 +1171,13 @@ describe('content studio application service', () => {
       status: 'published',
     })
     expect(service.recordMonitoringObservation(observation)).toEqual(observation)
+    expect(service.getProjectView('project-a').tasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'monitoring',
+        status: 'monitoring',
+        taskId: `monitoring-${publication.publicationId}`,
+      }),
+    ]))
   })
 
   it('报告只能引用同一项目和活动的监测快照', () => {

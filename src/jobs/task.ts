@@ -78,7 +78,12 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
     const task: ExecutionTask = {
       activityId: input.activityId,
       attempt: 1,
+      ...(input.channel === undefined ? {} : { channel: input.channel }),
+      ...(input.contentId === undefined ? {} : { contentId: input.contentId }),
       kind: input.kind,
+      ...(input.productionType === undefined
+        ? {}
+        : { productionType: input.productionType }),
       projectId: input.projectId,
       skipStages,
       status: 'queued',
@@ -137,7 +142,13 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
     }
     const allowedStatuses: readonly ExecutionTaskStatus[]
       = CAMPAIGN_JOB_TRANSITIONS[task.status]
-    if (!allowedStatuses.includes(nextStatus)) {
+    const isPublicationReceipt = task.kind === 'publication'
+      && (nextStatus === 'failed' || nextStatus === 'published')
+      && options.hasMatchingPublicationReceipt === true
+    const isMonitoringStart = task.kind === 'monitoring'
+      && task.status === 'queued'
+      && nextStatus === 'monitoring'
+    if (!allowedStatuses.includes(nextStatus) && !isPublicationReceipt && !isMonitoringStart) {
       throw new TaskStateError(
         `Task cannot transition from ${task.status} to ${nextStatus}`,
       )

@@ -489,7 +489,30 @@ describe('content Studio local MCP server', () => {
         },
       },
     })
-    const taskId = 'production-task-demo'
+    await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 18.1,
+      method: 'tools/call',
+      params: {
+        name: 'save_activity_content_pack',
+        arguments: {
+          activityId: 'task-demo',
+          contentGroupId: 'task-demo-content-group',
+          contents: [{
+            body: 'Task demo content',
+            channel: 'github',
+            contentId: 'task-demo-content',
+            format: 'article',
+            locale: 'en',
+            title: 'Task demo content',
+          }],
+          coreMessage: 'Explain the task demo.',
+          projectId,
+          title: 'Task demo content group',
+        },
+      },
+    })
+    const taskId = 'production-task-demo-content'
 
     await expect(server.handleMessage({
       jsonrpc: '2.0',
@@ -583,7 +606,30 @@ describe('content Studio local MCP server', () => {
         },
       },
     })
-    const taskId = 'production-mcp-task-demo'
+    await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 28.1,
+      method: 'tools/call',
+      params: {
+        name: 'save_activity_content_pack',
+        arguments: {
+          activityId: 'mcp-task-demo',
+          contentGroupId: 'mcp-task-demo-content-group',
+          contents: [{
+            body: 'Task polling content',
+            channel: 'github',
+            contentId: 'mcp-task-demo-content',
+            format: 'article',
+            locale: 'en',
+            title: 'Task polling content',
+          }],
+          coreMessage: 'Explain task polling.',
+          projectId,
+          title: 'Task polling content group',
+        },
+      },
+    })
+    const taskId = 'production-mcp-task-demo-content'
 
     await expect(server.handleMessage({
       jsonrpc: '2.0',
@@ -706,7 +752,7 @@ describe('content Studio local MCP server', () => {
         name: 'start_production_task',
         arguments: {
           projectId,
-          taskId: 'production-content-pack-demo',
+          taskId: 'production-content-pack-github-en',
         },
       },
     })).resolves.toMatchObject({
@@ -743,7 +789,26 @@ describe('content Studio local MCP server', () => {
       targetUrl: 'https://example.com/state-demo/',
       topic: { 'en': 'State demo', 'zh-CN': '状态演示' },
     })
-    const taskId = 'production-state-demo'
+    const group = service.createContentGroup({
+      activityId: 'state-demo',
+      contentGroupId: 'state-demo-content-group',
+      coreMessage: 'Explain state transitions.',
+      projectId,
+      title: 'State demo content group',
+    })
+    const content = service.createChannelContent({
+      activityId: 'state-demo',
+      artifactIds: [],
+      body: 'State demo content',
+      channel: 'github',
+      contentGroupId: group.contentGroupId,
+      contentId: 'state-demo-content',
+      format: 'article',
+      locale: 'en',
+      projectId,
+      title: 'State demo content',
+    })
+    const taskId = `production-${content.contentId}`
     taskStore.transitionTask(projectId, taskId, 'generating')
     taskStore.transitionTask(projectId, taskId, 'recording')
     taskStore.transitionTask(projectId, taskId, 'composing')
@@ -781,7 +846,26 @@ describe('content Studio local MCP server', () => {
       targetUrl: 'https://example.com/failed-state-demo/',
       topic: { 'en': 'Failed state', 'zh-CN': '失败状态' },
     })
-    const failedTaskId = 'production-failed-state-demo'
+    const failedGroup = service.createContentGroup({
+      activityId: 'failed-state-demo',
+      contentGroupId: 'failed-state-content-group',
+      coreMessage: 'Explain the failed state.',
+      projectId,
+      title: 'Failed state content group',
+    })
+    const failedContent = service.createChannelContent({
+      activityId: 'failed-state-demo',
+      artifactIds: [],
+      body: 'Failed state content',
+      channel: 'github',
+      contentGroupId: failedGroup.contentGroupId,
+      contentId: 'failed-state-content',
+      format: 'article',
+      locale: 'en',
+      projectId,
+      title: 'Failed state content',
+    })
+    const failedTaskId = `production-${failedContent.contentId}`
     taskStore.transitionTask(projectId, failedTaskId, 'generating')
     taskStore.transitionTask(projectId, failedTaskId, 'failed')
     await expect(server.handleMessage({

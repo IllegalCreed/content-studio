@@ -1128,6 +1128,7 @@ footer {
   }
 
   .content-type-grid,
+  .activity-execution-summary,
   .task-summary,
   .storage-grid {
     grid-template-columns: 1fr;
@@ -1242,6 +1243,47 @@ footer {
 
 .activity-composer-grid textarea {
   resize: vertical;
+}
+
+.channel-choice-field {
+  min-width: 0;
+  margin: 0;
+  padding: 0.7rem;
+  border: 1px solid var(--stroke);
+}
+
+.channel-choice-field legend {
+  padding: 0 0.25rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.channel-choice {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start;
+  gap: 0.55rem !important;
+  margin-top: 0.55rem;
+  color: var(--ink) !important;
+  cursor: pointer;
+}
+
+.channel-choice input {
+  min-height: auto;
+  margin-top: 0.15rem;
+  accent-color: var(--acid);
+}
+
+.channel-choice span,
+.channel-choice small {
+  display: block;
+}
+
+.channel-choice small,
+.form-hint {
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.62rem;
 }
 
 .empty-state {
@@ -1531,6 +1573,51 @@ footer {
   padding: 0.75rem 0;
   border-top: 1px solid var(--stroke);
   border-bottom: 1px solid var(--stroke);
+}
+
+.activity-structure-note {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  margin-top: 1rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px dashed var(--stroke);
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.activity-structure-note strong {
+  color: var(--acid);
+  font-weight: 500;
+}
+
+.activity-execution-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.activity-execution-summary > div {
+  padding: 0.75rem;
+  border: 1px solid var(--stroke);
+  background: #151713;
+}
+
+.activity-execution-summary span {
+  display: block;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6rem;
+}
+
+.activity-execution-summary strong {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--acid);
+  font-size: 1.15rem;
+  font-weight: 500;
 }
 
 .shooting-plan-card {

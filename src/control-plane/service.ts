@@ -562,12 +562,6 @@ export class ContentStudioApplicationService {
         : { videoPlanReviewStatus: 'pending' as const }),
       version: 1,
     })
-    this.taskStore.createTask({
-      activityId: activity.activityId,
-      kind: 'production',
-      projectId: activity.projectId,
-      taskId: `production-${activity.activityId}`,
-    })
     return activity
   }
 
@@ -724,10 +718,12 @@ export class ContentStudioApplicationService {
       activity.activityId,
       input.artifactIds,
     )
-    return this.repository.saveChannelContent({
+    const content = this.repository.saveChannelContent({
       ...input,
       version: 1,
     })
+    this.createProductionTask(content)
+    return content
   }
 
   saveActivityContentPack(
@@ -778,6 +774,7 @@ export class ContentStudioApplicationService {
       projectId: input.projectId,
       version: 1,
     }))
+    contents.forEach(content => this.createProductionTask(content))
     return { contentGroup, contents }
   }
 
@@ -831,7 +828,9 @@ export class ContentStudioApplicationService {
         locale: content.locale,
       },
     ])
-    return this.repository.savePublicationPlan(input)
+    const plan = this.repository.savePublicationPlan(input)
+    this.createPublicationTask(plan)
+    return plan
   }
 
   recordPublicationReceipt(
@@ -850,7 +849,27 @@ export class ContentStudioApplicationService {
     ) {
       throw new Error('Publication receipt must match activity, channel, and project')
     }
-    return this.repository.savePublicationReceipt(receipt)
+    const savedReceipt = this.repository.savePublicationReceipt(receipt)
+    const publicationTaskId = `publication-${receipt.publicationId}`
+    let publicationTask = this.taskStore.getTask(receipt.projectId, publicationTaskId)
+    if (publicationTask === undefined) {
+      this.createPublicationTask(plan)
+      publicationTask = this.taskStore.getTask(receipt.projectId, publicationTaskId)
+    }
+    if (publicationTask !== undefined) {
+      const nextStatus = receipt.status === 'published' ? 'published' : 'failed'
+      if (publicationTask.status !== nextStatus) {
+        this.taskStore.transitionTask(
+          receipt.projectId,
+          publicationTaskId,
+          nextStatus,
+          { hasMatchingPublicationReceipt: true },
+        )
+      }
+      if (receipt.status === 'published')
+        this.createMonitoringTask(receipt)
+    }
+    return savedReceipt
   }
 
   createOwnerHandoff(handoff: OwnerHandoff): OwnerHandoff {
@@ -898,7 +917,14 @@ export class ContentStudioApplicationService {
     ) {
       throw new Error('Monitoring observation must match publication')
     }
-    return this.repository.saveMonitoringObservation(observation)
+    const savedObservation = this.repository.saveMonitoringObservation(observation)
+    const monitoringTaskId = `monitoring-${observation.publicationId}`
+    if (this.taskStore.getTask(observation.projectId, monitoringTaskId) !== undefined) {
+      const task = this.taskStore.getTask(observation.projectId, monitoringTaskId)
+      if (task?.status === 'queued')
+        this.taskStore.transitionTask(observation.projectId, monitoringTaskId, 'monitoring')
+    }
+    return savedObservation
   }
 
   createReport(report: ContentStudioReport): ContentStudioReport {
@@ -1039,6 +1065,49 @@ export class ContentStudioApplicationService {
         outlinedFlows.add(scene.flowId)
       }
     }
+  }
+
+  private createProductionTask(content: ChannelContent): void {
+    const taskId = `production-${content.contentId}`
+    if (this.taskStore.getTask(content.projectId, taskId) !== undefined)
+      return
+    this.taskStore.createTask({
+      activityId: content.activityId,
+      channel: content.channel,
+      contentId: content.contentId,
+      kind: 'production',
+      productionType: content.format,
+      projectId: content.projectId,
+      taskId,
+    })
+  }
+
+  private createPublicationTask(plan: PublicationPlan): void {
+    const taskId = `publication-${plan.publicationId}`
+    if (this.taskStore.getTask(plan.projectId, taskId) !== undefined)
+      return
+    this.taskStore.createTask({
+      activityId: plan.activityId,
+      channel: plan.channel,
+      contentId: plan.contentId,
+      kind: 'publication',
+      projectId: plan.projectId,
+      taskId,
+    })
+  }
+
+  private createMonitoringTask(receipt: PublicationReceipt): void {
+    const taskId = `monitoring-${receipt.publicationId}`
+    if (this.taskStore.getTask(receipt.projectId, taskId) !== undefined)
+      return
+    this.taskStore.createTask({
+      activityId: receipt.activityId,
+      channel: receipt.channel,
+      contentId: this.requirePublicationPlan(receipt.projectId, receipt.publicationId).contentId,
+      kind: 'monitoring',
+      projectId: receipt.projectId,
+      taskId,
+    })
   }
 }
 

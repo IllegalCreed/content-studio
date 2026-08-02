@@ -172,6 +172,8 @@ export interface ContentStudioProjectView {
 }
 
 export interface ProjectChannelBinding {
+  accountAlias?: string
+  accountRef?: string
   channel: ChannelId
   delivery: DeliveryMode
   enabled: boolean
@@ -455,6 +457,8 @@ export interface CampaignJobTransitionOptions {
 
 export type ExecutionTaskKind = 'monitoring' | 'production' | 'publication'
 
+export type ProductionTaskType = 'article' | 'video'
+
 export type ExecutionTaskStatus = CampaignJobStatus
 
 export type ExecutionTaskSkipStage = 'generating' | 'recording'
@@ -462,7 +466,10 @@ export type ExecutionTaskSkipStage = 'generating' | 'recording'
 export interface ExecutionTask {
   activityId: string
   attempt: number
+  channel?: ChannelId
+  contentId?: string
   kind: ExecutionTaskKind
+  productionType?: ProductionTaskType
   projectId: string
   skipStages: ExecutionTaskSkipStage[]
   status: ExecutionTaskStatus
@@ -472,6 +479,9 @@ export interface ExecutionTask {
 export interface CreateExecutionTaskInput {
   activityId: string
   kind: ExecutionTaskKind
+  channel?: ChannelId
+  contentId?: string
+  productionType?: ProductionTaskType
   projectId: string
   skipStages?: ExecutionTaskSkipStage[]
   taskId: string

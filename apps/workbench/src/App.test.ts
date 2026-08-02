@@ -35,8 +35,9 @@ describe('content studio workbench', () => {
     await wrapper.get('button[data-module="activities"]').trigger('click')
 
     expect(wrapper.get('h1').text()).toContain('发布活动')
-    expect(wrapper.text()).toContain('内容组与渠道内容')
+    expect(wrapper.text()).toContain('内容素材与渠道成品')
     expect(wrapper.text()).toContain('关联执行任务')
+    expect(wrapper.find('.campaign-detail .status-rail').exists()).toBe(false)
     expect(wrapper.get('[data-testid="shooting-plan"]').text()).toContain('拍摄大纲')
     expect(wrapper.get('[data-testid="shooting-plan"]').text()).toContain('第 2 版')
     expect(wrapper.get('[data-testid="shooting-plan"]').text()).toContain('待确认')
@@ -53,6 +54,7 @@ describe('content studio workbench', () => {
     )
     expect(wrapper.get('[data-testid="start-task"]').attributes()).toHaveProperty('disabled')
     expect(wrapper.get('[data-testid="record-task"]').attributes()).toHaveProperty('disabled')
+    expect(wrapper.find('.task-detail .status-rail').exists()).toBe(true)
     expect(wrapper.text()).toContain('浏览器录制')
     expect(wrapper.text()).toContain('快速排序可视化指南')
     await wrapper.get('button[data-task-id="release-notes-publish-x"]').trigger('click')

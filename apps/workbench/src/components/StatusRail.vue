@@ -18,7 +18,7 @@ const activeIndex = computed(() =>
 <template>
   <ol
     class="status-rail"
-    aria-label="活动生命周期"
+    aria-label="任务生命周期"
   >
     <li
       v-for="(stage, index) in lifecycleStages"

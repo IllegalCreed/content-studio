@@ -298,30 +298,35 @@ describe('content studio local application server', () => {
       expect((await taskResponse.json()).tasks).toEqual([
         expect.objectContaining({
           activityId: 'activity-a',
+          channel: 'github',
+          contentId: 'content-a',
           kind: 'production',
+          productionType: 'article',
+          projectId: 'project-a',
+          skipStages: [],
           status: 'queued',
-          taskId: 'production-activity-a',
+          taskId: 'production-content-a',
         }),
       ])
       expect((await fetch(
-        `${running.baseUrl}/api/v1/projects/project-a/tasks/production-activity-a/events`,
+        `${running.baseUrl}/api/v1/projects/project-a/tasks/production-content-a/events`,
       ).then(response => response.json())).events).toEqual([
         expect.objectContaining({ kind: 'task-created', sequence: 1 }),
       ])
       const startResponse = await fetch(
-        `${running.baseUrl}/api/v1/projects/project-a/tasks/production-activity-a/start`,
+        `${running.baseUrl}/api/v1/projects/project-a/tasks/production-content-a/start`,
         { method: 'POST' },
       )
       expect(startResponse.status).toBe(200)
       expect(await startResponse.json()).toMatchObject({ status: 'generating' })
       const cancelResponse = await fetch(
-        `${running.baseUrl}/api/v1/projects/project-a/tasks/production-activity-a/cancel`,
+        `${running.baseUrl}/api/v1/projects/project-a/tasks/production-content-a/cancel`,
         { method: 'POST' },
       )
       expect(cancelResponse.status).toBe(200)
       expect(await cancelResponse.json()).toMatchObject({ status: 'cancelled' })
       const retryResponse = await fetch(
-        `${running.baseUrl}/api/v1/projects/project-a/tasks/production-activity-a/retry`,
+        `${running.baseUrl}/api/v1/projects/project-a/tasks/production-content-a/retry`,
         { method: 'POST' },
       )
       expect(retryResponse.status).toBe(200)
@@ -385,7 +390,7 @@ describe('content studio local application server', () => {
       campaignId: 'video-campaign',
       completedActions: 1,
       completedScenes: 1,
-      jobId: 'production-video-activity',
+      jobId: 'production-video-content',
       logs: {
         consoleErrors: 0,
         consoleWarnings: 0,
@@ -438,7 +443,26 @@ describe('content studio local application server', () => {
         format: 'landscape',
       },
     })
-    const taskId = `production-${activity.activityId}`
+    const group = handle.service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'video-content-group',
+      coreMessage: 'Explain quick sort.',
+      projectId: project.projectId,
+      title: 'Quick sort content',
+    })
+    const content = handle.service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: [],
+      body: 'Quick sort video content',
+      channel: 'youtube',
+      contentGroupId: group.contentGroupId,
+      contentId: 'video-content',
+      format: 'video',
+      locale: 'en',
+      projectId: project.projectId,
+      title: 'Quick sort video',
+    })
+    const taskId = `production-${content.contentId}`
     handle.service.startProductionTask(project.projectId, taskId)
     const running = await listen(handle.server)
 
