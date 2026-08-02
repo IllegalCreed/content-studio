@@ -153,6 +153,10 @@ Content Studio 保留更细的内部流水线状态，同时通过适配器映�
 任务适配器应实现 `tasks/get`、`tasks/update` 和 `tasks/cancel`，并在宿主支持时通过
 任务通知推送完整状态；默认始终支持轮询回退。
 
+本地第一版已实现这三个单任务方法：`tasks/get` 返回当前映射状态和事件，`tasks/update`
+按事件序号游标返回新增事件，`tasks/cancel` 只请求取消当前本地尝试。MCP Task 句柄仍
+必须同时携带匹配的 `projectId`，重试继续使用 Content Studio 的领域工具并保留旧尝试。
+
 MCP Tasks 没有 `tasks/list`。全局和项目任务面板必须继续使用经过业务授权的领域
 查询，例如：
 

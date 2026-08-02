@@ -9,6 +9,7 @@ import {
   ContentStudioApplicationService,
   InMemoryContentStudioRepository,
 } from '../control-plane/service'
+import { InMemoryExecutionTaskStore } from '../jobs/task'
 import {
   createContentStudioMcpServer,
   serveMcpStdio,
@@ -490,6 +491,179 @@ describe('content Studio local MCP server', () => {
       },
     })).resolves.toMatchObject({
       result: { isError: true },
+    })
+  })
+
+  it('maps domain task state to MCP Tasks and supports cursor-based polling', async () => {
+    const server = createFixture()
+    await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 28,
+      method: 'tools/call',
+      params: {
+        name: 'create_publishing_activity',
+        arguments: {
+          activityId: 'mcp-task-demo',
+          campaignId: 'mcp-task-demo',
+          channels: [{ id: 'github', locale: 'en' }],
+          goal: 'education',
+          projectId,
+          projectSnapshotId: snapshot.snapshotId,
+          status: 'draft',
+          targetUrl: 'https://example.com/mcp-task-demo/',
+          topic: { 'en': 'Task polling', 'zh-CN': '任务轮询' },
+        },
+      },
+    })
+    const taskId = 'production-mcp-task-demo'
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 29,
+      method: 'tasks/get',
+      params: { projectId, taskId },
+    })).resolves.toMatchObject({
+      result: {
+        task: {
+          attempt: 1,
+          eventCursor: '1',
+          internalStatus: 'queued',
+          status: 'working',
+          taskId,
+        },
+      },
+    })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 30,
+      method: 'tasks/update',
+      params: { cursor: '1', projectId, taskId },
+    })).resolves.toMatchObject({
+      result: {
+        events: [],
+        task: { eventCursor: '1', status: 'working' },
+      },
+    })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 31,
+      method: 'tasks/cancel',
+      params: { projectId, taskId },
+    })).resolves.toMatchObject({
+      result: {
+        task: {
+          internalStatus: 'cancelled',
+          status: 'cancelled',
+        },
+      },
+    })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 32,
+      method: 'tasks/update',
+      params: { cursor: '1', projectId, taskId },
+    })).resolves.toMatchObject({
+      result: {
+        events: [expect.objectContaining({
+          kind: 'attempt-cancelled',
+          sequence: 2,
+        })],
+        task: { status: 'cancelled' },
+      },
+    })
+  })
+
+  it('maps owner input, failure, and completion states without allowing MCP to invent them', async () => {
+    const repository = new InMemoryContentStudioRepository()
+    const taskStore = new InMemoryExecutionTaskStore()
+    const service = new ContentStudioApplicationService(repository, taskStore)
+    service.registerProject(project, snapshot)
+    service.bindProjectChannel({
+      channel: 'github',
+      delivery: 'automatic-candidate',
+      enabled: true,
+      projectId,
+    })
+    const server = createContentStudioMcpServer({ projectId, service })
+    service.createActivity({
+      activityId: 'state-demo',
+      campaignId: 'state-demo',
+      channels: [{ id: 'github', locale: 'en' }],
+      goal: 'education',
+      projectId,
+      projectSnapshotId: snapshot.snapshotId,
+      status: 'draft',
+      targetUrl: 'https://example.com/state-demo/',
+      topic: { 'en': 'State demo', 'zh-CN': '状态演示' },
+    })
+    const taskId = 'production-state-demo'
+    taskStore.transitionTask(projectId, taskId, 'generating')
+    taskStore.transitionTask(projectId, taskId, 'recording')
+    taskStore.transitionTask(projectId, taskId, 'composing')
+    taskStore.transitionTask(projectId, taskId, 'awaiting-owner')
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 33,
+      method: 'tasks/get',
+      params: { projectId, taskId },
+    })).resolves.toMatchObject({
+      result: { task: { status: 'input_required', internalStatus: 'awaiting-owner' } },
+    })
+
+    taskStore.transitionTask(projectId, taskId, 'published', {
+      hasMatchingPublicationReceipt: true,
+    })
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 34,
+      method: 'tasks/get',
+      params: { projectId, taskId },
+    })).resolves.toMatchObject({
+      result: { task: { status: 'completed', internalStatus: 'published' } },
+    })
+
+    service.createActivity({
+      activityId: 'failed-state-demo',
+      campaignId: 'failed-state-demo',
+      channels: [{ id: 'github', locale: 'en' }],
+      goal: 'education',
+      projectId,
+      projectSnapshotId: snapshot.snapshotId,
+      status: 'draft',
+      targetUrl: 'https://example.com/failed-state-demo/',
+      topic: { 'en': 'Failed state', 'zh-CN': '失败状态' },
+    })
+    const failedTaskId = 'production-failed-state-demo'
+    taskStore.transitionTask(projectId, failedTaskId, 'generating')
+    taskStore.transitionTask(projectId, failedTaskId, 'failed')
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 35,
+      method: 'tasks/get',
+      params: { projectId, taskId: failedTaskId },
+    })).resolves.toMatchObject({
+      result: { task: { status: 'failed', internalStatus: 'failed' } },
+    })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 36,
+      method: 'tasks/get',
+      params: { projectId, taskId: 'Invalid_Task' },
+    })).resolves.toMatchObject({
+      error: { code: -32602 },
+    })
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 37,
+      method: 'tasks/update',
+      params: { cursor: '', projectId, taskId },
+    })).resolves.toMatchObject({
+      error: { code: -32602 },
     })
   })
 

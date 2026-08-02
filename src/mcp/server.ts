@@ -3,6 +3,8 @@
 import type { ContentStudioApplicationService } from '../control-plane/service'
 import type {
   ExecutionTask,
+  ExecutionTaskEvent,
+  ExecutionTaskStatus,
 } from '../types'
 import { createInterface } from 'node:readline'
 import {
@@ -10,6 +12,11 @@ import {
   RecordConflictError,
   RecordNotFoundError,
 } from '../control-plane/service'
+import {
+  TaskNotFoundError,
+  TaskScopeError,
+  TaskStateError,
+} from '../jobs/task'
 import {
   parseCreateActivityInput,
   parseCreateChannelContentInput,
@@ -20,6 +27,8 @@ import { assertNoSensitiveKeys } from '../validation'
 const PROTOCOL_VERSION = '2026-07-28'
 const IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const PROJECT_URI_PATTERN = /^content-studio:\/\/projects\/([^/]+)\/(view|activities|content|tasks)$/
+
+type McpTaskStatus = 'cancelled' | 'completed' | 'failed' | 'input_required' | 'working'
 
 export interface McpJsonRpcRequest {
   jsonrpc: '2.0'
@@ -127,6 +136,7 @@ async function dispatchRequest(
       return success(request.id!, {
         capabilities: {
           resources: {},
+          tasks: {},
           tools: {},
         },
         projectId: options.projectId,
@@ -150,6 +160,12 @@ async function dispatchRequest(
       return success(request.id!, { tools: toolDefinitions() })
     case 'tools/call':
       return toolCall(request.id!, request.params, options)
+    case 'tasks/get':
+      return success(request.id!, getMcpTask(request.params, options))
+    case 'tasks/update':
+      return success(request.id!, updateMcpTask(request.params, options))
+    case 'tasks/cancel':
+      return success(request.id!, cancelMcpTask(request.params, options))
     default:
       return protocolError(request.id!, -32601, `Method not found: ${request.method}`)
   }
@@ -575,6 +591,113 @@ function toolResult(value: unknown): Record<string, unknown> {
   }
 }
 
+function getMcpTask(
+  input: unknown,
+  options: ContentStudioMcpServerOptions,
+): { events: ExecutionTaskEvent[], task: Record<string, unknown> } {
+  const handle = parseTaskHandle(input, options, false)
+  const view = options.service.getProjectView(handle.projectId)
+  const task = requireTask(view.tasks, handle.taskId)
+  const events = options.service.listTaskEvents(handle.projectId, handle.taskId)
+  return {
+    events,
+    task: toMcpTask(task, events),
+  }
+}
+
+function updateMcpTask(
+  input: unknown,
+  options: ContentStudioMcpServerOptions,
+): { events: ExecutionTaskEvent[], task: Record<string, unknown> } {
+  const handle = parseTaskHandle(input, options, true)
+  const view = options.service.getProjectView(handle.projectId)
+  const task = requireTask(view.tasks, handle.taskId)
+  const events = options.service
+    .listTaskEvents(handle.projectId, handle.taskId)
+    .filter(event => handle.cursor === undefined || event.sequence > handle.cursor)
+  const allEvents = options.service.listTaskEvents(handle.projectId, handle.taskId)
+  return {
+    events,
+    task: toMcpTask(task, allEvents),
+  }
+}
+
+function cancelMcpTask(
+  input: unknown,
+  options: ContentStudioMcpServerOptions,
+): { task: Record<string, unknown> } {
+  const handle = parseTaskHandle(input, options, false)
+  const task = options.service.cancelTask(handle.projectId, handle.taskId)
+  const events = options.service.listTaskEvents(handle.projectId, handle.taskId)
+  return { task: toMcpTask(task, events) }
+}
+
+function parseTaskHandle(
+  input: unknown,
+  options: ContentStudioMcpServerOptions,
+  allowCursor: boolean,
+): { cursor?: number, projectId: string, taskId: string } {
+  const value = asRecord(input, 'task params')
+  assertKeys(
+    value,
+    allowCursor ? ['cursor', 'projectId', 'taskId'] : ['projectId', 'taskId'],
+    'task params',
+  )
+  const projectId = scopedId(value.projectId, options.projectId, 'projectId')
+  const taskId = identifierField(value.taskId, 'taskId')
+  if (value.cursor === undefined)
+    return { projectId, taskId }
+  if (
+    (typeof value.cursor !== 'string' && typeof value.cursor !== 'number')
+    || (typeof value.cursor === 'string' && value.cursor.trim() === '')
+  ) {
+    throw new McpToolError('cursor must be a non-negative integer')
+  }
+  const cursor = Number(value.cursor)
+  if (!Number.isInteger(cursor) || cursor < 0)
+    throw new McpToolError('cursor must be a non-negative integer')
+  return { cursor, projectId, taskId }
+}
+
+function requireTask(
+  tasks: ExecutionTask[],
+  taskId: string,
+): ExecutionTask {
+  const task = tasks.find(candidate => candidate.taskId === taskId)
+  if (task === undefined)
+    throw new RecordNotFoundError('Task', taskId)
+  return task
+}
+
+function toMcpTask(
+  task: ExecutionTask,
+  events: ExecutionTaskEvent[],
+): Record<string, unknown> {
+  const lastEvent = events.at(-1)
+  return {
+    attempt: task.attempt,
+    eventCursor: String(lastEvent?.sequence ?? 0),
+    internalStatus: task.status,
+    ...(lastEvent === undefined ? {} : { lastEvent }),
+    pollIntervalMs: 1000,
+    projectId: task.projectId,
+    status: mapTaskStatus(task.status),
+    taskId: task.taskId,
+  }
+}
+
+function mapTaskStatus(status: ExecutionTaskStatus): McpTaskStatus {
+  if (status === 'awaiting-owner')
+    return 'input_required'
+  if (status === 'cancelled')
+    return 'cancelled'
+  if (status === 'failed')
+    return 'failed'
+  if (status === 'published')
+    return 'completed'
+  return 'working'
+}
+
 function scopedRecord(
   input: unknown,
   projectId: string,
@@ -680,6 +803,12 @@ function errorCode(error: unknown): number {
     return -32002
   if (error instanceof RecordConflictError)
     return -32009
+  if (error instanceof TaskNotFoundError)
+    return -32002
+  if (error instanceof TaskScopeError)
+    return -32003
+  if (error instanceof TaskStateError)
+    return -32602
   return -32602
 }
 
