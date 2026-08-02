@@ -43,6 +43,27 @@ AI 负责“拍什么、怎么讲、镜头如何组织”；项目接入层负�
 - 必要时增加少量 `data-testid` 标注；
 - 如果默认声明式流程不够，再提供经过许可的项目适配器。
 
+项目可以在清单的 `captureTargets` 中登记这些关键节点。每个目标只需要一个稳定
+的业务 ID、用途（`control`、`state` 或 `result`）、双语说明和一个语义定位器：
+
+```json
+{
+  "id": "animation-play",
+  "purpose": "control",
+  "label": {
+    "zh-CN": "播放动画按钮",
+    "en": "Play animation button"
+  },
+  "locator": {
+    "by": "test-id",
+    "value": "animation-play"
+  }
+}
+```
+
+`test-id` 必须使用小写 kebab-case；`role`、`label` 和 `text` 仍然优先。目标清单
+只描述录制真正依赖的节点，不要求给所有 DOM 添加标注，也不接受 CSS/XPath 选择器。
+
 不需要给每一个 DOM 都加 `testid`。只标注录制真正依赖的稳定节点，例如开始按钮、
 动画状态、结果区域和下一步操作。优先使用 role、label、text 和可访问名称，
 `testid` 用于语义不足但确实需要稳定引用的节点。
@@ -132,8 +153,8 @@ repeatability: high | conditional | low
 Content Studio 不应在任务运行中悄悄把有源模式降级为无源模式。模式变化需要新的
 项目能力确认、重新生成录制计划，并在回执中记录。
 
-当前项目清单已经可以显式声明 `sourceAccess`、`captureMode` 和
-`repeatability`。历史清单省略这些字段时仍按兼容规则解释为
+当前项目清单已经可以显式声明 `sourceAccess`、`captureMode`、`repeatability` 和
+关键节点 `captureTargets`。历史清单省略这些字段时仍按兼容规则解释为
 `source-owned`、`deterministic`、`high`；声明 `web-assisted` 时不能同时声明
 `deterministic`，避免把无源项目误当成可确定性重放的项目。
 

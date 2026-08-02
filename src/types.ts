@@ -43,6 +43,15 @@ export interface SemanticLocator {
   name?: string
 }
 
+export type ProjectCaptureTargetPurpose = 'control' | 'result' | 'state'
+
+export interface ProjectCaptureTarget {
+  id: string
+  label: LocalizedText
+  locator: SemanticLocator
+  purpose: ProjectCaptureTargetPurpose
+}
+
 export type CaptureStep
   = | {
     kind: 'capture'
@@ -92,6 +101,7 @@ export interface ProjectManifest {
   tagline: LocalizedText
   facts: ProjectFact[]
   captureFlows: CaptureFlow[]
+  captureTargets?: ProjectCaptureTarget[]
   sourceAccess?: ProjectAccessMode
   captureMode?: ProjectCaptureMode
   repeatability?: ProjectRepeatability

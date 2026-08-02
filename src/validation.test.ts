@@ -112,6 +112,53 @@ describe('manifest validation', () => {
     })).toThrow(/web-assisted.*deterministic/i)
   })
 
+  it('accepts a small semantic capture target registry and enforces test-id naming', () => {
+    const validated = validateProjectManifest({
+      ...project,
+      captureTargets: [{
+        id: 'animation-play',
+        label: {
+          'en': 'Play animation',
+          'zh-CN': '播放动画',
+        },
+        locator: {
+          by: 'test-id',
+          value: 'animation-play',
+        },
+        purpose: 'control',
+      }],
+    })
+
+    expect(validated.captureTargets).toEqual([{
+      id: 'animation-play',
+      label: {
+        'en': 'Play animation',
+        'zh-CN': '播放动画',
+      },
+      locator: {
+        by: 'test-id',
+        value: 'animation-play',
+      },
+      purpose: 'control',
+    }])
+
+    expect(() => validateProjectManifest({
+      ...project,
+      captureTargets: [{
+        id: 'animation-play',
+        label: {
+          'en': 'Play animation',
+          'zh-CN': '播放动画',
+        },
+        locator: {
+          by: 'test-id',
+          value: 'Animation_Play',
+        },
+        purpose: 'control',
+      }],
+    })).toThrow(/test-id.*kebab-case/i)
+  })
+
   it('fails closed for non-HTTPS public URLs and unknown capture flows', () => {
     expect(() =>
       validateProjectManifest({

@@ -7,6 +7,8 @@ import type {
   LocalizedText,
   ProjectAccessMode,
   ProjectCaptureMode,
+  ProjectCaptureTarget,
+  ProjectCaptureTargetPurpose,
   ProjectFact,
   ProjectManifest,
   ProjectRepeatability,
@@ -24,6 +26,12 @@ const GOALS = new Set<CampaignSpec['goal']>([
   'launch',
 ])
 const VIDEO_FORMATS = new Set(['landscape', 'portrait', 'square'])
+const CAPTURE_TARGET_PURPOSES = new Set<ProjectCaptureTargetPurpose>([
+  'control',
+  'result',
+  'state',
+])
+const TEST_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
 
 export function validateProjectManifest(input: unknown): ProjectManifest {
   assertNoSensitiveKeys(input)
@@ -40,6 +48,9 @@ export function validateProjectManifest(input: unknown): ProjectManifest {
     tagline: parseLocalizedText(value.tagline, locales, 'tagline'),
     facts: parseFacts(value.facts, locales),
     captureFlows: parseCaptureFlows(value.captureFlows, locales),
+    ...(value.captureTargets === undefined
+      ? {}
+      : { captureTargets: parseCaptureTargets(value.captureTargets, locales) }),
     ...(value.sourceAccess === undefined
       ? {}
       : { sourceAccess: parseProjectSourceAccess(value.sourceAccess) }),
@@ -248,6 +259,41 @@ function parseCaptureFlows(
   return flows
 }
 
+function parseCaptureTargets(
+  input: unknown,
+  locales: Locale[],
+): ProjectCaptureTarget[] {
+  if (!Array.isArray(input))
+    throw new TypeError('captureTargets must be an array')
+  const targets = input.map((item, index) => {
+    const value = asRecord(item, `captureTargets[${index}]`)
+    const purpose = parseNonEmptyString(
+      value.purpose,
+      `captureTargets[${index}].purpose`,
+    )
+    if (!CAPTURE_TARGET_PURPOSES.has(purpose as ProjectCaptureTargetPurpose))
+      throw new Error(`Unsupported capture target purpose: ${purpose}`)
+    return {
+      id: parseIdentifier(value.id, `captureTargets[${index}].id`),
+      label: parseLocalizedText(
+        value.label,
+        locales,
+        `captureTargets[${index}].label`,
+      ),
+      locator: parseLocator(
+        value.locator,
+        `captureTargets[${index}].locator`,
+      ),
+      purpose: purpose as ProjectCaptureTargetPurpose,
+    }
+  })
+  assertUnique(
+    targets.map(target => target.id),
+    'capture target id',
+  )
+  return targets
+}
+
 function parseCaptureStep(input: unknown, name: string): CaptureStep {
   const value = asRecord(input, name)
   const kind = parseNonEmptyString(value.kind, `${name}.kind`)
@@ -310,6 +356,8 @@ function parseLocator(input: unknown, name: string): SemanticLocator {
     by: by as SemanticLocator['by'],
     value: parseNonEmptyString(value.value, `${name}.value`),
   }
+  if (locator.by === 'test-id' && !TEST_ID_PATTERN.test(locator.value))
+    throw new Error(`${name}.value test-id must use lowercase kebab-case`)
   if (value.name !== undefined)
     locator.name = parseNonEmptyString(value.name, `${name}.name`)
   return locator
