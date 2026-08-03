@@ -26,6 +26,7 @@ describe('content studio workbench', () => {
     expect(wrapper.get('h1').text()).toContain('总览')
     expect(wrapper.find('.hero').exists()).toBe(false)
     expect(wrapper.find('.workspace-tabs').exists()).toBe(false)
+    expect(wrapper.find('.workspace-actions button').exists()).toBe(false)
     expect(wrapper.findAll('select')).toHaveLength(0)
     expect(wrapper.text()).toContain('Algorithm Visualizer')
     expect(wrapper.text()).toContain('待处理任务')
@@ -70,6 +71,8 @@ describe('content studio workbench', () => {
     await flushPromises()
 
     expect(wrapper.get('h1').text()).toContain('发布活动')
+    expect(wrapper.find('.workspace-actions button').exists()).toBe(false)
+    expect(wrapper.get('.workspace-action-status').text()).toContain('运行时未连接')
     expect(wrapper.text()).toContain('内容素材与渠道成品')
     expect(wrapper.text()).toContain('关联执行任务')
     expect(wrapper.find('.campaign-detail .status-rail').exists()).toBe(false)

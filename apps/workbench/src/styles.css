@@ -370,6 +370,13 @@ main {
   font-size: 0.72rem;
 }
 
+.workspace-action-status {
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  line-height: 1.4;
+}
+
 .overview-scope-note {
   display: flex;
   align-items: center;

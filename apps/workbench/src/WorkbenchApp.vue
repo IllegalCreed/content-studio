@@ -1263,12 +1263,15 @@ async function refreshProjectView(): Promise<void> {
         <div class="workspace-actions">
           <span class="connection-pill">{{ runtimeLoading ? '正在连接运行时' : runtimeConnected ? '运行时已连接' : '只读演示' }}</span>
           <button
+            v-if="activeModule === 'activities' && runtimeConnected"
             type="button"
-            :disabled="activeModule !== 'activities' || runtimeLoading || !runtimeConnected"
             @click="openActivityComposer"
           >
-            {{ activeModule === 'activities' ? (runtimeLoading ? '连接中…' : runtimeConnected ? '新建发布活动' : '等待运行时') : '操作暂不可用' }}
+            新建发布活动
           </button>
+          <span v-else-if="activeModule === 'activities'" class="workspace-action-status">
+            {{ runtimeLoading ? '正在连接运行时' : '运行时未连接，暂不能新建活动' }}
+          </span>
         </div>
       </section>
 
