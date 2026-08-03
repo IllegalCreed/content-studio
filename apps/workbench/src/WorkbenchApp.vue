@@ -67,6 +67,11 @@ import {
   type TaskScope,
   type WorkbenchModuleId,
 } from './stores/workbench-ui'
+import {
+  buildWorkbenchUiQuery,
+  parseWorkbenchUiQuery,
+  type WorkbenchUiRouteState,
+} from './stores/workbench-ui-route'
 
 type ModuleId = WorkbenchModuleId
 
@@ -159,6 +164,7 @@ const {
   selectedTaskId,
 } = storeToRefs(uiStore)
 uiStore.setActiveModule(moduleForPath(route.path))
+applyRouteUiState(route.query)
 const runtimeError = ref<string | null>(null)
 const workbenchRuntime = createWorkbenchRuntime()
 const currentSnapshotId = ref(`${snapshot.project.projectId}-snapshot-1`)
@@ -499,13 +505,16 @@ function activityTaskSummary(activityId: string): string {
 
 function selectModule(moduleId: ModuleId): void {
   uiStore.setActiveModule(moduleId)
-  void router.push(pathForModule(moduleId))
   if (moduleId === 'tasks') {
     uiStore.setTaskScope('全部项目')
   }
   if (moduleId === 'project-tasks') {
     uiStore.setTaskScope('当前项目')
   }
+  void router.push({
+    path: pathForModule(moduleId),
+    query: routeQueryForModule(moduleId),
+  })
 }
 
 function moduleForPath(path: string): ModuleId {
@@ -550,7 +559,72 @@ watch(() => route.path, (path) => {
     uiStore.setTaskScope('全部项目')
   if (module === 'project-tasks')
     uiStore.setTaskScope('当前项目')
+  const query = routeQueryForModule(module)
+  if (!sameRouteQuery(route.query, query))
+    void router.replace({ query })
 })
+
+watch(() => route.query, query => applyRouteUiState(query), { deep: true })
+watch(
+  [selectedCampaignId, selectedTaskId, selectedAssetId, assetFilter, selectedChannelId, selectedChannelAccountId],
+  () => {
+    const query = routeQueryForModule(activeModule.value)
+    if (sameRouteQuery(route.query, query))
+      return
+    void router.replace({ query })
+  },
+  { flush: 'post' },
+)
+
+function applyRouteUiState(query: Parameters<typeof parseWorkbenchUiQuery>[0]): void {
+  const state = parseWorkbenchUiQuery(query)
+  if (state.selectedCampaignId !== undefined)
+    uiStore.selectCampaign(state.selectedCampaignId)
+  if (state.selectedTaskId !== undefined)
+    uiStore.selectTask(state.selectedTaskId)
+  if (state.selectedAssetId !== undefined)
+    uiStore.selectAsset(state.selectedAssetId)
+  if (state.assetFilter !== undefined)
+    uiStore.setAssetFilter(state.assetFilter)
+  if (state.selectedChannelId !== undefined)
+    uiStore.selectChannel(state.selectedChannelId)
+  if (state.selectedChannelAccountId !== undefined)
+    uiStore.selectChannelAccount(state.selectedChannelAccountId)
+}
+
+function currentRouteUiState(): WorkbenchUiRouteState {
+  return {
+    assetFilter: assetFilter.value,
+    selectedAssetId: selectedAssetId.value,
+    selectedCampaignId: selectedCampaignId.value,
+    selectedChannelAccountId: selectedChannelAccountId.value ?? undefined,
+    selectedChannelId: selectedChannelId.value,
+    selectedTaskId: selectedTaskId.value,
+  }
+}
+
+function routeQueryForModule(moduleId: ModuleId) {
+  return buildWorkbenchUiQuery(moduleId, currentRouteUiState())
+}
+
+function sameRouteQuery(
+  current: Parameters<typeof parseWorkbenchUiQuery>[0],
+  next: ReturnType<typeof buildWorkbenchUiQuery>,
+): boolean {
+  const keys = new Set([...Object.keys(current), ...Object.keys(next)])
+  return [...keys].every((key) => {
+    const currentValue = queryValues(current[key])
+    const nextValue = queryValues(next[key])
+    return currentValue.length === nextValue.length
+      && currentValue.every((value, index) => value === nextValue[index])
+  })
+}
+
+function queryValues(value: unknown): string[] {
+  if (Array.isArray(value))
+    return value.filter((item): item is string => typeof item === 'string')
+  return typeof value === 'string' ? [value] : []
+}
 
 function openActivityDetail(campaignId: string): void {
   uiStore.selectCampaign(campaignId)
@@ -565,7 +639,10 @@ function selectTask(taskId: string): void {
 function openOwnerTask(taskId: string): void {
   uiStore.selectTask(taskId)
   uiStore.setTaskScope('当前项目')
-  void router.push('/project/tasks')
+  void router.push({
+    path: '/project/tasks',
+    query: routeQueryForModule('project-tasks'),
+  })
 }
 
 function selectAsset(assetId: string): void {
@@ -1294,6 +1371,7 @@ async function refreshProjectView(): Promise<void> {
   <WorkbenchShell
     :project-id="snapshot.project.projectId"
     :project-name="snapshot.project.name"
+    :route-query-for="routeQueryForModule"
     :runtime-connected="snapshot.runtimeConnected"
     @navigate="selectModule"
   >

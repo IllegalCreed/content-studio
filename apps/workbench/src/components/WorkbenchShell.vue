@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import type { LocationQueryRaw } from 'vue-router'
 
 type ModuleId =
   | 'overview'
@@ -22,6 +23,7 @@ interface ModuleLink {
 const props = defineProps<{
   projectId: string
   projectName: string
+  routeQueryFor?: (moduleId: ModuleId) => LocationQueryRaw
   runtimeConnected: boolean
 }>()
 
@@ -102,7 +104,7 @@ function toggleProjectPicker(): void {
         <RouterLink
           v-for="(module, index) in globalModules"
           :key="module.id"
-          :to="paths[module.id]"
+          :to="{ path: paths[module.id], query: props.routeQueryFor?.(module.id) ?? {} }"
           :data-module="module.id"
           :class="{ active: module.id === activeModule }"
           :aria-current="module.id === activeModule ? 'page' : undefined"
@@ -118,7 +120,7 @@ function toggleProjectPicker(): void {
         <RouterLink
           v-for="(module, index) in projectModules"
           :key="module.id + '-project'"
-          :to="paths[module.id]"
+          :to="{ path: paths[module.id], query: props.routeQueryFor?.(module.id) ?? {} }"
           :data-module="module.id"
           :class="{ active: module.id === activeModule }"
           :aria-current="module.id === activeModule ? 'page' : undefined"
