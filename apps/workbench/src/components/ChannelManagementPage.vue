@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { ChannelId } from '@content-studio/core-types'
 import type { ChannelProjection, WorkbenchSnapshot } from '../model'
 
@@ -19,6 +20,26 @@ const emit = defineEmits<{
   'select-channel': [channelId: ChannelId]
   'select-channel-account': [accountId: string]
 }>()
+
+const selectedAccountAction = computed(() => {
+  const account = props.selectedChannelAccount
+  if (account === null) {
+    return props.selectedChannel.health === '未查询'
+      ? '尚未查询渠道状态'
+      : props.selectedChannel.nextAction ?? '暂无待处理动作'
+  }
+  if (account.nextAction !== null)
+    return account.nextAction
+  if (account.statusSource !== 'marketing-ops')
+    return '尚未查询该账号状态'
+  return account.health === '已就绪' ? '暂无待处理动作' : '请检查账号状态'
+})
+
+const selectedMetrics = computed(() =>
+  props.selectedChannel.metrics.length > 0
+    ? props.selectedChannel.metrics.join('、')
+    : '暂无登记的平台指标',
+)
 </script>
 
 <template>
@@ -27,7 +48,7 @@ const emit = defineEmits<{
       <div><p class="eyebrow">全局控制台 / 发布助手状态</p><h2>渠道管理</h2></div>
       <span>{{ props.snapshot.channelBlueprintCount }} 个全局规格 · {{ props.channelSnapshotCount }} 个状态快照</span>
     </div>
-    <p class="section-intro">全局目录定义平台能力和账号；项目选择是否启用并绑定其中一个账号。右侧状态来自 marketing-ops 的只读渠道检查，健康不等于拥有发布权限。</p>
+    <p class="section-intro">全局目录定义平台能力和账号；项目选择是否启用并绑定其中一个账号。平台支持的指标是能力说明，不是实时数据；账号健康只有明确标记为 marketing-ops 状态时才视为已查询。</p>
     <div class="channel-overview-grid">
       <div class="channel-overview-card"><span>全局规格</span><strong>{{ props.snapshot.channelBlueprintCount }}</strong><small>文章、短帖和视频信息</small></div>
       <div class="channel-overview-card"><span>项目已启用</span><strong>{{ props.enabledChannels.length }}</strong><small>活动只能选择这些渠道</small></div>
@@ -63,7 +84,7 @@ const emit = defineEmits<{
         <div v-if="props.selectedChannelAccount" class="channel-account-detail">
           <span>账号状态来源</span><strong>{{ props.selectedChannelAccount.statusSource === 'marketing-ops' ? 'marketing-ops 只读快照' : '项目配置（尚未查询）' }}</strong>
           <span>适配器</span><strong>{{ props.selectedChannelAccount.adapterReady ? '已就绪' : '未就绪' }}</strong>
-          <span>下一步</span><strong>{{ props.selectedChannelAccount.nextAction ?? '保持状态快照' }}</strong>
+          <span>待处理动作</span><strong>{{ selectedAccountAction }}</strong>
         </div>
       </div>
       <div class="channel-binding-form channel-project-link">
@@ -78,9 +99,9 @@ const emit = defineEmits<{
         </div>
       </div>
       <div class="channel-detail-grid">
-        <div><span>项目策略</span><strong>{{ props.selectedChannel.enabled ? '允许作为活动目标' : '未启用' }}</strong></div>
-        <div><span>可监测指标</span><strong>{{ props.selectedChannel.metrics.join('、') }}</strong></div>
-        <div><span>下一步</span><strong>{{ props.selectedChannelAccount?.nextAction ?? props.selectedChannel.nextAction ?? '保持渠道状态快照' }}</strong></div>
+        <div><span>当前项目状态</span><strong>{{ props.selectedChannel.enabled ? '已启用，可作为活动目标' : '未启用，活动不可选择' }}</strong></div>
+        <div><span>平台支持的指标</span><strong>{{ selectedMetrics }}</strong></div>
+        <div><span>账号/适配器状态</span><strong>{{ selectedAccountAction }}</strong></div>
       </div>
       <p class="channel-boundary-note">状态来源：{{ props.selectedChannelAccount?.statusSource === 'marketing-ops' ? 'marketing-ops 只读快照' : '项目配置（尚未读取渠道快照）' }}。这里只展示能力和状态，不保存凭据，也不会因为“已就绪”自动获得发布权限。</p>
     </article>
