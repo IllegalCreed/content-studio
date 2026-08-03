@@ -42,6 +42,8 @@ const progress = computed(() =>
           class="preview-image"
           :src="job.previewUrl"
           :alt="job.previewLabel"
+          loading="lazy"
+          decoding="async"
         >
         <template v-else>
           <div class="preview-orbit orbit-one" />

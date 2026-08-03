@@ -7,7 +7,9 @@ packages:
   - apps/*
 
 catalog:
+  pinia: ^4.0.2
   playwright: ^1.62.0
+  vue-router: ^4.6.4
 catalogs:
   dev:
     '@antfu/eslint-config': 9.2.0

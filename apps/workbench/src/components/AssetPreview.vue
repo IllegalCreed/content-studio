@@ -42,7 +42,7 @@ watch(
     <pre v-if="kind === 'text' && textContent !== null" data-testid="asset-preview-text">{{ textContent }}</pre>
     <p v-else-if="kind === 'text' && loadError" class="asset-preview-empty">文字预览暂时不可用，请检查文件是否仍在登记的项目目录中。</p>
     <p v-else-if="kind === 'text'" class="asset-preview-empty">正在读取文字预览…</p>
-    <img v-else-if="kind === 'image' && src" :src="src" :alt="label">
+    <img v-else-if="kind === 'image' && src" :src="src" :alt="label" loading="lazy" decoding="async">
     <video v-else-if="kind === 'video' && src" :src="src" controls preload="metadata">
       当前浏览器不支持视频预览。
     </video>

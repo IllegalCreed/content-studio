@@ -1,11 +1,20 @@
 import { mount } from '@vue/test-utils'
+import { createPinia } from 'pinia'
 import { describe, expect, it } from 'vitest'
-import App from './App.vue'
+import { createWorkbenchRouter } from './router'
+import WorkbenchApp from './WorkbenchApp.vue'
 import './styles.css'
 
 describe('content studio workbench', () => {
   it('把规划中的模块作为可切换的功能页面展示', async () => {
-    const wrapper = mount(App)
+    const router = createWorkbenchRouter(true)
+    await router.push('/overview')
+    await router.isReady()
+    const wrapper = mount(WorkbenchApp, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
 
     expect(wrapper.find('[data-testid="workbench-dashboard"]').exists()).toBe(true)
     expect(wrapper.get('h1').text()).toContain('总览')
