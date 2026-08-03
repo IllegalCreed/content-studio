@@ -635,6 +635,79 @@ export interface WorkbenchSnapshot {
   tasks: TaskProjection[]
 }
 
+interface DemoTaskInput {
+  accountAlias: string
+  activityId: string
+  activityTitle: string
+  channel: ChannelId
+  contentId?: string
+  contentTitle: string
+  eventMessage: string
+  projectId: string
+  taskId: string
+  taskKind: ExecutionTask['kind']
+  productionType?: ExecutionTask['productionType']
+  status: ExecutionTask['status']
+  attempt: number
+  title: string
+}
+
+function demoTaskProjection(input: DemoTaskInput): TaskProjection {
+  const task: ExecutionTask = {
+    activityId: input.activityId,
+    attempt: input.attempt,
+    channel: input.channel,
+    ...(input.contentId === undefined ? {} : { contentId: input.contentId }),
+    kind: input.taskKind,
+    ...(input.productionType === undefined ? {} : { productionType: input.productionType }),
+    projectId: input.projectId,
+    skipStages: [],
+    status: input.status,
+    taskId: input.taskId,
+  }
+  const event: ExecutionTaskEvent = {
+    attempt: task.attempt,
+    eventId: `${task.taskId}-demo-event`,
+    kind: 'status-changed',
+    message: input.eventMessage,
+    projectId: task.projectId,
+    sequence: 1,
+    status: task.status,
+    taskId: task.taskId,
+    schemaVersion: 1,
+  }
+  const lifecycle = taskLifecycleProjection(task, [event])
+  return {
+    accountAlias: input.accountAlias,
+    activityId: input.activityId,
+    activityTitle: input.activityTitle,
+    attempt: task.attempt,
+    channel: input.channel,
+    ...(input.contentId === undefined ? {} : { contentId: input.contentId }),
+    contentTitle: input.contentTitle,
+    detail: lifecycle.detail,
+    attempts: lifecycle.attempts,
+    events: [{
+      attempt: event.attempt,
+      kind: event.kind,
+      message: event.message,
+      sequence: event.sequence,
+      status: event.status,
+      summary: taskEventSummary(event),
+    }],
+    kind: task.kind === 'production'
+      ? '制作'
+      : task.kind === 'publication'
+        ? '发布'
+        : '监测',
+    progress: lifecycle.progress,
+    status: task.status,
+    steps: lifecycle.steps,
+    taskId: task.taskId,
+    title: input.title,
+  }
+}
+
 function channelAccount(input: Omit<ChannelAccountProjection, 'assignedProjects'> & { assignedProjects?: string[] }): ChannelAccountProjection {
   return {
     assignedProjects: input.assignedProjects ?? (input.isDefault ? ['algorithm-visualizer'] : []),
@@ -1265,69 +1338,52 @@ export const snapshot: WorkbenchSnapshot = {
     retention: '最终素材长期保留，临时产物 30 天',
   },
   tasks: [
-    {
+    demoTaskProjection({
       accountAlias: 'Algorithm Visualizer',
       activityId: 'quick-sort-guide',
       activityTitle: '快速排序可视化指南',
-      attempt: 2,
       channel: 'bilibili',
+      contentId: 'quick-sort-video-bilibili',
       contentTitle: '快速排序演示视频',
-      detail: '7 / 12 个动作已完成 · 预览帧已生成',
-      attempts: [{ attempt: 2, eventCount: 0, lastEvent: '演示数据未加载运行事件', status: '录制中' }],
-      events: [],
-      kind: '制作',
-      progress: 58,
-      status: 'recording',
-      steps: [
-        { detail: '主题和事实已确认', label: '生成脚本和拍摄大纲', status: 'done' },
-        { detail: '12 个浏览器动作已编译', label: '生成分镜和录制计划', status: 'done' },
-        { detail: '已完成 7 / 12 个动作', label: '浏览器录制', status: 'active' },
-        { detail: '等待录制完成', label: '生成预览帧', status: 'pending' },
-        { detail: '等待录制完成', label: '合成视频和资源变体', status: 'pending' },
-      ],
+      eventMessage: '录制阶段已开始，预览帧已生成。具体动作进度见录制产物。',
+      projectId: 'algorithm-visualizer',
       taskId: 'quick-sort-guide-recording',
+      taskKind: 'production',
+      productionType: 'video',
+      status: 'recording',
+      attempt: 2,
       title: '录制快速排序演示视频',
-    },
-    {
+    }),
+    demoTaskProjection({
       accountAlias: 'Algorithm Visualizer',
       activityId: 'release-notes',
       activityTitle: '版本更新发布',
-      attempt: 1,
       channel: 'x',
+      contentId: 'release-notes-x',
       contentTitle: 'Version update overview',
-      detail: '等待渠道授权人登录、审核和最终点击',
-      attempts: [{ attempt: 1, eventCount: 0, lastEvent: '演示数据未加载运行事件', status: '等待人工' }],
-      events: [],
-      kind: '发布',
-      status: 'awaiting-owner',
-      steps: [
-        { detail: '文章、视频和封面已准备', label: '准备渠道发布包', status: 'done' },
-        { detail: '等待渠道授权人处理', label: '官方页面审核和最终点击', status: 'active' },
-        { detail: '需要公开地址才能继续', label: '保存发布回执', status: 'pending' },
-      ],
+      eventMessage: '等待渠道授权人登录、审核和最终点击',
+      projectId: 'algorithm-visualizer',
       taskId: 'release-notes-publish-x',
+      taskKind: 'publication',
+      status: 'awaiting-owner',
+      attempt: 1,
       title: '发布到 X',
-    },
-    {
+    }),
+    demoTaskProjection({
       accountAlias: 'Algorithm Visualizer',
       activityId: 'quick-sort-guide',
       activityTitle: '快速排序可视化指南',
-      attempt: 1,
       channel: 'bilibili',
+      contentId: 'quick-sort-video-bilibili',
       contentTitle: '快速排序演示视频',
-      detail: '发布后 1 小时采集播放量、点赞和评论',
-      attempts: [{ attempt: 1, eventCount: 0, lastEvent: '演示数据未加载运行事件', status: '监测中' }],
-      events: [],
-      kind: '监测',
-      status: 'monitoring',
-      steps: [
-        { detail: '已绑定发布回执', label: '建立监测计划', status: 'done' },
-        { detail: '等待下一个采集窗口', label: '采集播放量和互动', status: 'active' },
-        { detail: '发布后 48 小时采集', label: '补充长期数据', status: 'pending' },
-      ],
+      eventMessage: '发布后 1 小时采集播放量、点赞和评论',
+      projectId: 'algorithm-visualizer',
       taskId: 'quick-sort-guide-monitoring',
+      taskKind: 'monitoring',
+      status: 'monitoring',
+      attempt: 1,
       title: '追踪快速排序视频表现',
-    },
+    }),
   ],
 }
 

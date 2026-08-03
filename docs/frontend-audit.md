@@ -74,8 +74,8 @@
 - 任务是执行记录，类型为制作、发布、监测，状态来自任务生命周期：
   `queued → generating → recording → composing → awaiting-owner → published → monitoring`，
   另有 `failed`、`cancelled` 终态/分支。
-- `taskLifecycleProjection()` 已经根据持久化任务和事件生成任务阶段；静态演示任务的
-  阶段仍在 `model.ts` 中固定，是演示数据，不是运行时引擎的事实。
+- `taskLifecycleProjection()` 已经根据任务和事件生成任务阶段；静态演示任务也通过
+  `demoTaskProjection()` 使用同一套生命周期计算，因此演示和运行时不会再出现两套阶段名。
 - **UI 规则**：活动详情显示“活动状态”；任务面板显示“任务状态”和“任务阶段”。两者
   不再使用“活动步骤”这个叫法。
 

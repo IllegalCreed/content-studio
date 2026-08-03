@@ -8,6 +8,7 @@ import {
   recordingReceiptToVideoJob,
   runtimeActivityArtifacts,
   runtimeProjectAssets,
+  snapshot,
   taskLifecycleProjection,
   videoViewportForFormat,
 } from './model'
@@ -291,6 +292,29 @@ describe('runtime report projection', () => {
       source: '活动产物晋升',
       version: 'v1',
     }])
+  })
+})
+
+describe('demo task projection', () => {
+  it('uses the same lifecycle stages as runtime tasks', () => {
+    const [recording, publication, monitoring] = snapshot.tasks
+
+    expect(recording?.steps.map(step => step.label)).toEqual([
+      '排队中',
+      '生成中',
+      '录制中',
+      '合成中',
+    ])
+    expect(recording?.progress).toBe(67)
+    expect(publication?.steps.map(step => step.label)).toEqual([
+      '排队中',
+      '等待人工',
+      '已发布',
+    ])
+    expect(monitoring?.steps.map(step => step.label)).toEqual([
+      '排队中',
+      '监测中',
+    ])
   })
 })
 

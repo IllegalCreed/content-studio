@@ -87,7 +87,7 @@ describe('content studio workbench', () => {
     expect(wrapper.get('[data-testid="start-task"]').attributes()).toHaveProperty('disabled')
     expect(wrapper.get('[data-testid="record-task"]').attributes()).toHaveProperty('disabled')
     expect(wrapper.find('.task-detail .status-rail').exists()).toBe(true)
-    expect(wrapper.text()).toContain('浏览器录制')
+    expect(wrapper.text()).toContain('录制中')
     expect(wrapper.text()).toContain('快速排序可视化指南')
     const retryButton = wrapper.get('[data-testid="retry-task"]')
     await wrapper.get('button[data-task-id="release-notes-publish-x"]').trigger('click')
