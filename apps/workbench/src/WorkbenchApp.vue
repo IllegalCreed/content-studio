@@ -13,7 +13,11 @@ import StatusRail from './components/StatusRail.vue'
 import SelectMenu from './components/SelectMenu.vue'
 import TaskBoardPage from './components/TaskBoardPage.vue'
 import WorkbenchShell from './components/WorkbenchShell.vue'
-import { preferRuntimeData } from './projections'
+import {
+  activityToCampaign,
+  preferRuntimeData,
+  taskToProjection,
+} from './projections'
 import VideoJobPanel from './components/VideoJobPanel.vue'
 import AssetPreview from './components/AssetPreview.vue'
 import type {
@@ -22,41 +26,27 @@ import type {
   CampaignProjection,
   ChannelContentProjection,
   ChannelProjection,
-  ContentGroupProjection,
-  VideoPlanProjection,
   WorkbenchSnapshot,
 } from './model'
 import type {
-  CaptureFlow,
-  ChannelContent,
   ChannelId,
-  ContentGroup,
   CreatePublishingActivityInput,
   CreateChannelContentInput,
   CreateContentGroupInput,
-  ExecutionTask,
-  ExecutionTaskEvent,
   ActivityArtifact,
-  OwnerHandoff,
   ProjectAsset,
   ProjectChannelBinding,
   PublicationPlan,
-  PublishingActivity,
-  RecordingAttemptRecord,
   StorageCleanupPreview,
   VideoFormat,
 } from '@content-studio/core-types'
 import {
-  activityArtifactProjections,
   humanizeActivityStatus,
   humanizeTaskEventKind,
   humanizeStatus,
   runtimeActivityArtifacts,
   runtimeProjectAssets,
   runtimeReports,
-  recordingReceiptToVideoJob,
-  taskEventSummary,
-  taskLifecycleProjection,
   videoViewportForFormat,
 } from './model'
 import { createWorkbenchRuntime } from './runtime'
@@ -1086,7 +1076,10 @@ async function saveActivity(): Promise<void> {
   }
   try {
     const activity = await workbenchRuntime.createActivity(input)
-    snapshot.campaigns = [activityToCampaign(activity), ...snapshot.campaigns]
+    snapshot.campaigns = [activityToCampaign({
+      accountAliasForChannel: projectAccountAliasForChannel,
+      activity,
+    }), ...snapshot.campaigns]
     const projectView = await workbenchRuntime.project(snapshot.project.projectId)
     applyProjectView(projectView)
     uiStore.selectCampaign(activity.activityId)
@@ -1100,177 +1093,6 @@ async function saveActivity(): Promise<void> {
   }
   finally {
     activitySaving.value = false
-  }
-}
-
-function activityToCampaign(
-  activity: PublishingActivity,
-  contentGroups: ContentGroup[] = [],
-  channelContents: ChannelContent[] = [],
-  captureFlows: CaptureFlow[] = [],
-  ownerHandoffs: OwnerHandoff[] = [],
-  activityArtifacts: ActivityArtifact[] = [],
-  projectAssets: ProjectAsset[] = [],
-  productionTasks: ExecutionTask[] = [],
-  recordingReceipts: RecordingAttemptRecord[] = [],
-): CampaignProjection {
-  const topic = activity.topic['zh-CN'] ?? activity.topic.en
-  const groups = contentGroups
-    .filter(group => group.activityId === activity.activityId)
-    .map<ContentGroupProjection>(group => ({
-      contentGroupId: group.contentGroupId,
-      contents: channelContents
-        .filter(content => content.contentGroupId === group.contentGroupId)
-        .map<ChannelContentProjection>(content => ({
-          accountAlias: projectAccountAliasForChannel(content.channel),
-          artifactIds: content.artifactIds,
-          body: content.body,
-          channel: content.channel,
-          contentId: content.contentId,
-          format: content.format === 'article' ? '文章' : '视频',
-          locale: content.locale,
-          status: '已生成',
-          title: content.title,
-        })),
-      coreMessage: group.coreMessage,
-      title: group.title,
-    }))
-  const videoPlan = activity.video === undefined
-    ? null
-    : createVideoPlanProjection(activity, captureFlows)
-  const videoTask = productionTasks.find(task =>
-    task.activityId === activity.activityId
-    && task.kind === 'production'
-    && task.productionType === 'video',
-  )
-  const latestVideoReceipt = videoTask === undefined
-    ? undefined
-    : recordingReceipts
-      .filter(receipt => receipt.jobId === videoTask.taskId)
-      .sort((left, right) => right.attempt - left.attempt)[0]
-  const videoJob = latestVideoReceipt === undefined
-    ? null
-    : recordingReceiptToVideoJob(latestVideoReceipt)
-  const referencedAssetIds = new Set(
-    channelContents
-      .filter(content => content.activityId === activity.activityId)
-      .flatMap(content => content.artifactIds)
-      .filter(artifactId => projectAssets.some(asset =>
-        asset.assetId === artifactId || asset.sourceArtifactId === artifactId,
-      )),
-  )
-  return {
-    activityArtifacts: activityArtifactProjections(
-      activityArtifacts.filter(artifact => artifact.activityId === activity.activityId),
-    ),
-    activityStatus: activity.status === 'active'
-      ? '进行中'
-      : activity.status === 'planned'
-        ? '已规划'
-        : activity.status === 'completed'
-          ? '已完成'
-          : activity.status === 'archived'
-            ? '已归档'
-            : '草稿',
-    assets: referencedAssetIds.size,
-    campaignId: activity.activityId,
-    channels: activity.channels.map(channel => channel.id),
-    contentGroups: groups,
-    executionStatus: videoTask?.status ?? 'queued',
-    handoffs: ownerHandoffs
-      .filter(handoff => handoff.activityId === activity.activityId)
-      .map(handoff => ({
-        accountAlias: projectAccountAliasForChannel(handoff.channel)
-          ?? '项目账号待绑定',
-        checklist: handoff.checklist,
-        channel: handoff.channel,
-        expiresAt: handoff.expiresAt,
-        handoffId: handoff.handoffId,
-        officialTargetUrl: handoff.officialTargetUrl,
-        reason: '等待渠道授权人完成登录、审核和最终点击',
-        status: handoff.status === 'pending' ? 'waiting' : 'ready',
-      })),
-    nextAction: videoJob?.outcome === '失败'
-      ? '录制失败，请查看日志摘要后重试。'
-      : groups.length > 0
-        ? '渠道内容已保存，下一步进入制作任务。'
-        : '等待 AI 生成内容和拍摄大纲。',
-    referencedAssets: [...referencedAssetIds],
-    title: topic,
-    topic,
-    version: activity.version,
-    videoPlan,
-    videoJob,
-  }
-}
-
-function createVideoPlanProjection(
-  activity: PublishingActivity,
-  captureFlows: CaptureFlow[],
-): VideoPlanProjection {
-  const video = activity.video!
-  const flowById = new Map(captureFlows.map(flow => [flow.id, flow]))
-  const outlineByFlowId = new Map((video.outline ?? []).map(scene => [scene.flowId, scene]))
-  return {
-    format: video.format,
-    planVersion: video.planVersion ?? activity.version,
-    reviewStatus: activity.videoPlanReviewStatus === 'confirmed' ? '已确认' : '待确认',
-    viewport: videoViewportForFormat(video),
-    scenes: video.flowIds.map((flowId) => {
-      const flow = flowById.get(flowId)
-      const outline = outlineByFlowId.get(flowId)
-      return {
-        flowId,
-        objective: outline?.objective['zh-CN'] ?? outline?.objective.en ?? '按项目流程执行该场景。',
-        startPath: flow?.startPath ?? '未登记路径',
-        title: outline?.title['zh-CN'] ?? outline?.title.en ?? flow?.title['zh-CN'] ?? flow?.title.en ?? flowId,
-      }
-    }),
-  }
-}
-
-function taskToProjection(
-  task: ExecutionTask,
-  events: ExecutionTaskEvent[] = [],
-): WorkbenchSnapshot['tasks'][number] {
-  const campaign = snapshot.campaigns.find(candidate => candidate.campaignId === task.activityId)
-  const channel = task.channel ?? campaign?.channels[0] ?? 'github'
-  const account = projectAccountAliasForChannel(channel) ?? '未绑定账号'
-  const activityTitle = campaign?.title ?? task.activityId
-  const contentTitle = campaign?.contentGroups
-    .flatMap(group => group.contents)
-    .find(content => content.contentId === task.contentId)?.title
-    ?? '等待 AI 生成内容'
-  const lifecycle = taskLifecycleProjection(task, events)
-  return {
-    accountAlias: account,
-    activityId: task.activityId,
-    activityTitle,
-    attempt: task.attempt,
-    channel,
-    ...(task.contentId === undefined ? {} : { contentId: task.contentId }),
-    contentTitle,
-    attempts: lifecycle.attempts,
-    detail: lifecycle.detail,
-    events: events.map(event => ({
-      attempt: event.attempt,
-      kind: event.kind,
-      message: event.message,
-      sequence: event.sequence,
-      ...(event.stage === undefined ? {} : { stage: event.stage }),
-      summary: taskEventSummary(event),
-      status: event.status,
-    })),
-    kind: task.kind === 'production'
-      ? '制作'
-      : task.kind === 'publication'
-        ? '发布'
-        : '监测',
-    progress: lifecycle.progress,
-    status: task.status,
-    steps: lifecycle.steps,
-    taskId: task.taskId,
-    title: task.kind === 'production' ? `制作：${activityTitle}` : `${task.kind}：${activityTitle}`,
   }
 }
 
@@ -1327,19 +1149,18 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
       const binding = bindingByChannel.get(channel.channel)
       channel.projectAccountId = binding?.accountRef ?? null
     })
-    const runtimeCampaigns = projectView.activities.map(activity =>
-      activityToCampaign(
-        activity,
-        projectView.contentGroups,
-        projectView.channelContents,
-        projectView.snapshot.manifest.captureFlows,
-        projectView.ownerHandoffs,
-        projectView.activityArtifacts,
-        projectView.projectAssets,
-        projectView.tasks,
-        projectView.recordingReceipts,
-      ),
-    )
+    const runtimeCampaigns = projectView.activities.map(activity => activityToCampaign({
+      accountAliasForChannel: projectAccountAliasForChannel,
+      activity,
+      activityArtifacts: projectView.activityArtifacts,
+      captureFlows: projectView.snapshot.manifest.captureFlows,
+      channelContents: projectView.channelContents,
+      contentGroups: projectView.contentGroups,
+      ownerHandoffs: projectView.ownerHandoffs,
+      productionTasks: projectView.tasks,
+      projectAssets: projectView.projectAssets,
+      recordingReceipts: projectView.recordingReceipts,
+    }))
     snapshot.projectAssets = runtimeProjectAssets(projectView)
     snapshot.activityArtifacts = runtimeActivityArtifacts(projectView)
     snapshot.storage = {
@@ -1357,9 +1178,12 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
     )
     runtimeActivityIds.value = new Set(projectView.activities.map(activity => activity.activityId))
     runtimeTaskIds.value = new Set(projectView.tasks.map(task => task.taskId))
-    const runtimeTasks = projectView.tasks.map(task =>
-      taskToProjection(task, projectView.taskEvents[task.taskId] ?? []),
-    )
+    const runtimeTasks = projectView.tasks.map(task => taskToProjection({
+      accountAliasForChannel: projectAccountAliasForChannel,
+      campaigns: runtimeCampaigns,
+      events: projectView.taskEvents[task.taskId] ?? [],
+      task,
+    }))
     snapshot.tasks = preferRuntimeData(
       runtimeTasks,
       snapshot.tasks,
