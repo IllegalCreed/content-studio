@@ -377,46 +377,6 @@ main {
   line-height: 1.4;
 }
 
-.overview-scope-note {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-top: 1rem;
-  padding: 0.9rem 1rem;
-  border: 1px dashed var(--stroke);
-  background: rgb(217 255 67 / 3%);
-}
-
-.overview-scope-note > div {
-  display: grid;
-  gap: 0.2rem;
-}
-
-.overview-scope-note .eyebrow {
-  margin: 0;
-}
-
-.overview-scope-note strong {
-  font-size: 0.82rem;
-  font-weight: 500;
-}
-
-.overview-scope-note span {
-  color: var(--muted);
-  font-size: 0.68rem;
-  line-height: 1.45;
-}
-
-.overview-scope-note button {
-  flex: 0 0 auto;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid var(--stroke);
-  background: transparent;
-  color: var(--acid);
-  font-size: 0.68rem;
-}
-
 .overview-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1207,6 +1167,20 @@ button:disabled {
   grid-template-columns: minmax(15rem, 0.8fr) minmax(0, 1.8fr);
   gap: 1rem;
   margin-top: 0.75rem;
+}
+
+.task-scope-note,
+.channel-directory-status {
+  margin: 1rem 0 0;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.channel-directory-status {
+  margin-top: 0.25rem;
 }
 
 .task-empty-state {
@@ -2175,13 +2149,9 @@ footer {
 }
 
 @media (max-width: 640px) {
-  .overview-scope-note {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .overview-scope-note button {
-    width: 100%;
+  .task-scope-note,
+  .channel-directory-status {
+    text-align: left;
   }
 
   .context-list {

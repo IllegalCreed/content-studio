@@ -34,16 +34,9 @@ const emit = defineEmits<{
 
 <template>
   <section id="tasks" class="module-section">
-    <div class="section-heading">
-      <div>
-        <p class="eyebrow">执行层投影</p>
-        <h2>任务清单</h2>
-      </div>
-      <span data-testid="task-scope-note">
-        {{ props.activeTaskScope === '全部项目' ? `${props.projectCount} 个已接入项目 · 统一执行记录` : `当前项目 · ${props.projectName}` }}
-      </span>
-    </div>
-    <p class="section-intro">制作、发布、监测是执行任务，不是发布活动里的业务对象。取消和重试最终由本地运行时执行。</p>
+    <p class="task-scope-note" data-testid="task-scope-note">
+      {{ props.activeTaskScope === '全部项目' ? `${props.projectCount} 个已接入项目 · 统一执行记录` : `当前项目 · ${props.projectName}` }}
+    </p>
     <div class="task-summary">
       <div v-for="(count, kind) in props.taskCounts" :key="kind" class="task-summary-card">
         <span>{{ kind }}任务</span><strong>{{ count }}</strong>

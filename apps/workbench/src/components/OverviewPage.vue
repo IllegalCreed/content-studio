@@ -20,15 +20,6 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <section class="overview-scope-note" data-testid="overview-scope-note">
-    <div>
-      <p class="eyebrow">全局控制台 / 跨项目汇总</p>
-      <strong>这里看所有项目的活动、任务和待人工事项</strong>
-      <span>当前本地运行时已加载 {{ props.projectCount }} 个项目；下面的活动和任务都带有项目归属。</span>
-    </div>
-    <button type="button" @click="emit('go-project')">查看当前项目</button>
-  </section>
-
   <section class="overview-stats" aria-label="全局总览">
     <div class="overview-stat">
       <span>待处理任务</span>
