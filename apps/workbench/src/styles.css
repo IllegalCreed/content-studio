@@ -1047,6 +1047,16 @@ button:disabled {
   background: linear-gradient(90deg, rgb(217 255 67 / 7%), transparent 55%), var(--panel);
 }
 
+.handoff-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.handoff-list .handoff-card {
+  margin-top: 0;
+}
+
 .channel-badge {
   color: var(--acid);
   border-color: #596233;

@@ -10,18 +10,18 @@
 
 ## 当前页面事实
 
-| 页面         | 当前入口                          | 当前状态                               | 结论                                                               |
-| ------------ | --------------------------------- | -------------------------------------- | ------------------------------------------------------------------ |
-| 总览         | `/overview`                       | `components/OverviewPage.vue`          | 已有跨项目概览投影，页面模板已独立                                 |
-| 全局任务面板 | `/tasks`                          | `components/TaskBoardPage.vue`         | 能显示制作/发布/监测三类执行记录；筛选和选中项仍是本地状态         |
-| 全局渠道管理 | `/channels`                       | `components/ChannelManagementPage.vue` | 已有渠道规格、账号、项目引用数和 marketing-ops 状态展示            |
-| 项目概览     | `/project`                        | `components/ProjectOverviewPage.vue`   | 已有项目渠道开关、唯一账号绑定和项目摘要                           |
-| 发布活动列表 | `/project/activities`             | `components/ActivityListPage.vue`      | 已有主题列表和创建表单；详情已改为独立路由                         |
-| 活动详情     | `/project/activities/:activityId` | `pages/ActivityDetailPage.vue`         | 已显示主题、渠道、业务进度、内容组、渠道结果、任务、产物和视频计划 |
-| 项目任务面板 | `/project/tasks`                  | `components/TaskBoardPage.vue`         | 是全局任务数据的当前项目投影，不是活动业务层级                     |
-| 项目素材库   | `/project/assets`                 | `components/AssetLibraryPage.vue`      | 已区分项目素材与活动产物，并提供预览、晋升和清理预览               |
-| 待人工处理   | `/project/owner`                  | `components/OwnerInboxPage.vue`        | 展示 owner handoff；仍需把“待处理事项”与任务上下文连接得更紧       |
-| 项目报告     | `/project/reports`                | `components/ProjectReportsPage.vue`    | 已展示回执和监测摘要；当前主要是投影数据                           |
+| 页面         | 当前入口                          | 当前状态                               | 结论                                                                           |
+| ------------ | --------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------ |
+| 总览         | `/overview`                       | `components/OverviewPage.vue`          | 已有跨项目概览投影，页面模板已独立                                             |
+| 全局任务面板 | `/tasks`                          | `components/TaskBoardPage.vue`         | 能显示制作/发布/监测三类执行记录；筛选和选中项仍是本地状态                     |
+| 全局渠道管理 | `/channels`                       | `components/ChannelManagementPage.vue` | 已有渠道规格、账号、项目引用数和 marketing-ops 状态展示                        |
+| 项目概览     | `/project`                        | `components/ProjectOverviewPage.vue`   | 已有项目渠道开关、唯一账号绑定和项目摘要                                       |
+| 发布活动列表 | `/project/activities`             | `components/ActivityListPage.vue`      | 已有主题列表和创建表单；详情已改为独立路由                                     |
+| 活动详情     | `/project/activities/:activityId` | `pages/ActivityDetailPage.vue`         | 已显示主题、渠道、业务进度、内容组、渠道结果、任务、产物和视频计划             |
+| 项目任务面板 | `/project/tasks`                  | `components/TaskBoardPage.vue`         | 是全局任务数据的当前项目投影，不是活动业务层级                                 |
+| 项目素材库   | `/project/assets`                 | `components/AssetLibraryPage.vue`      | 已区分项目素材与活动产物，并提供预览、晋升和清理预览                           |
+| 待人工处理   | `/project/owner`                  | `components/OwnerInboxPage.vue`        | 逐条展示 owner handoff，并可跳回已建立的对应任务；完成/取消仍待 runtime 写接口 |
+| 项目报告     | `/project/reports`                | `components/ProjectReportsPage.vue`    | 已展示回执和监测摘要；当前主要是投影数据                                       |
 
 根路由现在重定向到 `/overview`，活动详情已经可以深链接和返回活动列表。运行时
 不可用时，页面必须明确显示“演示数据/只读”，不能把演示数据伪装成真实状态。
@@ -39,8 +39,9 @@
 - **任务步骤**：需要区分数据来源。运行时任务通过 `taskLifecycleProjection()` 按任务状态和
   事件计算阶段；`model.ts` 中固定的多步内容只属于静态演示任务，不代表运行时任务的真实
   步骤。后续要让演示数据也复用同一套阶段投影，避免用户看到两种表现。
-- **待人工处理**：本轮已补“查看对应任务”，可以回到项目任务面板继续查看上下文；完成/取消
-  handoff 的真实写操作和活动详情中的回执回写仍待 runtime 接口接通。
+- **待人工处理**：待人工页现在会逐条展示所有 handoff，并为已建立任务提供“查看对应任务”，
+  可以回到项目任务面板继续查看上下文；完成/取消 handoff 的真实写操作和活动详情中的回执
+  回写仍待 runtime 接口接通。
 - **活动详情业务中枢**：本轮已补“活动业务进度”和“渠道结果”区，静态演示活动也会显示
   内容组；运行时页面展示发布安排、成功/失败回执、公开地址和最新监测指标来源。按渠道
   多时间点的完整报告时间线仍待后续实现。
