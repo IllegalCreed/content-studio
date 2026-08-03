@@ -222,18 +222,15 @@ main {
 }
 
 .project-switcher-chevron {
-  display: inline-flex;
-  width: 1rem;
-  height: 1rem;
-  align-items: center;
-  justify-content: center;
-  align-self: center;
-  flex: 0 0 1rem;
+  flex: 0 0 auto;
+  width: 0.85rem;
+  height: 0.85rem;
   margin-left: 0.35rem;
-  color: var(--acid);
-  font-size: 0.9rem;
-  line-height: 1;
-  transform: translateY(-0.24rem);
+  fill: none;
+  stroke: var(--acid);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
 }
 
 .project-menu {

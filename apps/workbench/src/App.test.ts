@@ -16,6 +16,8 @@ describe('content studio workbench', () => {
     expect(wrapper.text()).toContain('待处理任务')
 
     const projectSwitcher = wrapper.get('button[aria-label="切换项目"]')
+    expect(wrapper.get('.project-switcher-chevron').element.tagName).toBe('svg')
+    expect(wrapper.find('.project-switcher-chevron path').exists()).toBe(true)
     expect(projectSwitcher.attributes('aria-expanded')).toBe('false')
     await projectSwitcher.trigger('click')
     expect(projectSwitcher.attributes('aria-expanded')).toBe('true')

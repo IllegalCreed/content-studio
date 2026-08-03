@@ -1100,7 +1100,14 @@ async function refreshProjectView(): Promise<void> {
           >
             <span class="project-switcher-label">当前项目</span>
             <strong>{{ snapshot.project.name }}</strong>
-            <span class="project-switcher-chevron" aria-hidden="true">⌄</span>
+            <svg
+              class="project-switcher-chevron"
+              viewBox="0 0 12 12"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="m2.25 4.25 3.75 3.75 3.75-3.75" />
+            </svg>
           </button>
           <div
             v-if="projectPickerOpen"
