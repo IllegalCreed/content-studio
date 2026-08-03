@@ -6,13 +6,15 @@ import type {
 import { describe, expect, it } from 'vitest'
 import {
   recordingReceiptToVideoJob,
-  runtimeActivityArtifacts,
-  runtimeProjectAssets,
   snapshot,
   taskLifecycleProjection,
   videoViewportForFormat,
 } from './model'
-import { runtimeReports } from './projections'
+import {
+  runtimeActivityArtifacts,
+  runtimeProjectAssets,
+  runtimeReports,
+} from './projections'
 
 function projectView(overrides: Partial<ContentStudioProjectView> = {}): ContentStudioProjectView {
   return {

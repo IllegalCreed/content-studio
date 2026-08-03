@@ -16,6 +16,8 @@ import WorkbenchShell from './components/WorkbenchShell.vue'
 import {
   activityToCampaign,
   preferRuntimeData,
+  runtimeActivityArtifacts,
+  runtimeProjectAssets,
   runtimeReports,
   taskToProjection,
 } from './projections'
@@ -45,8 +47,6 @@ import {
   humanizeActivityStatus,
   humanizeTaskEventKind,
   humanizeStatus,
-  runtimeActivityArtifacts,
-  runtimeProjectAssets,
   videoViewportForFormat,
 } from './model'
 import { createWorkbenchRuntime } from './runtime'

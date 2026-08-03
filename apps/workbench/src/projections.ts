@@ -14,6 +14,9 @@ import type {
   RecordingAttemptRecord,
 } from '@content-studio/core-types'
 import type {
+  ActivityArtifactProjection,
+  AssetPreviewKind,
+  AssetProjection,
   CampaignProjection,
   ChannelContentProjection,
   ContentGroupProjection,
@@ -22,7 +25,6 @@ import type {
   VideoPlanProjection,
 } from './model'
 import {
-  activityArtifactProjections,
   recordingReceiptToVideoJob,
   taskEventSummary,
   taskLifecycleProjection,
@@ -35,6 +37,122 @@ export function preferRuntimeData<T>(
   runtimeConnected: boolean,
 ): T[] {
   return [...(runtimeConnected ? runtimeItems : demoItems)]
+}
+
+export function runtimeActivityArtifacts(
+  projectView: ContentStudioProjectView,
+): ActivityArtifactProjection[] {
+  return activityArtifactProjections(projectView.activityArtifacts)
+}
+
+export function activityArtifactProjections(
+  artifacts: readonly ActivityArtifact[],
+): ActivityArtifactProjection[] {
+  return artifacts.map(artifact => ({
+    activityId: artifact.activityId,
+    artifactId: artifact.artifactId,
+    kind: activityArtifactKindLabel(artifact.kind),
+    name: fileName(artifact.relativePath),
+    previewKind: activityArtifactPreviewKind(artifact.kind),
+    previewUrl: `/api/v1/projects/${encodeURIComponent(artifact.projectId)}/activity-artifacts/${encodeURIComponent(artifact.artifactId)}/preview`,
+    size: '未记录',
+    status: '已登记',
+  }))
+}
+
+export function runtimeProjectAssets(
+  projectView: ContentStudioProjectView,
+): AssetProjection[] {
+  const activityById = new Map(
+    projectView.activities.map(activity => [
+      activity.activityId,
+      activity.topic['zh-CN'] ?? activity.topic.en ?? activity.activityId,
+    ]),
+  )
+  const artifactActivityById = new Map(
+    projectView.activityArtifacts.map(artifact => [artifact.artifactId, artifact.activityId]),
+  )
+  const assetReferences = new Map<string, Set<string>>()
+  const addReference = (assetId: string, activityId: string): void => {
+    const references = assetReferences.get(assetId) ?? new Set<string>()
+    const title = activityById.get(activityId)
+    if (title !== undefined)
+      references.add(title)
+    assetReferences.set(assetId, references)
+  }
+  for (const content of projectView.channelContents) {
+    for (const artifactId of content.artifactIds) {
+      const activityId = artifactActivityById.get(artifactId) ?? content.activityId
+      addReference(artifactId, activityId)
+    }
+  }
+  for (const asset of projectView.projectAssets) {
+    if (asset.sourceArtifactId !== undefined) {
+      const sourceReferences = assetReferences.get(asset.sourceArtifactId)
+      if (sourceReferences !== undefined)
+        assetReferences.set(asset.assetId, new Set(sourceReferences))
+    }
+  }
+
+  return projectView.projectAssets.map(asset => ({
+    assetId: asset.assetId,
+    kind: asset.kind,
+    name: fileName(asset.relativePath),
+    previewKind: projectAssetPreviewKind(asset.kind),
+    previewUrl: `/api/v1/projects/${encodeURIComponent(asset.projectId)}/project-assets/${encodeURIComponent(asset.assetId)}/preview`,
+    referencedBy: [...(assetReferences.get(asset.assetId) ?? new Set<string>())],
+    retention: '长期保留',
+    size: '未记录',
+    source: asset.sourceArtifactId === undefined ? '项目登记' : '活动产物晋升',
+    version: `v${asset.version}`,
+  }))
+}
+
+function activityArtifactKindLabel(
+  kind: ContentStudioProjectView['activityArtifacts'][number]['kind'],
+): ActivityArtifactProjection['kind'] {
+  return kind === 'article-version'
+    ? '文章版本'
+    : kind === 'preview-frame'
+      ? '预览帧'
+      : kind === 'video-clip'
+        ? '视频片段'
+        : kind === 'video'
+          ? '视频'
+          : kind === 'image'
+            ? '图片'
+            : '音频'
+}
+
+function activityArtifactPreviewKind(
+  kind: ContentStudioProjectView['activityArtifacts'][number]['kind'],
+): AssetPreviewKind {
+  return kind === 'article-version'
+    ? 'text'
+    : kind === 'audio'
+      ? 'audio'
+      : kind === 'image' || kind === 'preview-frame'
+        ? 'image'
+        : kind === 'video' || kind === 'video-clip'
+          ? 'video'
+          : 'unsupported'
+}
+
+function projectAssetPreviewKind(
+  kind: ContentStudioProjectView['projectAssets'][number]['kind'],
+): AssetPreviewKind {
+  return kind === 'audio'
+    ? 'audio'
+    : kind === 'image' || kind === 'logo'
+      ? 'image'
+      : kind === 'video'
+        ? 'video'
+        : 'unsupported'
+}
+
+function fileName(relativePath: string): string {
+  const segments = relativePath.split(/[\\/]/u)
+  return segments.at(-1) || relativePath
 }
 
 const reportMetricLabels: Record<ObservationMetric, string> = {
