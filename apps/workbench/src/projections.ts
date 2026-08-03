@@ -23,6 +23,7 @@ import type {
   ChannelProjection,
   ContentGroupProjection,
   ReportProjection,
+  ReportTimelineProjection,
   TaskProjection,
   VideoPlanProjection,
 } from './model'
@@ -230,8 +231,15 @@ export function runtimeReports(
     const activity = activityById.get(plan.activityId)
     const content = contentById.get(plan.contentId)
     const receipt = receiptByPublication.get(plan.publicationId)
-    const latestObservation = [...(observationsByPublication.get(plan.publicationId) ?? [])]
-      .sort((left, right) => right.collectedAt.localeCompare(left.collectedAt))[0]
+    const sortedObservations = [...(observationsByPublication.get(plan.publicationId) ?? [])]
+      .sort((left, right) => right.collectedAt.localeCompare(left.collectedAt))
+    const timeline = sortedObservations
+      .map<ReportTimelineProjection>(observation => ({
+        collectedAt: observation.collectedAt,
+        metrics: reportMetrics(observation.metrics, content?.format, false),
+        source: observation.source,
+      }))
+    const latestObservation = sortedObservations[0]
     const metrics = latestObservation === undefined
       ? defaultReportMetrics(content?.format)
       : reportMetrics(latestObservation.metrics, content?.format)
@@ -259,7 +267,10 @@ export function runtimeReports(
             ? '已收到成功发布回执，等待第一条监测数据。'
             : '发布安排已创建，等待匹配的 marketing-ops 发布回执。'
           : `数据来源：${latestObservation.source}`,
+      publicationId: plan.publicationId,
+      ...(receipt?.publicUrl === undefined ? {} : { publicUrl: receipt.publicUrl }),
       status,
+      timeline,
     }
   })
 }
@@ -274,14 +285,20 @@ function defaultReportMetrics(format: 'article' | 'video' | undefined): ReportPr
 function reportMetrics(
   metrics: Partial<Record<ObservationMetric, number | null>>,
   format: 'article' | 'video' | undefined,
+  includeMissing = true,
 ): ReportProjection['metrics'] {
   const preferredKeys: ObservationMetric[] = format === 'video'
     ? ['views', 'likes', 'comments', 'favorites']
     : ['reads', 'likes', 'comments', 'shares']
-  const keys = [
-    ...preferredKeys,
-    ...reportMetricOrder.filter(key => !preferredKeys.includes(key) && metrics[key] !== undefined),
-  ]
+  const keys = includeMissing
+    ? [
+        ...preferredKeys,
+        ...reportMetricOrder.filter(key => !preferredKeys.includes(key) && metrics[key] !== undefined),
+      ]
+    : [
+        ...preferredKeys.filter(key => metrics[key] !== undefined),
+        ...reportMetricOrder.filter(key => !preferredKeys.includes(key) && metrics[key] !== undefined),
+      ]
   return keys.map(key => ({
     label: reportMetricLabels[key],
     value: metrics[key] === null || metrics[key] === undefined

@@ -168,6 +168,8 @@ describe('content studio workbench', () => {
     await wrapper.get('a[data-module="reports"]').trigger('click')
     expect(wrapper.get('h1').text()).toContain('项目报告')
     expect(wrapper.text()).toContain('演示数据')
+    expect(wrapper.text()).toContain('监测时间线')
+    expect(wrapper.text()).toContain('2026-08-02 09:30')
   })
 
   it('运行时返回空项目时显示空状态而不是读取不存在的活动', async () => {

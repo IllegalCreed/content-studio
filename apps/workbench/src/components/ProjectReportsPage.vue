@@ -20,6 +20,17 @@ const emit = defineEmits<{
         <div class="report-metrics"><div v-for="metric in report.metrics" :key="metric.label"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong></div></div>
         <p class="report-note">{{ report.note }}</p>
         <small class="report-last-checked">{{ report.lastChecked }}</small>
+        <a v-if="report.publicUrl" class="report-public-url" :href="report.publicUrl" target="_blank" rel="noreferrer">打开公开地址 →</a>
+        <div v-if="report.timeline.length > 0" class="report-timeline">
+          <div class="report-timeline-heading"><p class="eyebrow">监测时间线</p><span>{{ report.timeline.length }} 次采集</span></div>
+          <ol>
+            <li v-for="point in report.timeline" :key="point.collectedAt + '-' + point.source">
+              <div><strong>{{ point.collectedAt }}</strong><span>{{ point.source }}</span></div>
+              <small>{{ point.metrics.map(metric => `${metric.label} ${metric.value}`).join(' · ') }}</small>
+            </li>
+          </ol>
+        </div>
+        <p v-else class="report-timeline-empty">尚未有监测采集</p>
         <button type="button" class="report-link" @click="emit('open-activity', report.activityId)">查看所属活动 →</button>
       </article>
     </div>

@@ -3435,6 +3435,80 @@ footer {
   line-height: 1.5;
 }
 
+.report-public-url {
+  display: inline-block;
+  margin-top: 0.75rem;
+  color: var(--acid);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.report-timeline {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--stroke);
+}
+
+.report-timeline-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.report-timeline-heading .eyebrow {
+  margin-bottom: 0;
+}
+
+.report-timeline-heading > span,
+.report-timeline li span,
+.report-timeline-empty {
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.58rem;
+}
+
+.report-timeline ol {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-timeline li {
+  padding: 0.55rem 0.65rem;
+  border-left: 2px solid var(--acid);
+  background: var(--panel-strong);
+}
+
+.report-timeline li > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.report-timeline li strong {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  font-weight: 500;
+}
+
+.report-timeline li small {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--ink);
+  font-size: 0.65rem;
+  line-height: 1.45;
+}
+
+.report-timeline-empty {
+  margin: 1.25rem 0 0;
+}
+
 .report-link {
   display: block;
   margin-top: 0.9rem;

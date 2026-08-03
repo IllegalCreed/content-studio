@@ -21,6 +21,12 @@ export interface ProjectProjection {
   version: string
 }
 
+export interface ReportTimelineProjection {
+  collectedAt: string
+  metrics: Array<{ label: string, value: string }>
+  source: string
+}
+
 export interface ReportProjection {
   activityId: string
   activityTitle: string
@@ -30,7 +36,10 @@ export interface ReportProjection {
   lastChecked: string
   metrics: Array<{ label: string, value: string }>
   note: string
+  publicationId: string
+  publicUrl?: string
   status: '监测中' | '发布失败' | '等待发布回执' | '等待监测数据'
+  timeline: ReportTimelineProjection[]
 }
 
 function fileName(relativePath: string): string {
@@ -1197,7 +1206,18 @@ export const snapshot: WorkbenchSnapshot = {
         { label: '收藏', value: '34' },
       ],
       note: '正式版本需要匹配的发布回执；当前仅用于展示监测面板。',
+      publicationId: 'demo-quick-sort-bilibili',
       status: '监测中',
+      timeline: [{
+        collectedAt: '2026-08-02 09:30',
+        metrics: [
+          { label: '播放量', value: '1,284' },
+          { label: '点赞', value: '86' },
+          { label: '评论', value: '12' },
+          { label: '收藏', value: '34' },
+        ],
+        source: '演示数据',
+      }],
     },
     {
       activityId: 'release-notes',
@@ -1213,7 +1233,9 @@ export const snapshot: WorkbenchSnapshot = {
         { label: '转发', value: '—' },
       ],
       note: '等待渠道授权人审核和最终发布点击。',
+      publicationId: 'demo-release-notes-x',
       status: '等待发布回执',
+      timeline: [],
     },
   ],
   runtimeConnected: false,

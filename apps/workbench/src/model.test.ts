@@ -222,6 +222,25 @@ describe('runtime report projection', () => {
       { label: '评论', value: '3' },
       { label: '转发', value: '—' },
     ])
+    expect(report?.timeline).toEqual([
+      {
+        collectedAt: '2026-08-03T00:00:00.000Z',
+        metrics: [
+          { label: '阅读量', value: '100' },
+          { label: '点赞', value: '20' },
+          { label: '评论', value: '3' },
+        ],
+        source: 'authorized-adapter',
+      },
+      {
+        collectedAt: '2026-08-02T00:00:00.000Z',
+        metrics: [
+          { label: '阅读量', value: '10' },
+          { label: '点赞', value: '2' },
+        ],
+        source: 'public',
+      },
+    ])
 
     const [failedReport] = runtimeReports(projectView({
       publicationReceipts: [{
