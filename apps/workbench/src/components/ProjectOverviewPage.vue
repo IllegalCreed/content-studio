@@ -89,7 +89,10 @@ const emit = defineEmits<{
     <section class="module-card project-channel-config" data-testid="project-channel-config">
       <div class="module-card-heading">
         <div><p class="eyebrow">项目空间 / 发布设置</p><h3>项目渠道配置</h3></div>
-        <span>{{ props.enabledChannels.length }} 个渠道已启用</span>
+        <span class="project-channel-enabled-count" data-testid="project-channel-enabled">
+          <strong>{{ props.enabledChannels.length }}</strong>
+          <small>个渠道已启用</small>
+        </span>
       </div>
       <p class="section-intro">这里决定当前项目实际使用哪些全局渠道，以及每个渠道对应的项目账号。发布活动只能选择已启用的渠道。</p>
       <div class="project-channel-config-grid">
@@ -115,6 +118,11 @@ const emit = defineEmits<{
               <strong>{{ props.selectedChannel.delivery }}</strong>
               <small>由全局渠道规格决定，项目不可修改</small>
             </div>
+          </div>
+          <div class="channel-binding-summary" data-testid="project-channel-summary">
+            <div><span>项目状态</span><strong>{{ props.selectedChannel.enabled ? '已启用' : '未启用' }}</strong></div>
+            <div><span>活动选择</span><strong>{{ props.selectedChannel.enabled ? '活动可选择' : '不会显示' }}</strong></div>
+            <div><span>发布助手</span><strong>{{ props.selectedChannel.delivery === '仅生成内容' ? '不进入' : '可进入' }}</strong></div>
           </div>
           <p v-if="props.channelBindingSaveError" class="form-error" aria-live="polite">{{ props.channelBindingSaveError }}</p>
           <div class="form-actions">

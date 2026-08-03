@@ -3256,10 +3256,32 @@ footer {
 }
 
 .channel-binding-form {
-  margin-top: 1rem;
+  margin-top: 0;
   padding: 1rem;
-  border: 1px dashed #596233;
+  border: 1px solid #596233;
   background: rgb(217 255 67 / 3%);
+}
+
+.project-channel-enabled-count {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: baseline;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  white-space: nowrap;
+}
+
+.project-channel-enabled-count strong {
+  color: var(--acid);
+  font-size: 1.35rem;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+
+.project-channel-enabled-count small {
+  color: var(--muted);
+  font-size: inherit;
 }
 
 .channel-binding-toggle {
@@ -3424,6 +3446,7 @@ footer {
   display: grid;
   grid-template-columns: minmax(12rem, 0.75fr) minmax(0, 1.75fr);
   gap: 0.75rem;
+  align-items: start;
   margin-top: 1rem;
 }
 
@@ -3431,6 +3454,9 @@ footer {
   display: grid;
   align-content: start;
   gap: 0.35rem;
+  max-height: 34rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
 }
 
 .project-channel-list button {
@@ -3469,6 +3495,37 @@ footer {
   grid-column: 1 / -1;
   color: var(--muted);
   font-size: 0.62rem;
+}
+
+.channel-binding-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+}
+
+.channel-binding-summary > div {
+  min-width: 0;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--stroke);
+}
+
+.channel-binding-summary span,
+.channel-binding-summary strong {
+  display: block;
+}
+
+.channel-binding-summary span {
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.58rem;
+}
+
+.channel-binding-summary strong {
+  margin-top: 0.3rem;
+  color: var(--ink);
+  font-size: 0.68rem;
+  font-weight: 500;
 }
 
 .channel-project-link {
@@ -4084,6 +4141,7 @@ footer {
   .channel-detail-grid,
   .channel-account-detail,
   .channel-binding-fields,
+  .channel-binding-summary,
   .video-plan-fields,
   .project-channel-config-grid,
   .report-metrics,
