@@ -40,6 +40,16 @@ const selectedMetrics = computed(() =>
     ? props.selectedChannel.metrics.join('、')
     : '暂无登记的平台指标',
 )
+
+const selectedProjectAccount = computed(() => props.projectAccountFor(props.selectedChannel))
+
+const selectedProjectAccountLabel = computed(
+  () => selectedProjectAccount.value?.alias ?? '未选择项目账号',
+)
+
+const selectedFormatSummary = computed(
+  () => `${props.selectedChannel.format} · 标题 ${props.selectedChannel.titleLimit} 字 · 正文 ${props.selectedChannel.bodyLimit} 字`,
+)
 </script>
 
 <template>
@@ -87,19 +97,19 @@ const selectedMetrics = computed(() =>
           <span>待处理动作</span><strong>{{ selectedAccountAction }}</strong>
         </div>
       </div>
-      <div class="channel-binding-form channel-project-link">
-        <div class="channel-account-panel-heading">
-          <div><p class="eyebrow">项目级设置</p><strong>项目渠道配置不在全局目录中修改</strong></div>
-          <small>全局页只查看平台能力和状态</small>
+      <div class="channel-binding-form channel-project-link channel-project-link-compact" data-testid="channel-project-summary">
+        <div class="channel-project-link-copy">
+          <p class="eyebrow">当前项目引用</p>
+          <strong>{{ props.selectedChannel.enabled ? '已启用 · 活动可选择' : '未启用 · 活动不可选择' }}</strong>
+          <small>项目账号：{{ selectedProjectAccountLabel }} · 交付方式：{{ props.selectedChannel.delivery }}</small>
         </div>
-        <p class="channel-boundary-note">每个项目选择哪个账号、是否使用该渠道和交付方式，请到当前项目的“项目概览”里配置。</p>
-        <div class="form-actions">
-          <small class="form-hint">这里不会修改项目绑定。</small>
-          <button type="button" class="primary-button" @click="emit('go-project')">去项目配置</button>
-        </div>
+        <button type="button" class="primary-button" @click="emit('go-project')">修改项目配置</button>
       </div>
       <div class="channel-detail-grid">
         <div><span>当前项目状态</span><strong>{{ props.selectedChannel.enabled ? '已启用，可作为活动目标' : '未启用，活动不可选择' }}</strong></div>
+        <div><span>项目账号</span><strong>{{ selectedProjectAccountLabel }}</strong></div>
+        <div><span>交付方式</span><strong>{{ props.selectedChannel.delivery }}</strong></div>
+        <div><span>平台格式限制</span><strong>{{ selectedFormatSummary }}</strong></div>
         <div><span>平台支持的指标</span><strong>{{ selectedMetrics }}</strong></div>
         <div><span>账号/适配器状态</span><strong>{{ selectedAccountAction }}</strong></div>
       </div>

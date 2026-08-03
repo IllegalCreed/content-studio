@@ -3098,7 +3098,7 @@ footer {
 
 .channel-detail-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.6rem;
   margin-top: 1.25rem;
 }
@@ -3212,6 +3212,41 @@ footer {
 
 .channel-project-link {
   background: rgb(0 0 0 / 10%);
+}
+
+.channel-project-link-compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+}
+
+.channel-project-link-copy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.channel-project-link-copy .eyebrow {
+  margin: 0;
+}
+
+.channel-project-link-copy strong {
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.channel-project-link-copy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.65rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channel-project-link-compact .primary-button {
+  flex: 0 0 auto;
 }
 
 .project-profile-card h3,
@@ -3719,6 +3754,19 @@ footer {
   .report-metrics,
   .cleanup-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .channel-project-link-compact {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .channel-project-link-copy small {
+    white-space: normal;
+  }
+
+  .channel-project-link-compact .primary-button {
+    width: 100%;
   }
 
   .cleanup-item {
