@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import type { ProjectChannelBinding } from '@content-studio/core-types'
 import SelectMenu from './SelectMenu.vue'
 import type { ChannelProjection, WorkbenchSnapshot } from '../model'
 import { humanizeActivityStatus } from '../model'
 
 interface ChannelBindingForm {
   accountRef: string
-  delivery: ProjectChannelBinding['delivery']
 }
 
 const props = defineProps<{
@@ -14,7 +12,6 @@ const props = defineProps<{
   channelBindingForm: ChannelBindingForm
   channelBindingSaveError: string | null
   channelBindingSaving: boolean
-  deliveryOptions: readonly { label: string, value: string }[]
   enabledChannels: ChannelProjection[]
   projectAccountAlias: (channel: ChannelProjection) => string | undefined
   projectAccountOptions: readonly { label: string, value: string }[]
@@ -113,10 +110,11 @@ const emit = defineEmits<{
               <span>项目账号</span>
               <SelectMenu v-model="props.channelBindingForm.accountRef" data-testid="project-channel-account" aria-label="项目账号" :disabled="!props.runtimeConnected || props.channelBindingSaving" :options="props.projectAccountOptions" />
             </label>
-            <label>
+            <div class="channel-binding-readonly" data-testid="project-channel-delivery">
               <span>交付方式</span>
-              <SelectMenu v-model="props.channelBindingForm.delivery" aria-label="交付方式" :disabled="!props.runtimeConnected || props.channelBindingSaving" :options="props.deliveryOptions" />
-            </label>
+              <strong>{{ props.selectedChannel.delivery }}</strong>
+              <small>由全局渠道规格决定，项目不可修改</small>
+            </div>
           </div>
           <p v-if="props.channelBindingSaveError" class="form-error" aria-live="polite">{{ props.channelBindingSaveError }}</p>
           <div class="form-actions">

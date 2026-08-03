@@ -257,20 +257,9 @@ const contentForm = reactive<{
 })
 const channelBindingForm = reactive<{
   accountRef: string
-  delivery: ProjectChannelBinding['delivery']
 }>({
   accountRef: snapshot.channels[0]?.projectAccountId ?? '',
-  delivery: 'owner-assisted',
 })
-
-const deliveryOptions: Array<{
-  label: ChannelProjection['delivery']
-  value: ProjectChannelBinding['delivery']
-}> = [
-  { label: '全自动候选', value: 'automatic-candidate' },
-  { label: '人工辅助', value: 'owner-assisted' },
-  { label: '仅生成内容', value: 'content-only' },
-]
 
 const contentFormatOptions = [
   { label: '文章', value: 'article' },
@@ -736,7 +725,10 @@ function selectChannelAccount(accountId: string): void {
 function syncChannelBindingForm(): void {
   const channel = selectedChannel.value
   channelBindingForm.accountRef = channel.projectAccountId ?? ''
-  channelBindingForm.delivery = channel.delivery === '全自动候选'
+}
+
+function deliveryModeForChannel(channel: ChannelProjection): ProjectChannelBinding['delivery'] {
+  return channel.delivery === '全自动候选'
     ? 'automatic-candidate'
     : channel.delivery === '仅生成内容'
       ? 'content-only'
@@ -753,7 +745,7 @@ async function saveChannelBinding(): Promise<void> {
     : selectedChannel.value.accounts.find(account => account.accountId === channelBindingForm.accountRef) ?? null
   const input: ProjectChannelBinding = {
     channel: selectedChannel.value.channel,
-    delivery: channelBindingForm.delivery,
+    delivery: deliveryModeForChannel(selectedChannel.value),
     enabled: channelBindingForm.accountRef !== '',
     projectId: snapshot.project.projectId,
     ...(selectedAccount === null
@@ -1350,7 +1342,6 @@ async function refreshProjectView(): Promise<void> {
           :channel-binding-form="channelBindingForm"
           :channel-binding-save-error="channelBindingSaveError"
           :channel-binding-saving="channelBindingSaving"
-          :delivery-options="deliveryOptions"
           :enabled-channels="enabledChannels"
           :project-account-alias="projectAccountAlias"
           :project-account-options="projectAccountOptions"

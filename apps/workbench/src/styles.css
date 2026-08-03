@@ -3054,6 +3054,31 @@ footer {
   font-size: 0.62rem;
 }
 
+.channel-binding-readonly {
+  display: grid;
+  align-content: start;
+  gap: 0.35rem;
+  min-height: 2.25rem;
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.channel-binding-readonly strong {
+  min-height: 2.25rem;
+  padding: 0.5rem 0.6rem;
+  color: var(--ink);
+  border: 1px solid var(--stroke);
+  background: #10130f;
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.channel-binding-readonly small {
+  color: var(--muted);
+  font-size: 0.6rem;
+  line-height: 1.4;
+}
+
 .channel-binding-fields input,
 .channel-binding-fields select {
   min-height: 2.25rem;

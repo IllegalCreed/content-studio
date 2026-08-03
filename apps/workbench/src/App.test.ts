@@ -115,6 +115,8 @@ describe('content studio workbench', () => {
     const accountSelect = wrapper.get('[data-testid="project-channel-account"]')
     expect(accountSelect.text()).toContain('IllegalCreed')
     expect(accountSelect.find('[role="listbox"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="project-channel-delivery"]').text()).toContain('全自动候选')
+    expect(wrapper.find('[aria-label="交付方式"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="project-channel-account-alias"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="project-view-channels"]').classes()).toContain('primary-button')
     expect(wrapper.get('[data-testid="project-view-activities"]').classes()).toContain('primary-button')
