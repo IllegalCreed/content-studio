@@ -1167,6 +1167,36 @@ button:disabled {
   margin-top: 0.75rem;
 }
 
+.task-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  padding: 4rem 1.5rem;
+  border: 1px dashed var(--stroke);
+  background: var(--panel);
+  text-align: center;
+}
+
+.task-empty-state .eyebrow,
+.task-empty-state h3,
+.task-empty-state p {
+  margin: 0;
+}
+
+.task-empty-state h3 {
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 500;
+}
+
+.task-empty-state > p:not(.eyebrow) {
+  max-width: 32rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+
 .task-list {
   display: flex;
   flex-direction: column;

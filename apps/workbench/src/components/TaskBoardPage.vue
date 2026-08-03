@@ -26,6 +26,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'change-task': [action: TaskAction]
+  'go-activities': []
   'select-task': [taskId: string]
   'set-scope': [scope: TaskScope]
 }>()
@@ -50,7 +51,13 @@ const emit = defineEmits<{
         <span>{{ kind }}任务</span><strong>{{ count }}</strong>
       </div>
     </div>
-    <div class="task-board">
+    <div v-if="props.visibleTasks.length === 0" class="task-empty-state" data-testid="tasks-empty-state">
+      <p class="eyebrow">当前范围没有执行记录</p>
+      <h3>{{ props.runtimeConnected ? '还没有制作、发布或监测任务' : '没有可展示的演示任务' }}</h3>
+      <p>{{ props.runtimeConnected ? '先创建一个发布活动，并为渠道内容建立制作或发布安排，任务会自动出现在这里。' : '连接本地运行时后，这里会显示真实的项目任务。' }}</p>
+      <button type="button" class="primary-button" @click="emit('go-activities')">去发布活动</button>
+    </div>
+    <div v-else class="task-board">
       <div class="task-list" role="list" aria-label="执行任务">
         <button
           v-for="task in props.visibleTasks"
@@ -133,7 +140,7 @@ const emit = defineEmits<{
     </div>
   </section>
   <VideoJobPanel
-    v-if="props.selectedTaskCampaign.videoJob !== null"
+    v-if="props.visibleTasks.length > 0 && props.selectedTaskCampaign.videoJob !== null"
     id="video"
     :job="props.selectedTaskCampaign.videoJob"
     :runtime-connected="props.runtimeConnected"

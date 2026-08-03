@@ -194,6 +194,14 @@ describe('content studio workbench', () => {
     expect(wrapper.text()).toContain('0 个活动')
     expect(wrapper.text()).toContain('当前运行时还没有发布活动')
     expect(wrapper.text()).not.toContain('Cannot read properties of undefined')
+
+    runtimeStore.markRuntimeReady()
+    await wrapper.get('a[data-module="tasks"]').trigger('click')
+    await nextTick()
+    expect(wrapper.get('[data-testid="tasks-empty-state"]').text()).toContain('还没有制作、发布或监测任务')
+    expect(wrapper.find('.task-detail').exists()).toBe(false)
+    await wrapper.get('[data-testid="tasks-empty-state"] button').trigger('click')
+    expect(router.currentRoute.value.path).toBe('/project/activities')
   })
 
   it('从深链接 query 恢复素材筛选和选中素材', async () => {

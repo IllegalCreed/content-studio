@@ -1351,6 +1351,7 @@ async function refreshProjectView(): Promise<void> {
           :task-counts="taskCounts"
           :visible-tasks="visibleTasks"
           @change-task="changeSelectedTask"
+          @go-activities="selectModule('activities')"
           @select-task="selectTask"
           @set-scope="setTaskScope"
         />
