@@ -1134,6 +1134,105 @@ describe('content studio local application server', () => {
     }
   })
 
+  it('returns a cleanup preview for registered files without scanning unknown files', async () => {
+    const { project, snapshot } = createProject()
+    const productionOutputRoot = '/tmp/content-studio-cleanup-preview'
+    const activityRoot = join(productionOutputRoot, project.projectId, 'activity-a')
+    const assetRoot = join(productionOutputRoot, project.projectId, 'assets')
+    await mkdir(activityRoot, { recursive: true })
+    await mkdir(assetRoot, { recursive: true })
+    await writeFile(join(activityRoot, 'draft.md'), 'draft')
+    await writeFile(join(assetRoot, 'logo.png'), 'logo-file')
+    await writeFile(join(productionOutputRoot, project.projectId, 'unknown.bin'), 'unknown')
+    const handle = createContentStudioServer({
+      productionOutputRoot,
+      project,
+      projectChannelBindings: [{
+        channel: 'github',
+        delivery: 'content-only',
+        enabled: true,
+        projectId: project.projectId,
+      }],
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    handle.service.createActivity({
+      activityId: 'activity-a',
+      campaignId: 'campaign-a',
+      channels: [{ id: 'github', locale: 'en' }],
+      goal: 'education',
+      projectId: project.projectId,
+      projectSnapshotId: snapshot.snapshotId,
+      status: 'draft',
+      targetUrl: 'https://project-a.example.com',
+      topic: { 'en': 'Cleanup', 'zh-CN': '清理' },
+    })
+    handle.service.createActivityArtifact({
+      activityId: 'activity-a',
+      artifactId: 'draft-artifact',
+      kind: 'article-version',
+      projectId: project.projectId,
+      relativePath: 'activity-a/draft.md',
+      sha256: 'a'.repeat(64),
+    })
+    handle.service.createActivityArtifact({
+      activityId: 'activity-a',
+      artifactId: 'missing-artifact',
+      kind: 'preview-frame',
+      projectId: project.projectId,
+      relativePath: 'activity-a/missing.png',
+      sha256: 'b'.repeat(64),
+    })
+    handle.repository.saveProjectAsset({
+      assetId: 'logo-asset',
+      kind: 'logo',
+      projectId: project.projectId,
+      relativePath: 'assets/logo.png',
+      sha256: 'c'.repeat(64),
+      version: 1,
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const response = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/storage/cleanup-preview`,
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual(expect.objectContaining({
+        projectId: project.projectId,
+        totals: {
+          files: 3,
+          missingFiles: 1,
+          protectedBytes: 9,
+          protectedFiles: 1,
+          reviewBytes: 5,
+          reviewFiles: 1,
+          totalBytes: 14,
+        },
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'draft-artifact',
+            sizeBytes: 5,
+            status: 'review',
+          }),
+          expect.objectContaining({
+            id: 'missing-artifact',
+            status: 'missing',
+          }),
+          expect.objectContaining({
+            id: 'logo-asset',
+            sizeBytes: 9,
+            status: 'protected',
+          }),
+        ]),
+      }))
+    }
+    finally {
+      await running.close()
+      await rm(productionOutputRoot, { force: true, recursive: true })
+    }
+  })
+
   it('confirms a stored activity video plan through the local runtime', async () => {
     const { project, snapshot: baseSnapshot } = createProject()
     const snapshot: ProjectSnapshot = {

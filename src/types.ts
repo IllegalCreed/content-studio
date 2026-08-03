@@ -312,6 +312,41 @@ export interface ProjectAsset {
   version: number
 }
 
+export type StorageCleanupPreviewItemStatus
+  = | 'missing'
+    | 'protected'
+    | 'review'
+    | 'unsafe'
+
+export interface StorageCleanupPreviewItem {
+  id: string
+  kind: ActivityArtifactKind | ProjectAssetKind
+  name: string
+  reason: string
+  relativePath: string
+  scope: 'activity-artifact' | 'project-asset'
+  sizeBytes?: number
+  status: StorageCleanupPreviewItemStatus
+  version: number
+}
+
+export interface StorageCleanupPreviewTotals {
+  files: number
+  missingFiles: number
+  protectedBytes: number
+  protectedFiles: number
+  reviewBytes: number
+  reviewFiles: number
+  totalBytes: number
+}
+
+export interface StorageCleanupPreview {
+  generatedAt: string
+  items: StorageCleanupPreviewItem[]
+  projectId: string
+  totals: StorageCleanupPreviewTotals
+}
+
 export interface PromoteActivityArtifactInput {
   artifactId: string
   assetId: string

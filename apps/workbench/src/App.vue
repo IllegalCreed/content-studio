@@ -31,6 +31,7 @@ import type {
   PublicationPlan,
   PublishingActivity,
   RecordingAttemptRecord,
+  StorageCleanupPreview,
 } from '@content-studio/core-types'
 import {
   activityArtifactProjections,
@@ -158,6 +159,10 @@ const publicationPlanActionError = ref<string | null>(null)
 const publicationPlanActionPending = ref<string | null>(null)
 const assetPromotionError = ref<string | null>(null)
 const assetPromotionPending = ref<string | null>(null)
+const storagePreviewOpen = ref(false)
+const storagePreviewLoading = ref(false)
+const storagePreviewError = ref<string | null>(null)
+const storagePreview = ref<StorageCleanupPreview | null>(null)
 const channelBindingSaving = ref(false)
 const channelBindingSaveError = ref<string | null>(null)
 const runtimeTaskIds = ref<Set<string>>(new Set())
@@ -721,6 +726,39 @@ async function promoteActivityArtifact(artifact: ActivityArtifactProjection): Pr
   finally {
     assetPromotionPending.value = null
   }
+}
+
+async function toggleStorageCleanupPreview(): Promise<void> {
+  if (!snapshot.runtimeConnected)
+    return
+  storagePreviewOpen.value = !storagePreviewOpen.value
+  if (!storagePreviewOpen.value || storagePreviewLoading.value)
+    return
+  storagePreviewLoading.value = true
+  storagePreviewError.value = null
+  try {
+    storagePreview.value = await workbenchRuntime.storageCleanupPreview(
+      snapshot.project.projectId,
+    )
+  }
+  catch (error: unknown) {
+    storagePreviewError.value = error instanceof Error
+      ? error.message
+      : '清理预览读取失败'
+  }
+  finally {
+    storagePreviewLoading.value = false
+  }
+}
+
+function formatStorageBytes(bytes: number): string {
+  if (bytes < 1024)
+    return `${bytes} B`
+  if (bytes < 1024 * 1024)
+    return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
 
 async function saveActivity(): Promise<void> {
@@ -1933,7 +1971,45 @@ async function refreshProjectView(): Promise<void> {
             </div>
             <div v-else class="empty-state">当前项目还没有登记活动产物。</div>
           </div>
-          <div class="retention-note"><span>当前保留规则</span><strong>{{ snapshot.storage.retention }}</strong><button type="button" disabled>查看清理预览</button></div>
+          <div class="retention-note">
+            <span>当前保留规则</span>
+            <strong>{{ snapshot.storage.retention }}</strong>
+            <button
+              type="button"
+              class="primary-button"
+              :disabled="!snapshot.runtimeConnected || storagePreviewLoading"
+              @click="toggleStorageCleanupPreview"
+            >
+              {{ storagePreviewLoading ? '读取中…' : storagePreviewOpen ? '收起清理预览' : '查看清理预览' }}
+            </button>
+          </div>
+          <section v-if="storagePreviewOpen" class="cleanup-preview-panel" data-testid="cleanup-preview">
+            <div class="section-heading">
+              <div><p class="eyebrow">只读检查</p><h3>清理预览</h3></div>
+              <span v-if="storagePreview">生成于 {{ storagePreview.generatedAt }}</span>
+            </div>
+            <p class="section-intro">这里只检查 Content Studio 已登记的项目素材和活动产物，不扫描未知文件，也不会自动删除。</p>
+            <p v-if="storagePreviewError" class="form-error">{{ storagePreviewError }}</p>
+            <template v-else-if="storagePreview">
+              <div class="cleanup-summary-grid">
+                <div><span>登记文件</span><strong>{{ storagePreview.totals.files }}</strong></div>
+                <div><span>占用空间</span><strong>{{ formatStorageBytes(storagePreview.totals.totalBytes) }}</strong></div>
+                <div><span>待确认</span><strong>{{ storagePreview.totals.reviewFiles }} 个 · {{ formatStorageBytes(storagePreview.totals.reviewBytes) }}</strong></div>
+                <div><span>长期保留</span><strong>{{ storagePreview.totals.protectedFiles }} 个 · {{ formatStorageBytes(storagePreview.totals.protectedBytes) }}</strong></div>
+                <div><span>文件缺失</span><strong>{{ storagePreview.totals.missingFiles }}</strong></div>
+              </div>
+              <div class="cleanup-item-list">
+                <div class="cleanup-item cleanup-item-heading"><span>文件</span><span>范围</span><span>状态</span><span>大小</span></div>
+                <div v-for="item in storagePreview.items" :key="`${item.scope}-${item.id}`" class="cleanup-item">
+                  <div><strong>{{ item.name }}</strong><small>{{ item.relativePath }} · v{{ item.version }}</small></div>
+                  <span>{{ item.scope === 'project-asset' ? '项目素材' : '活动产物' }}</span>
+                  <span class="cleanup-status" :data-status="item.status">{{ item.status === 'protected' ? '长期保留' : item.status === 'review' ? '待确认' : item.status === 'missing' ? '文件缺失' : '路径不安全' }}</span>
+                  <span>{{ item.sizeBytes === undefined ? '—' : formatStorageBytes(item.sizeBytes) }}</span>
+                </div>
+              </div>
+            </template>
+            <p v-else class="empty-state">正在读取已登记文件…</p>
+          </section>
         </section>
       </template>
 

@@ -7,6 +7,7 @@ import type {
   ActivityArtifact,
   ChannelContentFormat,
   ChannelId,
+  ContentStudioProjectView,
   CreateActivityArtifactInput,
   CreateChannelContentInput,
   CreateContentGroupInput,
@@ -25,11 +26,15 @@ import type {
   PromoteActivityArtifactInput,
   PublicationPlan,
   PublicationReceipt,
+  StorageCleanupPreview,
+  StorageCleanupPreviewItem,
+  StorageCleanupPreviewItemStatus,
+  StorageCleanupPreviewTotals,
   VideoFormat,
   VideoOutlineScene,
 } from '../types'
 import { Buffer } from 'node:buffer'
-import { readFile, realpath } from 'node:fs/promises'
+import { readFile, realpath, stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { CHANNEL_BLUEPRINTS } from '../constants'
@@ -271,6 +276,27 @@ async function handleRequest(
         artifact.relativePath,
         artifact.sha256,
         artifact.version,
+      )
+      return
+    }
+
+    if (
+      request.method === 'GET'
+      && segments.length === 6
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'storage'
+      && segments[5] === 'cleanup-preview'
+    ) {
+      const projectId = identifierField(decodeSegment(segments[3]!), 'projectId')
+      sendJson(
+        response,
+        200,
+        await createStorageCleanupPreview(
+          production.outputRoot,
+          service.getProjectView(projectId),
+        ),
       )
       return
     }
@@ -1400,38 +1426,7 @@ async function serveRegisteredPreview(
   sha256: string,
   version: number,
 ): Promise<void> {
-  const projectRoot = resolve(outputRoot, projectId)
-  const candidatePath = resolve(projectRoot, relativePath)
-  const candidateRelativePath = relative(projectRoot, candidatePath)
-  if (
-    candidateRelativePath === ''
-    || candidateRelativePath.startsWith('..')
-    || isAbsolute(candidateRelativePath)
-  ) {
-    throw new RequestError(400, 'Registered preview path is unsafe')
-  }
-
-  let safePath: string
-  try {
-    const [safeProjectRoot, safeCandidatePath] = await Promise.all([
-      realpath(projectRoot),
-      realpath(candidatePath),
-    ])
-    const safeRelativePath = relative(safeProjectRoot, safeCandidatePath)
-    if (
-      safeRelativePath === ''
-      || safeRelativePath.startsWith('..')
-      || isAbsolute(safeRelativePath)
-    ) {
-      throw new RequestError(400, 'Registered preview path is unsafe')
-    }
-    safePath = safeCandidatePath
-  }
-  catch (error: unknown) {
-    if (error instanceof RequestError)
-      throw error
-    throw new RequestError(404, 'Registered preview file is unavailable')
-  }
+  const safePath = await resolveRegisteredPreviewPath(outputRoot, projectId, relativePath)
 
   let content: Buffer
   try {
@@ -1447,6 +1442,174 @@ async function serveRegisteredPreview(
   response.setHeader('X-Content-Studio-Version', String(version))
   response.writeHead(200)
   response.end(content)
+}
+
+async function createStorageCleanupPreview(
+  outputRoot: string,
+  projectView: ContentStudioProjectView,
+): Promise<StorageCleanupPreview> {
+  const promotedArtifactIds = new Set(
+    projectView.projectAssets
+      .map(asset => asset.sourceArtifactId)
+      .filter((artifactId): artifactId is string => artifactId !== undefined),
+  )
+  const candidates: Array<{
+    id: string
+    kind: StorageCleanupPreviewItem['kind']
+    name: string
+    reason: string
+    relativePath: string
+    scope: StorageCleanupPreviewItem['scope']
+    status: Extract<StorageCleanupPreviewItemStatus, 'protected' | 'review'>
+    version: number
+  }> = [
+    ...projectView.activityArtifacts
+      .filter(artifact => !promotedArtifactIds.has(artifact.artifactId))
+      .map(artifact => ({
+        id: artifact.artifactId,
+        kind: artifact.kind,
+        name: fileNameFromRelativePath(artifact.relativePath),
+        reason: '活动产物尚未晋升为项目素材，清理前需要用户确认。',
+        relativePath: artifact.relativePath,
+        scope: 'activity-artifact' as const,
+        status: 'review' as const,
+        version: artifact.version,
+      })),
+    ...projectView.projectAssets.map(asset => ({
+      id: asset.assetId,
+      kind: asset.kind,
+      name: fileNameFromRelativePath(asset.relativePath),
+      reason: '项目素材默认长期保留，不会进入自动清理。',
+      relativePath: asset.relativePath,
+      scope: 'project-asset' as const,
+      status: 'protected' as const,
+      version: asset.version,
+    })),
+  ]
+  const items: StorageCleanupPreviewItem[] = await Promise.all(
+    candidates.map(async (candidate) => {
+      const inspection = await inspectRegisteredPreview(
+        outputRoot,
+        projectView.project.projectId,
+        candidate.relativePath,
+      )
+      if (inspection.status === 'available') {
+        return {
+          ...candidate,
+          sizeBytes: inspection.sizeBytes,
+          status: candidate.status,
+        }
+      }
+      return {
+        ...candidate,
+        reason: inspection.status === 'unsafe'
+          ? '登记路径越过了项目输出目录，已阻止读取。'
+          : '登记文件不存在，当前没有可回收的文件。',
+        status: inspection.status,
+      }
+    }),
+  )
+  const totals = items.reduce<StorageCleanupPreviewTotals>((summary, item) => {
+    const sizeBytes = item.sizeBytes ?? 0
+    summary.totalBytes += sizeBytes
+    if (item.status === 'protected') {
+      summary.protectedBytes += sizeBytes
+      summary.protectedFiles += 1
+    }
+    if (item.status === 'review') {
+      summary.reviewBytes += sizeBytes
+      summary.reviewFiles += 1
+    }
+    if (item.status === 'missing' || item.status === 'unsafe')
+      summary.missingFiles += 1
+    return summary
+  }, {
+    files: items.length,
+    missingFiles: 0,
+    protectedBytes: 0,
+    protectedFiles: 0,
+    reviewBytes: 0,
+    reviewFiles: 0,
+    totalBytes: 0,
+  })
+  return {
+    generatedAt: new Date().toISOString(),
+    items,
+    projectId: projectView.project.projectId,
+    totals,
+  }
+}
+
+async function inspectRegisteredPreview(
+  outputRoot: string,
+  projectId: string,
+  relativePath: string,
+): Promise<{
+  sizeBytes?: number
+  status: 'available' | 'missing' | 'unsafe'
+}> {
+  let safePath: string
+  try {
+    safePath = await resolveRegisteredPreviewPath(outputRoot, projectId, relativePath)
+  }
+  catch (error: unknown) {
+    return {
+      status: error instanceof RequestError && error.status === 400
+        ? 'unsafe'
+        : 'missing',
+    }
+  }
+  try {
+    const fileStatus = await stat(safePath)
+    return fileStatus.isFile()
+      ? { sizeBytes: fileStatus.size, status: 'available' }
+      : { status: 'missing' }
+  }
+  catch {
+    return { status: 'missing' }
+  }
+}
+
+async function resolveRegisteredPreviewPath(
+  outputRoot: string,
+  projectId: string,
+  relativePath: string,
+): Promise<string> {
+  const projectRoot = resolve(outputRoot, projectId)
+  const candidatePath = resolve(projectRoot, relativePath)
+  const candidateRelativePath = relative(projectRoot, candidatePath)
+  if (
+    candidateRelativePath === ''
+    || candidateRelativePath.startsWith('..')
+    || isAbsolute(candidateRelativePath)
+  ) {
+    throw new RequestError(400, 'Registered preview path is unsafe')
+  }
+
+  try {
+    const [safeProjectRoot, safeCandidatePath] = await Promise.all([
+      realpath(projectRoot),
+      realpath(candidatePath),
+    ])
+    const safeRelativePath = relative(safeProjectRoot, safeCandidatePath)
+    if (
+      safeRelativePath === ''
+      || safeRelativePath.startsWith('..')
+      || isAbsolute(safeRelativePath)
+    ) {
+      throw new RequestError(400, 'Registered preview path is unsafe')
+    }
+    return safeCandidatePath
+  }
+  catch (error: unknown) {
+    if (error instanceof RequestError)
+      throw error
+    throw new RequestError(404, 'Registered preview file is unavailable')
+  }
+}
+
+function fileNameFromRelativePath(relativePath: string): string {
+  return relativePath.split(/[\\/]/u).at(-1) ?? relativePath
 }
 
 function closeServer(

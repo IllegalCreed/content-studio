@@ -15,6 +15,7 @@ import type {
   PublicationPlan,
   PublishingActivity,
   RecorderAttemptReceipt,
+  StorageCleanupPreview,
 } from '@content-studio/core-types'
 
 export interface RuntimeHealth {
@@ -53,6 +54,7 @@ export interface WorkbenchRuntime {
     taskId: string,
     input: RecordTaskInput,
   ) => Promise<RecordTaskResult>
+  storageCleanupPreview: (projectId: string) => Promise<StorageCleanupPreview>
   retryTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
   startTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
   taskEvents: (projectId: string, taskId: string) => Promise<ExecutionTaskEvent[]>
@@ -139,6 +141,9 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
         body: JSON.stringify(input),
         method: 'POST',
       },
+    ),
+    storageCleanupPreview: projectId => request<StorageCleanupPreview>(
+      `/projects/${encodeURIComponent(projectId)}/storage/cleanup-preview`,
     ),
     retryTask: (projectId, taskId) => request<ExecutionTask>(
       `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/retry`,

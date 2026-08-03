@@ -31,6 +31,27 @@ describe('workbench runtime client', () => {
     )
   })
 
+  it('reads a project-scoped cleanup preview without sending a path', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        projectId: 'project-a',
+        items: [],
+        totals: { files: 0 },
+      }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const runtime = createWorkbenchRuntime('/api/v1')
+    await expect(runtime.storageCleanupPreview('project-a')).resolves.toMatchObject({
+      projectId: 'project-a',
+      items: [],
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/project-a/storage/cleanup-preview',
+      expect.objectContaining({ headers: { accept: 'application/json' } }),
+    )
+  })
+
   it('saves a project channel binding through the local runtime', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
