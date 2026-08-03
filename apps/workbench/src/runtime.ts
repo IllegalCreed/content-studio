@@ -10,6 +10,7 @@ import type {
   CreatePublishingActivityInput,
   ExecutionTask,
   ExecutionTaskEvent,
+  OwnerHandoff,
   ProjectAsset,
   ProjectChannelBinding,
   PromoteActivityArtifactInput,
@@ -36,7 +37,9 @@ export interface RecordTaskResult {
 }
 
 export interface WorkbenchRuntime {
+  cancelOwnerHandoff: (projectId: string, handoffId: string) => Promise<OwnerHandoff>
   cancelTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
+  completeOwnerHandoff: (projectId: string, handoffId: string) => Promise<OwnerHandoff>
   confirmActivityVideoPlan: (
     projectId: string,
     activityId: string,
@@ -80,8 +83,16 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
   }
 
   return {
+    cancelOwnerHandoff: (projectId, handoffId) => request<OwnerHandoff>(
+      `/projects/${encodeURIComponent(projectId)}/owner-handoffs/${encodeURIComponent(handoffId)}/cancel`,
+      { method: 'POST' },
+    ),
     cancelTask: (projectId, taskId) => request<ExecutionTask>(
       `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/cancel`,
+      { method: 'POST' },
+    ),
+    completeOwnerHandoff: (projectId, handoffId) => request<OwnerHandoff>(
+      `/projects/${encodeURIComponent(projectId)}/owner-handoffs/${encodeURIComponent(handoffId)}/complete`,
       { method: 'POST' },
     ),
     confirmActivityVideoPlan: (projectId, activityId, baseVersion) => request<PublishingActivity>(

@@ -67,6 +67,7 @@ const emit = defineEmits<{
         <dl class="asset-detail-list">
           <div><dt>类型</dt><dd>{{ props.selectedAsset.kind }}</dd></div>
           <div><dt>大小</dt><dd>{{ props.selectedAsset.size }}</dd></div>
+          <div><dt>校验和</dt><dd><code>{{ props.selectedAsset.checksum ?? '未登记' }}</code></dd></div>
           <div><dt>来源</dt><dd>{{ props.selectedAsset.source }}</dd></div>
           <div><dt>保留策略</dt><dd>{{ props.selectedAsset.retention }}</dd></div>
         </dl>
@@ -89,7 +90,7 @@ const emit = defineEmits<{
         <article v-for="artifact in props.snapshot.activityArtifacts" :key="artifact.artifactId" class="artifact-list-item">
           <button type="button" @click="emit('select-artifact', artifact.activityId)">
             <strong>{{ artifact.name }}</strong>
-            <span>{{ artifact.kind }} · {{ artifact.size }} · {{ artifact.status }}</span>
+            <span>{{ artifact.kind }} · {{ artifact.size }} · {{ artifact.status }} · 校验和 {{ artifact.checksum ? artifact.checksum.slice(0, 12) + '…' : '未登记' }}</span>
           </button>
           <AssetPreview
             v-if="props.runtimeConnected && artifact.previewKind && artifact.previewUrl"

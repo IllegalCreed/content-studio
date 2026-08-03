@@ -9,6 +9,8 @@ import type {
 import type { ChannelProjection } from './model'
 import { describe, expect, it } from 'vitest'
 import {
+  activityBusinessProgressProjection,
+  activityPublicationProjections,
   activityToCampaign,
   preferRuntimeData,
   projectChannels,
@@ -181,5 +183,73 @@ describe('workbench runtime projections', () => {
       status: 'queued',
       taskId: 'task-a',
     })
+  })
+
+  it('把活动渠道结果和业务进度集中投影，区分发布回执与监测观测', () => {
+    const content = {
+      channel: 'github' as const,
+      contentId: 'content-a',
+      format: '文章' as const,
+      locale: 'zh-CN' as const,
+      status: '已生成' as const,
+      title: '版本说明',
+    }
+    const results = activityPublicationProjections({
+      activityId: 'activity-a',
+      contentGroups: [{
+        contentGroupId: 'group-a',
+        contents: [content],
+        coreMessage: '说明版本变化',
+        title: '版本内容',
+      }],
+      monitoringObservations: [{
+        activityId: 'activity-a',
+        channel: 'github',
+        collectedAt: '2026-08-03T10:00:00.000Z',
+        metrics: { reads: 12 },
+        observationId: 'observation-a',
+        projectId: 'project-a',
+        publicationId: 'publication-a',
+        source: 'public',
+      }],
+      publicationPlans: [{
+        activityId: 'activity-a',
+        channel: 'github',
+        contentId: 'content-a',
+        projectId: 'project-a',
+        publicationId: 'publication-a',
+      }],
+      publicationReceipts: [{
+        activityId: 'activity-a',
+        channel: 'github',
+        externalReceiptId: 'receipt-a',
+        projectId: 'project-a',
+        publicationId: 'publication-a',
+        receiptId: 'receipt-a',
+        status: 'published',
+      }],
+    })
+
+    expect(results).toMatchObject([{
+      channel: 'github',
+      latestObservation: {
+        metrics: '阅读 12',
+        source: '公开页面',
+      },
+      status: '已发布',
+    }])
+    const progress = activityBusinessProgressProjection({
+      channels: ['github'],
+      contentGroups: [{
+        contentGroupId: 'group-a',
+        contents: [content],
+        coreMessage: '说明版本变化',
+        title: '版本内容',
+      }],
+      publicationResults: results,
+      tasks: [{ kind: 'production', status: 'composing' }],
+    })
+    expect(progress.find(stage => stage.label === '主题与渠道')).toMatchObject({ status: 'done' })
+    expect(progress.find(stage => stage.label === '发布回执')).toMatchObject({ status: 'done' })
   })
 })

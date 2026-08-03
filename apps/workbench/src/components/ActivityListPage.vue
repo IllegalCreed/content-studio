@@ -105,7 +105,7 @@ const emit = defineEmits<{
       <div class="activity-composer-grid">
         <label>
           活动主题
-          <input v-model="props.activityForm.topic" name="activity-topic" required placeholder="例如：用动画理解快速排序的分区过程" />
+          <input v-model="props.activityForm.topic" autocomplete="off" name="activity-topic" required placeholder="例如：用动画理解快速排序的分区过程" />
         </label>
         <fieldset class="channel-choice-field">
           <legend>目标渠道（可多选）</legend>
@@ -130,11 +130,11 @@ const emit = defineEmits<{
           </label>
           <label>
             录制宽度（CSS 像素）
-            <input v-model.number="props.activityForm.videoWidth" name="activity-video-width" min="320" max="3840" required type="number" />
+            <input v-model.number="props.activityForm.videoWidth" autocomplete="off" name="activity-video-width" min="320" max="3840" required type="number" />
           </label>
           <label>
             录制高度（CSS 像素）
-            <input v-model.number="props.activityForm.videoHeight" name="activity-video-height" min="320" max="3840" required type="number" />
+            <input v-model.number="props.activityForm.videoHeight" autocomplete="off" name="activity-video-height" min="320" max="3840" required type="number" />
           </label>
           <p class="form-hint field-wide">尺寸会同时用于目标网站视口和 Playwright 录制文件，保存时还会经过服务端安全校验。</p>
         </fieldset>
@@ -153,10 +153,14 @@ const emit = defineEmits<{
         <div><p class="eyebrow">当前活动 / 渠道内容</p><h3>保存一条内容版本</h3></div>
         <span>手动测试入口 · AI/MCP 接入后复用同一接口</span>
       </div>
+      <div class="ai-host-note" data-testid="ai-host-note">
+        <strong>AI 创作由 MCP 主机负责</strong>
+        <p>当前页面只保存一版可审核内容来验证 runtime 合同。连接支持内容生成的 MCP 主机后，文章、图片、视频脚本和拍摄大纲会从对话中生成，再回到这里审核。</p>
+      </div>
       <div class="activity-composer-grid">
         <label>
           内容标题
-          <input v-model="props.contentForm.title" name="content-title" required placeholder="例如：理解分区操作" />
+          <input v-model="props.contentForm.title" autocomplete="off" name="content-title" required placeholder="例如：理解分区操作" />
         </label>
         <label>
           目标渠道
@@ -172,11 +176,11 @@ const emit = defineEmits<{
         </label>
         <label class="field-wide">
           内容组核心信息
-          <input v-model="props.contentForm.coreMessage" name="content-core-message" required placeholder="这一组内容要让用户记住什么？" />
+          <input v-model="props.contentForm.coreMessage" autocomplete="off" name="content-core-message" required placeholder="这一组内容要让用户记住什么？" />
         </label>
         <label class="field-wide">
           正文或视频脚本摘要
-          <textarea v-model="props.contentForm.body" name="content-body" required rows="5" placeholder="先写入一版可审核内容，后续 AI 会生成正式版本。" />
+          <textarea v-model="props.contentForm.body" autocomplete="off" name="content-body" required rows="5" placeholder="先写入一版可审核内容，后续 AI 会生成正式版本。" />
         </label>
       </div>
       <p v-if="props.contentSaveError" class="form-error" aria-live="polite">{{ props.contentSaveError }}</p>

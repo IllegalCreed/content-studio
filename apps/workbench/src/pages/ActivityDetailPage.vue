@@ -2,15 +2,18 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type {
-  CampaignJobStatus,
   CampaignVideo,
-  ChannelId,
-  ObservationMetric,
   PublishingActivity,
   VideoViewport,
 } from '@content-studio/core-types'
 import WorkbenchShell from '../components/WorkbenchShell.vue'
-import { videoViewportForFormat } from '../model'
+import type { ActivityArtifactProjection, ContentGroupProjection } from '../model'
+import {
+  activityArtifactProjections,
+  activityBusinessProgressProjection,
+  activityPublicationProjections,
+} from '../projections'
+import { humanizeTaskStatus, videoViewportForFormat } from '../model'
 import { useWorkbenchStore } from '../stores/workbench'
 
 const route = useRoute()
@@ -71,182 +74,50 @@ const tasks = computed(() => {
     return store.projectView.tasks.filter(task => task.activityId === activityId.value)
   return store.snapshot.tasks.filter(task => task.activityId === activityId.value)
 })
-const contentGroups = computed(() => {
+const contentGroups = computed<ContentGroupProjection[]>(() => {
   if (store.projectView === null)
     return staticActivity.value?.contentGroups ?? []
   return store.projectView.contentGroups
     .filter(group => group.activityId === activityId.value)
     .map(group => ({
-      ...group,
-      contents: store.projectView!.channelContents.filter(content => content.contentGroupId === group.contentGroupId),
+      contentGroupId: group.contentGroupId,
+      coreMessage: group.coreMessage,
+      title: group.title,
+      contents: store.projectView!.channelContents
+        .filter(content => content.contentGroupId === group.contentGroupId)
+        .map(content => ({
+          accountAlias: store.projectView!.projectChannelBindings.find(binding => binding.channel === content.channel)?.accountAlias,
+          artifactIds: content.artifactIds,
+          body: content.body,
+          channel: content.channel,
+          contentId: content.contentId,
+          format: content.format === 'video' ? '视频' : '文章',
+          locale: content.locale,
+          status: '已生成',
+          title: content.title,
+        })),
     }))
 })
-type ActivityArtifactView = {
-  activityId: string
-  artifactId: string
-  kind: string
-  name: string
-  size: string
-}
-
-const artifacts = computed<ActivityArtifactView[]>(() => {
+const artifacts = computed<ActivityArtifactProjection[]>(() => {
   if (store.projectView === null)
     return staticActivity.value?.activityArtifacts ?? []
-  return store.projectView.activityArtifacts
-    .filter(artifact => artifact.activityId === activityId.value)
-    .map(artifact => ({
-      activityId: artifact.activityId,
-      artifactId: artifact.artifactId,
-      kind: artifact.kind,
-      name: artifact.relativePath.split(/[\\/]/u).at(-1) ?? artifact.relativePath,
-      size: '已登记',
-    }))
-})
-type PublicationResult = {
-  channel: ChannelId
-  contentId?: string
-  contentTitle: string
-  format: string
-  latestObservation?: {
-    collectedAt: string
-    metrics: string
-    source: string
-  }
-  publicUrl?: string
-  publicationId: string
-  status: '已发布' | '发布失败' | '已安排' | '待建立安排'
-}
-
-const publicationResults = computed<PublicationResult[]>(() => {
-  if (store.projectView === null) {
-    return contentGroups.value.flatMap(group => group.contents.map(content => ({
-      channel: content.channel,
-      contentId: content.contentId,
-      contentTitle: content.title,
-      format: content.format,
-      publicationId: `demo-${content.contentId}`,
-      status: '待建立安排' as const,
-    })))
-  }
-
-  const view = store.projectView
-  const contentById = new Map(view.channelContents.map(content => [content.contentId, content]))
-  const planByContentId = new Map(
-    view.publicationPlans
-      .filter(plan => plan.activityId === activityId.value)
-      .map(plan => [plan.contentId, plan]),
+  return activityArtifactProjections(
+    store.projectView.activityArtifacts.filter(artifact => artifact.activityId === activityId.value),
   )
-  const receiptByPublicationId = new Map(
-    view.publicationReceipts.map(receipt => [receipt.publicationId, receipt]),
-  )
-  const observationsByPublicationId = new Map<string, typeof view.monitoringObservations>()
-  for (const observation of view.monitoringObservations) {
-    const observations = observationsByPublicationId.get(observation.publicationId) ?? []
-    observations.push(observation)
-    observationsByPublicationId.set(observation.publicationId, observations)
-  }
-  const rows = view.channelContents
-    .filter(content => content.activityId === activityId.value)
-    .map(content => {
-      const plan = planByContentId.get(content.contentId)
-      const receipt = plan === undefined ? undefined : receiptByPublicationId.get(plan.publicationId)
-      const latestObservation = plan === undefined
-        ? undefined
-        : [...(observationsByPublicationId.get(plan.publicationId) ?? [])]
-          .sort((left, right) => right.collectedAt.localeCompare(left.collectedAt))[0]
-      return {
-        channel: content.channel,
-        contentId: content.contentId,
-        contentTitle: content.title,
-        format: content.format === 'video' ? '视频' : '文章',
-        ...(latestObservation === undefined ? {} : {
-          latestObservation: {
-            collectedAt: latestObservation.collectedAt,
-            metrics: observationMetrics(latestObservation.metrics),
-            source: observationSourceLabel(latestObservation.source),
-          },
-        }),
-        ...(receipt?.publicUrl === undefined ? {} : { publicUrl: receipt.publicUrl }),
-        publicationId: plan?.publicationId ?? `pending-${content.contentId}`,
-        status: receipt?.status === 'published'
-          ? '已发布' as const
-          : receipt?.status === 'failed'
-            ? '发布失败' as const
-            : plan === undefined
-              ? '待建立安排' as const
-              : '已安排' as const,
-      }
-    })
-  const plannedContentIds = new Set(rows.map(row => row.contentId))
-  const unlinkedPlans = view.publicationPlans
-    .filter(plan => plan.activityId === activityId.value && !plannedContentIds.has(plan.contentId))
-    .map(plan => ({
-      channel: plan.channel,
-      contentId: plan.contentId,
-      contentTitle: contentById.get(plan.contentId)?.title ?? '渠道成品待登记',
-      format: contentById.get(plan.contentId)?.format === 'video' ? '视频' : '文章',
-      publicationId: plan.publicationId,
-      status: '已安排' as const,
-    }))
-  return [...rows, ...unlinkedPlans]
 })
-
-type ActivityProgressStage = {
-  detail: string
-  label: string
-  status: 'active' | 'done' | 'pending'
-}
-
-const activityBusinessProgress = computed<ActivityProgressStage[]>(() => {
-  const productionTasks = tasks.value.filter(task => task.kind === 'production')
-  const publicationTasks = tasks.value.filter(task => task.kind === 'publication')
-  const monitoringTasks = tasks.value.filter(task => task.kind === 'monitoring')
-  const publicationScheduled = publicationResults.value.some(result => result.status !== '待建立安排')
-  const publicationCompleted = publicationResults.value.some(result => result.status === '已发布')
-  const monitoringCompleted = publicationResults.value.some(result => result.latestObservation !== undefined)
-  return [
-    {
-      detail: `${channels.value.length} 个渠道已选` ,
-      label: '主题与渠道',
-      status: channels.value.length > 0 ? 'done' : 'active',
-    },
-    {
-      detail: contentGroups.value.length > 0
-        ? `${contentGroups.value.length} 个内容组，${contentGroups.value.reduce((total, group) => total + group.contents.length, 0)} 个渠道版本`
-        : '等待 AI 或用户建立内容组',
-      label: '内容组与渠道成品',
-      status: contentGroups.value.length > 0 ? 'done' : 'active',
-    },
-    {
-      detail: productionTasks.length > 0
-        ? `${productionTasks.length} 个制作任务 · ${taskStatus(productionTasks[0]!.status)}`
-        : '尚未建立制作任务',
-      label: '制作执行',
-      status: productionTasks.length === 0 ? 'pending' : productionTasks.every(task => task.status === 'composing') ? 'done' : 'active',
-    },
-    {
-      detail: publicationScheduled
-        ? `${publicationResults.value.filter(result => result.status !== '待建立安排').length} 个发布安排`
-        : '尚未建立发布安排',
-      label: '发布安排',
-      status: publicationScheduled ? 'done' : 'pending',
-    },
-    {
-      detail: publicationCompleted
-        ? `${publicationResults.value.filter(result => result.status === '已发布').length} 个渠道已收到成功回执`
-        : publicationTasks.length > 0 ? '等待渠道回执' : '发布任务尚未建立',
-      label: '发布回执',
-      status: publicationCompleted ? 'done' : publicationTasks.length > 0 ? 'active' : 'pending',
-    },
-    {
-      detail: monitoringCompleted
-        ? `${publicationResults.value.filter(result => result.latestObservation !== undefined).length} 个渠道已有监测数据`
-        : monitoringTasks.length > 0 ? '等待第一次监测采集' : '监测任务尚未建立',
-      label: '监测结果',
-      status: monitoringCompleted ? 'done' : monitoringTasks.length > 0 ? 'active' : 'pending',
-    },
-  ]
-})
+const publicationResults = computed(() => activityPublicationProjections({
+  activityId: activityId.value,
+  contentGroups: contentGroups.value,
+  monitoringObservations: store.projectView?.monitoringObservations,
+  publicationPlans: store.projectView?.publicationPlans,
+  publicationReceipts: store.projectView?.publicationReceipts,
+}))
+const activityBusinessProgress = computed(() => activityBusinessProgressProjection({
+  channels: channels.value,
+  contentGroups: contentGroups.value,
+  publicationResults: publicationResults.value,
+  tasks: tasks.value,
+}))
 const isRuntimeActivity = computed(() => runtimeActivity.value !== undefined)
 const canConfirm = computed(() => isRuntimeActivity.value
   && runtimeActivity.value?.video !== undefined
@@ -304,21 +175,6 @@ async function revisePlan(): Promise<void> {
   }
 }
 
-function taskStatus(status: CampaignJobStatus): string {
-  const labels: Record<CampaignJobStatus, string> = {
-    'awaiting-owner': '等待人工',
-    'cancelled': '已取消',
-    'composing': '合成中',
-    'failed': '失败',
-    'generating': '生成中',
-    'monitoring': '监测中',
-    'published': '已发布',
-    'queued': '排队中',
-    'recording': '录制中',
-  }
-  return labels[status]
-}
-
 function activityStatusLabel(status: PublishingActivity['status']): string {
   const labels: Record<PublishingActivity['status'], string> = {
     active: '进行中',
@@ -328,32 +184,6 @@ function activityStatusLabel(status: PublishingActivity['status']): string {
     planned: '已规划',
   }
   return labels[status]
-}
-
-function observationMetrics(metrics: Partial<Record<ObservationMetric, number | null>>): string {
-  const labels: Record<string, string> = {
-    clicks: '点击',
-    comments: '评论',
-    favorites: '收藏',
-    likes: '点赞',
-    reads: '阅读',
-    replies: '回复',
-    shares: '转发',
-    views: '播放',
-  }
-  const entries = Object.entries(metrics)
-    .filter(([, value]) => value !== null)
-    .map(([key, value]) => `${labels[key] ?? key} ${value!.toLocaleString('zh-CN')}`)
-  return entries.length > 0 ? entries.join(' · ') : '暂无可用指标'
-}
-
-function observationSourceLabel(source: string): string {
-  const labels: Record<string, string> = {
-    'authorized-adapter': '授权适配器',
-    'owner-entered': '授权人录入',
-    public: '公开页面',
-  }
-  return labels[source] ?? source
 }
 
 onMounted(() => {
@@ -421,8 +251,8 @@ watch(videoPlan, syncViewportDraft, { immediate: true })
       </div>
       <div v-if="isRuntimeActivity" class="detail-viewport-editor">
         <div><strong>调整本次活动的录制尺寸</strong><small>保存会生成新版本，旧确认自动失效。</small></div>
-        <label>宽度<input v-model.number="viewportDraft.width" min="320" max="3840" type="number" /></label>
-        <label>高度<input v-model.number="viewportDraft.height" min="320" max="3840" type="number" /></label>
+        <label>宽度<input v-model.number="viewportDraft.width" autocomplete="off" min="320" max="3840" type="number" /></label>
+        <label>高度<input v-model.number="viewportDraft.height" autocomplete="off" min="320" max="3840" type="number" /></label>
         <button type="button" class="primary-button" :disabled="!canRevise" @click="revisePlan">
           {{ actionPending === 'revise' ? '保存中…' : '保存尺寸' }}
         </button>
@@ -480,12 +310,12 @@ watch(videoPlan, syncViewportDraft, { immediate: true })
     <section class="detail-section detail-two-columns">
       <div>
         <div class="detail-section-heading"><div><p class="eyebrow">执行记录</p><h2>关联任务</h2></div><span>{{ tasks.length }} 个</span></div>
-        <ul v-if="tasks.length > 0" class="detail-task-list"><li v-for="task in tasks" :key="task.taskId"><div><strong>{{ task.kind }} · {{ task.taskId }}</strong><small>{{ task.contentId ?? '活动级任务' }}</small></div><span class="task-status">{{ taskStatus(task.status) }}</span></li></ul>
+        <ul v-if="tasks.length > 0" class="detail-task-list"><li v-for="task in tasks" :key="task.taskId"><div><strong>{{ task.kind }} · {{ task.taskId }}</strong><small>{{ task.contentId ?? '活动级任务' }}</small></div><span class="task-status">{{ humanizeTaskStatus(task.status) }}</span></li></ul>
         <p v-else class="empty-state">当前活动还没有完整的制作、发布、监测任务链。</p>
       </div>
       <div>
         <div class="detail-section-heading"><div><p class="eyebrow">活动产物</p><h2>素材与成品</h2></div><span>{{ artifacts.length }} 个</span></div>
-        <ul v-if="artifacts.length > 0" class="detail-task-list"><li v-for="artifact in artifacts" :key="artifact.artifactId"><div><strong>{{ artifact.name }}</strong><small>{{ artifact.kind }} · {{ artifact.size }}</small></div><span>{{ artifact.artifactId }}</span></li></ul>
+        <ul v-if="artifacts.length > 0" class="detail-task-list"><li v-for="artifact in artifacts" :key="artifact.artifactId"><div><strong>{{ artifact.name }}</strong><small>{{ artifact.kind }} · {{ artifact.size }} · 校验和 {{ artifact.checksum ? artifact.checksum.slice(0, 12) + '…' : '未登记' }}</small></div><span>{{ artifact.artifactId }}</span></li></ul>
         <p v-else class="empty-state">当前活动还没有登记产物。</p>
       </div>
     </section>

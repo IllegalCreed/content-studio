@@ -189,6 +189,8 @@ const runtimeActivityIds = ref<Set<string>>(new Set())
 const projectCaptureFlowIds = ref<string[]>([])
 const taskActionError = ref<string | null>(null)
 const taskActionPending = ref<'cancel' | 'record' | 'retry' | 'start' | null>(null)
+const ownerHandoffActionError = ref<string | null>(null)
+const ownerHandoffActionPending = ref<'cancel' | 'complete' | null>(null)
 const videoPlanActionError = ref<string | null>(null)
 const videoPlanActionPending = ref(false)
 const videoPlanRevisionError = ref<string | null>(null)
@@ -643,6 +645,31 @@ function openOwnerTask(taskId: string): void {
     path: '/project/tasks',
     query: routeQueryForModule('project-tasks'),
   })
+}
+
+async function updateOwnerHandoff(
+  handoffId: string,
+  action: 'cancel' | 'complete',
+): Promise<void> {
+  if (!runtimeConnected.value || ownerHandoffActionPending.value !== null)
+    return
+  if (action === 'cancel' && !window.confirm('确认取消这次人工交接吗？取消后发布任务会停止，之后需要重新建立交接。'))
+    return
+  ownerHandoffActionPending.value = action
+  ownerHandoffActionError.value = null
+  try {
+    if (action === 'complete')
+      await workbenchRuntime.completeOwnerHandoff(snapshot.project.projectId, handoffId)
+    else
+      await workbenchRuntime.cancelOwnerHandoff(snapshot.project.projectId, handoffId)
+    await refreshProjectView()
+  }
+  catch (error: unknown) {
+    ownerHandoffActionError.value = error instanceof Error ? error.message : '人工交接状态保存失败'
+  }
+  finally {
+    ownerHandoffActionPending.value = null
+  }
 }
 
 function selectAsset(assetId: string): void {
@@ -1367,7 +1394,14 @@ async function refreshProjectView(): Promise<void> {
         />
       </template>
       <template v-else-if="activeModule === 'owner'">
-        <OwnerInboxPage :owner-handoffs="ownerHandoffs" @open-task="openOwnerTask" />
+        <OwnerInboxPage
+          :action-error="ownerHandoffActionError"
+          :action-pending="ownerHandoffActionPending"
+          :owner-handoffs="ownerHandoffs"
+          @cancel-handoff="updateOwnerHandoff($event, 'cancel')"
+          @complete-handoff="updateOwnerHandoff($event, 'complete')"
+          @open-task="openOwnerTask"
+        />
       </template>
 
       <template v-else-if="activeModule === 'reports'">

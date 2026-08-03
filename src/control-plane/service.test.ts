@@ -1194,8 +1194,17 @@ describe('content studio application service', () => {
     }
 
     expect(service.createOwnerHandoff(handoff)).toEqual(handoff)
+    expect(service.completeOwnerHandoff('project-a', handoff.handoffId)).toMatchObject({
+      handoffId: handoff.handoffId,
+      status: 'completed',
+    })
+    expect(service.getProjectView('project-a').ownerHandoffs).toEqual([
+      expect.objectContaining({ handoffId: handoff.handoffId, status: 'completed' }),
+    ])
+    expect(() => service.completeOwnerHandoff('project-a', handoff.handoffId))
+      .toThrow(/pending/i)
     expect(service.getProjectView('project-a')).toMatchObject({
-      ownerHandoffs: [handoff],
+      ownerHandoffs: [expect.objectContaining({ handoffId: handoff.handoffId, status: 'completed' })],
       tasks: [
         expect.objectContaining({
           kind: 'production',

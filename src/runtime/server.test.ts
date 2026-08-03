@@ -736,6 +736,16 @@ describe('content studio local application server', () => {
         status: 'pending',
       })
 
+      const completeHandoffResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/owner-handoffs/handoff-a/complete`,
+        { method: 'POST' },
+      )
+      expect(completeHandoffResponse.status).toBe(200)
+      expect(await completeHandoffResponse.json()).toMatchObject({
+        handoffId: 'handoff-a',
+        status: 'completed',
+      })
+
       const receiptResponse = await fetch(
         `${running.baseUrl}/api/v1/projects/project-a/activities/activity-a/publication-plans/publication-a/receipts`,
         {

@@ -298,6 +298,7 @@ describe('runtime report projection', () => {
       name: 'clip.webm',
       previewKind: 'video',
       previewUrl: '/api/v1/projects/project-a/activity-artifacts/artifact-a/preview',
+      checksum: 'a'.repeat(64),
       size: '未记录',
       status: '已登记',
     }])
@@ -307,6 +308,7 @@ describe('runtime report projection', () => {
       name: 'clip.webm',
       previewKind: 'video',
       previewUrl: '/api/v1/projects/project-a/project-assets/asset-a/preview',
+      checksum: 'b'.repeat(64),
       referencedBy: ['一篇指南'],
       retention: '长期保留',
       size: '未记录',

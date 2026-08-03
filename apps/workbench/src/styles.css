@@ -174,6 +174,7 @@ a:focus-visible {
 code {
   color: var(--acid);
   font-family: 'DM Mono', monospace;
+  overflow-wrap: anywhere;
 }
 
 main {
@@ -1074,6 +1075,17 @@ button:disabled {
   font-size: 0.75rem;
 }
 
+.handoff-actions {
+  display: flex;
+  grid-column: 2 / -1;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.handoff-actions button {
+  margin-left: 0;
+}
+
 .empty-handoff {
   margin-top: 2rem;
   padding: 2rem;
@@ -1768,6 +1780,28 @@ footer {
   border: 1px solid var(--stroke);
   background: #10130f;
   font: inherit;
+}
+
+.ai-host-note {
+  display: grid;
+  gap: 0.35rem;
+  margin: 1rem 0;
+  padding: 0.8rem 0.9rem;
+  border-left: 2px solid var(--acid);
+  background: var(--panel-strong);
+}
+
+.ai-host-note strong {
+  color: var(--acid);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.ai-host-note p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
 }
 
 .activity-composer input:focus-visible,

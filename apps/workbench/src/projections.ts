@@ -7,10 +7,13 @@ import type {
   ContentStudioProjectView,
   ExecutionTask,
   ExecutionTaskEvent,
+  MonitoringObservation,
   ObservationMetric,
   OwnerHandoff,
   ProjectAsset,
   ProjectChannelBinding,
+  PublicationPlan,
+  PublicationReceipt,
   PublishingActivity,
   RecordingAttemptRecord,
 } from '@content-studio/core-types'
@@ -28,6 +31,7 @@ import type {
   VideoPlanProjection,
 } from './model'
 import {
+  humanizeTaskStatus,
   recordingReceiptToVideoJob,
   taskEventSummary,
   taskLifecycleProjection,
@@ -76,6 +80,7 @@ export function activityArtifactProjections(
   return artifacts.map(artifact => ({
     activityId: artifact.activityId,
     artifactId: artifact.artifactId,
+    checksum: artifact.sha256,
     kind: activityArtifactKindLabel(artifact.kind),
     name: fileName(artifact.relativePath),
     previewKind: activityArtifactPreviewKind(artifact.kind),
@@ -121,6 +126,7 @@ export function runtimeProjectAssets(
 
   return projectView.projectAssets.map(asset => ({
     assetId: asset.assetId,
+    checksum: asset.sha256,
     kind: asset.kind,
     name: fileName(asset.relativePath),
     previewKind: projectAssetPreviewKind(asset.kind),
@@ -307,6 +313,210 @@ function reportMetrics(
   }))
 }
 
+export interface ActivityPublicationProjection {
+  channel: ChannelId
+  contentId?: string
+  contentTitle: string
+  format: string
+  latestObservation?: {
+    collectedAt: string
+    metrics: string
+    source: string
+  }
+  publicUrl?: string
+  publicationId: string
+  status: '已发布' | '发布失败' | '已安排' | '待建立安排'
+}
+
+export interface ActivityPublicationProjectionInput {
+  activityId: string
+  contentGroups: readonly ContentGroupProjection[]
+  monitoringObservations?: readonly MonitoringObservation[]
+  publicationPlans?: readonly PublicationPlan[]
+  publicationReceipts?: readonly PublicationReceipt[]
+}
+
+export function activityPublicationProjections({
+  activityId,
+  contentGroups,
+  monitoringObservations = [],
+  publicationPlans = [],
+  publicationReceipts = [],
+}: ActivityPublicationProjectionInput): ActivityPublicationProjection[] {
+  const contents = contentGroups.flatMap(group => group.contents)
+  const plans = publicationPlans.filter(plan => plan.activityId === activityId)
+  const receiptsByPublication = new Map(
+    publicationReceipts.map(receipt => [receipt.publicationId, receipt]),
+  )
+  const observationsByPublication = new Map<string, MonitoringObservation[]>()
+  for (const observation of monitoringObservations) {
+    const observations = observationsByPublication.get(observation.publicationId) ?? []
+    observations.push(observation)
+    observationsByPublication.set(observation.publicationId, observations)
+  }
+  const rows = contents.map((content) => {
+    const plan = plans.find(candidate => candidate.contentId === content.contentId)
+    const receipt = plan === undefined ? undefined : receiptsByPublication.get(plan.publicationId)
+    const latestObservation = plan === undefined
+      ? undefined
+      : [...(observationsByPublication.get(plan.publicationId) ?? [])]
+          .sort((left, right) => right.collectedAt.localeCompare(left.collectedAt))[0]
+    return publicationResult({ content, latestObservation, plan, receipt })
+  })
+  const linkedContentIds = new Set(
+    rows.map(row => row.contentId).filter((id): id is string => id !== undefined),
+  )
+  const unlinkedPlans = plans
+    .filter(plan => !linkedContentIds.has(plan.contentId))
+    .map(plan => publicationResult({
+      content: {
+        channel: plan.channel,
+        contentId: plan.contentId,
+        format: '文章',
+        locale: 'zh-CN',
+        status: '已生成',
+        title: '渠道成品待登记',
+      },
+      plan,
+      receipt: receiptsByPublication.get(plan.publicationId),
+    }))
+  return [...rows, ...unlinkedPlans]
+}
+
+function publicationResult({
+  content,
+  latestObservation,
+  plan,
+  receipt,
+}: {
+  content: ChannelContentProjection
+  latestObservation?: MonitoringObservation
+  plan?: PublicationPlan
+  receipt?: PublicationReceipt
+}): ActivityPublicationProjection {
+  return {
+    channel: content.channel,
+    ...(content.contentId === undefined ? {} : { contentId: content.contentId }),
+    contentTitle: content.title,
+    format: content.format,
+    ...(latestObservation === undefined
+      ? {}
+      : {
+          latestObservation: {
+            collectedAt: latestObservation.collectedAt,
+            metrics: observationMetrics(latestObservation.metrics),
+            source: observationSourceLabel(latestObservation.source),
+          },
+        }),
+    ...(receipt?.publicUrl === undefined ? {} : { publicUrl: receipt.publicUrl }),
+    publicationId: plan?.publicationId ?? `pending-${content.contentId ?? content.title}`,
+    status: receipt?.status === 'published'
+      ? '已发布'
+      : receipt?.status === 'failed'
+        ? '发布失败'
+        : plan === undefined
+          ? '待建立安排'
+          : '已安排',
+  }
+}
+
+export interface ActivityBusinessProgressProjection {
+  detail: string
+  label: string
+  status: 'active' | 'done' | 'pending'
+}
+
+export function activityBusinessProgressProjection({
+  channels,
+  contentGroups,
+  publicationResults,
+  tasks,
+}: {
+  channels: readonly ChannelId[]
+  contentGroups: readonly ContentGroupProjection[]
+  publicationResults: readonly ActivityPublicationProjection[]
+  tasks: ReadonlyArray<{
+    kind: ExecutionTask['kind'] | '制作' | '发布' | '监测'
+    status: ExecutionTask['status']
+  }>
+}): ActivityBusinessProgressProjection[] {
+  const productionTasks = tasks.filter(task => task.kind === 'production' || task.kind === '制作')
+  const publicationTasks = tasks.filter(task => task.kind === 'publication' || task.kind === '发布')
+  const monitoringTasks = tasks.filter(task => task.kind === 'monitoring' || task.kind === '监测')
+  const publicationScheduled = publicationResults.some(result => result.status !== '待建立安排')
+  const publicationCompleted = publicationResults.some(result => result.status === '已发布')
+  const monitoringCompleted = publicationResults.some(result => result.latestObservation !== undefined)
+  return [
+    {
+      detail: `${channels.length} 个渠道已选`,
+      label: '主题与渠道',
+      status: channels.length > 0 ? 'done' : 'active',
+    },
+    {
+      detail: contentGroups.length > 0
+        ? `${contentGroups.length} 个内容组，${contentGroups.reduce((total, group) => total + group.contents.length, 0)} 个渠道版本`
+        : '等待 AI 或用户建立内容组',
+      label: '内容组与渠道成品',
+      status: contentGroups.length > 0 ? 'done' : 'active',
+    },
+    {
+      detail: productionTasks.length > 0
+        ? `${productionTasks.length} 个制作任务 · ${humanizeTaskStatus(productionTasks[0]!.status)}`
+        : '尚未建立制作任务',
+      label: '制作执行',
+      status: productionTasks.length === 0
+        ? 'pending'
+        : productionTasks.every(task => task.status === 'composing') ? 'done' : 'active',
+    },
+    {
+      detail: publicationScheduled
+        ? `${publicationResults.filter(result => result.status !== '待建立安排').length} 个发布安排`
+        : '尚未建立发布安排',
+      label: '发布安排',
+      status: publicationScheduled ? 'done' : 'pending',
+    },
+    {
+      detail: publicationCompleted
+        ? `${publicationResults.filter(result => result.status === '已发布').length} 个渠道已收到成功回执`
+        : publicationTasks.length > 0 ? '等待渠道回执' : '发布任务尚未建立',
+      label: '发布回执',
+      status: publicationCompleted ? 'done' : publicationTasks.length > 0 ? 'active' : 'pending',
+    },
+    {
+      detail: monitoringCompleted
+        ? `${publicationResults.filter(result => result.latestObservation !== undefined).length} 个渠道已有监测数据`
+        : monitoringTasks.length > 0 ? '等待第一次监测采集' : '监测任务尚未建立',
+      label: '监测结果',
+      status: monitoringCompleted ? 'done' : monitoringTasks.length > 0 ? 'active' : 'pending',
+    },
+  ]
+}
+
+function observationMetrics(metrics: Partial<Record<ObservationMetric, number | null>>): string {
+  const labels: Record<ObservationMetric, string> = {
+    clicks: '点击',
+    comments: '评论',
+    favorites: '收藏',
+    likes: '点赞',
+    reads: '阅读',
+    replies: '回复',
+    shares: '转发',
+    views: '播放',
+  }
+  const entries = Object.entries(metrics)
+    .filter(([, value]) => value !== null)
+    .map(([key, value]) => `${labels[key as ObservationMetric] ?? key} ${value!.toLocaleString('zh-CN')}`)
+  return entries.length > 0 ? entries.join(' · ') : '暂无可用指标'
+}
+
+function observationSourceLabel(source: string): string {
+  return {
+    'authorized-adapter': '授权适配器',
+    'owner-entered': '授权人录入',
+    'public': '公开页面',
+  }[source] ?? source
+}
+
 export interface ActivityProjectionInput {
   accountAliasForChannel: (channel: ChannelId) => string | undefined
   activity: PublishingActivity
@@ -405,7 +615,7 @@ export function activityToCampaign({
         handoffId: handoff.handoffId,
         officialTargetUrl: handoff.officialTargetUrl,
         reason: '等待渠道授权人完成登录、审核和最终点击',
-        status: handoff.status === 'pending' ? 'waiting' : 'ready',
+        status: handoff.status === 'pending' ? 'waiting' : handoff.status,
       })),
     nextAction: videoJob?.outcome === '失败'
       ? '录制失败，请查看日志摘要后重试。'

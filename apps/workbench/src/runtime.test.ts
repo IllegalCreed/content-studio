@@ -90,6 +90,27 @@ describe('workbench runtime client', () => {
     )
   })
 
+  it('completes and cancels owner handoffs without publishing on its own', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ handoffId: 'handoff-a', status: 'completed' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ handoffId: 'handoff-b', status: 'cancelled' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const runtime = createWorkbenchRuntime('/api/v1')
+    await expect(runtime.completeOwnerHandoff('project-a', 'handoff-a')).resolves.toMatchObject({ status: 'completed' })
+    await expect(runtime.cancelOwnerHandoff('project-a', 'handoff-b')).resolves.toMatchObject({ status: 'cancelled' })
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/v1/projects/project-a/owner-handoffs/handoff-a/complete',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/projects/project-a/owner-handoffs/handoff-b/cancel',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
   it('turns a non-success response into a readable error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: 'blocked' }), { status: 403 }),

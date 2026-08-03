@@ -79,6 +79,7 @@ export interface ContentStudioRepository {
   ) => ProjectChannelBinding
   saveProjectSnapshot: (snapshot: ProjectSnapshot) => ProjectSnapshot
   saveOwnerHandoff: (handoff: OwnerHandoff) => OwnerHandoff
+  updateOwnerHandoff: (handoff: OwnerHandoff) => OwnerHandoff
   savePublicationPlan: (plan: PublicationPlan) => PublicationPlan
   savePublicationReceipt: (receipt: PublicationReceipt) => PublicationReceipt
   saveMonitoringObservation: (
@@ -275,6 +276,13 @@ implements ContentStudioRepository {
   saveOwnerHandoff(handoff: OwnerHandoff): OwnerHandoff {
     if (this.ownerHandoffs.has(handoff.handoffId))
       throw new RecordConflictError(handoff.handoffId, 1)
+    this.ownerHandoffs.set(handoff.handoffId, clone(handoff))
+    return clone(handoff)
+  }
+
+  updateOwnerHandoff(handoff: OwnerHandoff): OwnerHandoff {
+    if (!this.ownerHandoffs.has(handoff.handoffId))
+      throw new RecordNotFoundError('OwnerHandoff', handoff.handoffId)
     this.ownerHandoffs.set(handoff.handoffId, clone(handoff))
     return clone(handoff)
   }
@@ -693,6 +701,19 @@ export class ContentStudioApplicationService {
     return this.taskStore.cancelTask(projectId, taskId)
   }
 
+  completeOwnerHandoff(projectId: string, handoffId: string): OwnerHandoff {
+    return this.updateOwnerHandoffStatus(projectId, handoffId, 'completed')
+  }
+
+  cancelOwnerHandoff(projectId: string, handoffId: string): OwnerHandoff {
+    const handoff = this.updateOwnerHandoffStatus(projectId, handoffId, 'cancelled')
+    const publicationTaskId = `publication-${handoff.publicationId}`
+    const publicationTask = this.taskStore.getTask(projectId, publicationTaskId)
+    if (publicationTask?.status === 'awaiting-owner')
+      this.taskStore.cancelTask(projectId, publicationTaskId)
+    return handoff
+  }
+
   retryTask(projectId: string, taskId: string): ExecutionTask {
     this.requireProject(projectId)
     return this.taskStore.retryTask(projectId, taskId)
@@ -1055,6 +1076,20 @@ export class ContentStudioApplicationService {
       )
     }
     return savedHandoff
+  }
+
+  private updateOwnerHandoffStatus(
+    projectId: string,
+    handoffId: string,
+    status: Extract<OwnerHandoff['status'], 'cancelled' | 'completed'>,
+  ): OwnerHandoff {
+    this.requireProject(projectId)
+    const handoff = this.repository.getOwnerHandoff(projectId, handoffId)
+    if (handoff === undefined)
+      throw new RecordNotFoundError('OwnerHandoff', handoffId)
+    if (handoff.status !== 'pending')
+      throw new Error(`Owner handoff ${handoffId} is not pending`)
+    return this.repository.updateOwnerHandoff({ ...handoff, status })
   }
 
   recordMonitoringObservation(

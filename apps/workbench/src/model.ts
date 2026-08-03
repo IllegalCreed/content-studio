@@ -180,7 +180,7 @@ export interface OwnerHandoffProjection {
   handoffId: string
   officialTargetUrl: string
   reason: string
-  status: 'ready' | 'waiting'
+  status: 'cancelled' | 'completed' | 'expired' | 'ready' | 'waiting'
 }
 
 export type ActivityStatusProjection = '草稿' | '已规划' | '进行中' | '已完成' | '已归档'
@@ -410,6 +410,7 @@ export interface ContentGroupProjection {
 
 export interface AssetProjection {
   assetId: string
+  checksum?: string
   kind: 'audio' | 'font' | 'image' | 'logo' | 'template' | 'video'
   name: string
   previewKind?: AssetPreviewKind
@@ -424,6 +425,7 @@ export interface AssetProjection {
 export interface ActivityArtifactProjection {
   activityId: string
   artifactId: string
+  checksum?: string
   kind: '文章版本' | '图片' | '音频' | '预览帧' | '视频片段' | '视频'
   name: string
   previewKind?: AssetPreviewKind

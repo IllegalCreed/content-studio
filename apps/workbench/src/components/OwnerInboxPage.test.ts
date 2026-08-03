@@ -16,6 +16,7 @@ describe('ownerInboxPage', () => {
             handoffId: 'handoff-x-01',
             officialTargetUrl: 'https://x.com/compose/post',
             reason: '请完成 X 发布',
+            status: 'waiting',
             taskId: 'publication-release-notes-x',
           },
           {
@@ -27,6 +28,7 @@ describe('ownerInboxPage', () => {
             handoffId: 'handoff-github-01',
             officialTargetUrl: 'https://github.com/new',
             reason: '请完成 GitHub 发布',
+            status: 'waiting',
           },
         ],
       },
@@ -38,5 +40,29 @@ describe('ownerInboxPage', () => {
     const taskButton = wrapper.get('[data-testid="owner-handoff-task"]')
     await taskButton.trigger('click')
     expect(wrapper.emitted('open-task')).toEqual([['publication-release-notes-x']])
+  })
+
+  it('offers explicit completion and cancellation actions for pending handoffs', async () => {
+    const wrapper = mount(OwnerInboxPage, {
+      props: {
+        ownerHandoffs: [{
+          accountAlias: 'Docs',
+          campaignTitle: '版本发布',
+          channel: 'github',
+          checklist: ['确认内容'],
+          expiresAt: '2026-08-03 18:00',
+          handoffId: 'handoff-a',
+          officialTargetUrl: 'https://github.com/new',
+          reason: '请完成发布',
+          status: 'waiting',
+          taskId: 'publication-a',
+        }],
+      },
+    })
+
+    await wrapper.get('[data-testid="owner-handoff-complete"]').trigger('click')
+    await wrapper.get('[data-testid="owner-handoff-cancel"]').trigger('click')
+    expect(wrapper.emitted('complete-handoff')).toEqual([['handoff-a']])
+    expect(wrapper.emitted('cancel-handoff')).toEqual([['handoff-a']])
   })
 })

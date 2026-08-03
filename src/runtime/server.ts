@@ -372,6 +372,24 @@ async function handleRequest(
       && segments[0] === 'api'
       && segments[1] === 'v1'
       && segments[2] === 'projects'
+      && segments[4] === 'owner-handoffs'
+      && (segments[6] === 'complete' || segments[6] === 'cancel')
+    ) {
+      const projectId = identifierField(decodeSegment(segments[3]!), 'projectId')
+      const handoffId = identifierField(decodeSegment(segments[5]!), 'handoffId')
+      const handoff = segments[6] === 'complete'
+        ? service.completeOwnerHandoff(projectId, handoffId)
+        : service.cancelOwnerHandoff(projectId, handoffId)
+      sendJson(response, 200, handoff)
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
       && segments[4] === 'tasks'
       && segments[6] === 'record'
     ) {
