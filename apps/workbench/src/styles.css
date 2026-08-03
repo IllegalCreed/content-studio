@@ -882,6 +882,13 @@ main {
   font-size: 0.65rem;
 }
 
+.task-runtime-status {
+  flex: 1 1 12rem;
+  min-width: 12rem;
+  margin: 0;
+  white-space: nowrap;
+}
+
 .runtime-status > span {
   background: #777b72;
   box-shadow: none;

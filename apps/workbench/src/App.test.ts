@@ -104,6 +104,7 @@ describe('content studio workbench', () => {
     expect(wrapper.get('[data-testid="runtime-status"]').text()).toContain(
       '运行时未连接',
     )
+    expect(wrapper.get('.task-runtime-status').text()).toContain('演示任务不可操作')
     expect(wrapper.get('[data-testid="start-task"]').attributes()).toHaveProperty('disabled')
     expect(wrapper.get('[data-testid="record-task"]').attributes()).toHaveProperty('disabled')
     expect(wrapper.find('.task-detail .status-rail').exists()).toBe(true)

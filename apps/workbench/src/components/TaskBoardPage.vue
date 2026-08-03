@@ -150,9 +150,9 @@ const taskSummaryCopy: Record<'制作' | '发布' | '监测', string> = {
           <span>不会保存凭据</span>
         </div>
         <div class="job-actions">
-          <p class="runtime-status" aria-live="polite">
+          <p class="runtime-status task-runtime-status" aria-live="polite">
             <span v-if="props.taskActionError" class="task-action-error">{{ props.taskActionError }}</span>
-            <span v-else-if="!props.runtimeConnected">运行时未连接，演示任务不可操作</span>
+            <span v-else-if="!props.runtimeConnected">运行时未连接 · 演示任务不可操作</span>
             <span v-else>操作会写入本地任务事件，不会触发渠道发布</span>
           </p>
           <div>
