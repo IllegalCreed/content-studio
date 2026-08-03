@@ -4,8 +4,13 @@ import type { VideoJobProjection } from '../model'
 import { humanizeEventKind } from '../model'
 
 const props = defineProps<{
+  accountAlias?: string
+  activityTitle?: string
+  channel?: string
+  contentTitle?: string
   job: VideoJobProjection
   runtimeConnected: boolean
+  taskTitle?: string
 }>()
 
 const progress = computed(() =>
@@ -20,9 +25,13 @@ const progress = computed(() =>
     <div class="panel-heading">
       <div>
         <p class="eyebrow">
-          视频制作 · 第 {{ job.attempt }} 次尝试
+          选中任务 · 录制证据 · 第 {{ job.attempt }} 次尝试
         </p>
-        <h2>{{ job.jobId }}</h2>
+        <h2>{{ props.taskTitle ?? job.jobId }}</h2>
+        <p v-if="props.activityTitle || props.contentTitle || props.channel || props.accountAlias" class="video-job-context">
+          活动：{{ props.activityTitle ?? '未关联活动' }} · 内容：{{ props.contentTitle ?? '未关联内容' }} · 渠道：{{ props.channel ?? '未指定渠道' }} · 账号：{{ props.accountAlias ?? '未绑定账号' }}
+        </p>
+        <p class="video-job-id">任务编号：<code>{{ job.jobId }}</code></p>
       </div>
       <span class="progress-value">{{ progress }}%</span>
     </div>

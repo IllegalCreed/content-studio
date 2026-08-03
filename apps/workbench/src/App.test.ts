@@ -110,6 +110,8 @@ describe('content studio workbench', () => {
     expect(wrapper.find('.task-detail .status-rail').exists()).toBe(true)
     expect(wrapper.text()).toContain('录制中')
     expect(wrapper.text()).toContain('快速排序可视化指南')
+    expect(wrapper.get('.video-job-context').text()).toContain('快速排序演示视频')
+    expect(wrapper.get('.video-job-context').text()).toContain('bilibili')
     const retryButton = wrapper.get('[data-testid="retry-task"]')
     await wrapper.get('button[data-task-id="release-notes-publish-x"]').trigger('click')
     await nextTick()

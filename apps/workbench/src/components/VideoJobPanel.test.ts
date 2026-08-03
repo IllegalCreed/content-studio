@@ -34,10 +34,17 @@ describe('video job panel', () => {
       props: {
         job,
         runtimeConnected: true,
+        taskTitle: '录制快速排序演示视频',
+        activityTitle: '快速排序可视化指南',
+        contentTitle: '快速排序演示视频',
+        channel: 'bilibili',
+        accountAlias: 'Algorithm Visualizer',
       },
     })
 
     expect(wrapper.get('img.preview-image').attributes('src')).toBe(job.previewUrl)
+    expect(wrapper.get('.video-job-context').text()).toContain('快速排序可视化指南')
+    expect(wrapper.get('.video-job-context').text()).toContain('bilibili')
     expect(wrapper.text()).toContain('preview-1.png')
     expect(wrapper.text()).toContain('控制台错误 0 · 警告 1 · 页面错误 0')
     expect(wrapper.get('a[download]').attributes('href')).toBe(job.artifacts[0]!.url)
@@ -49,6 +56,11 @@ describe('video job panel', () => {
       props: {
         job: { ...job, previewUrl: undefined, previewLabel: '暂无预览帧' },
         runtimeConnected: false,
+        taskTitle: '录制快速排序演示视频',
+        activityTitle: '快速排序可视化指南',
+        contentTitle: '快速排序演示视频',
+        channel: 'bilibili',
+        accountAlias: 'Algorithm Visualizer',
       },
     })
 

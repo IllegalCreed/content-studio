@@ -176,7 +176,12 @@ const taskSummaryCopy: Record<'制作' | '发布' | '监测', string> = {
   <VideoJobPanel
     v-if="props.visibleTasks.length > 0 && props.selectedTaskCampaign.videoJob !== null"
     id="video"
+    :account-alias="props.selectedTask.accountAlias"
+    :activity-title="props.selectedTask.activityTitle"
+    :channel="props.selectedTask.channel"
+    :content-title="props.selectedTask.contentTitle"
     :job="props.selectedTaskCampaign.videoJob"
     :runtime-connected="props.runtimeConnected"
+    :task-title="props.selectedTask.title"
   />
 </template>
