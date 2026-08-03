@@ -69,7 +69,7 @@ export async function createRecorderArtifact(
   return {
     id,
     kind,
-    relativePath: relative(artifactDirectory, artifactPath),
+    relativePath: toPortableRelativePath(relative(artifactDirectory, artifactPath)),
     ...(sceneId === undefined ? {} : { sceneId }),
     sha256: createHash('sha256').update(content).digest('hex'),
     sizeBytes: fileStatus.size,
@@ -117,4 +117,8 @@ function isWithin(parent: string, child: string): boolean {
   return childRelativePath !== ''
     && !childRelativePath.startsWith('..')
     && !isAbsolute(childRelativePath)
+}
+
+function toPortableRelativePath(path: string): string {
+  return path.replaceAll('\\', '/')
 }

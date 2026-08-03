@@ -7,7 +7,7 @@ import type {
   RecorderAttemptReceipt,
 } from '../types'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   InMemoryContentStudioRepository,
@@ -886,8 +886,14 @@ describe('content studio local application server', () => {
       },
     }
     let recordingInput: { outputDirectory: string, plan: unknown } | undefined
+    const productionOutputRoot = resolve('/tmp/content-studio-runtime-recording')
     const receipt: RecorderAttemptReceipt = {
-      artifactDirectory: '/tmp/content-studio-runtime-recording/project-a/production-video-content/attempt-1',
+      artifactDirectory: join(
+        productionOutputRoot,
+        project.projectId,
+        'production-video-content',
+        'attempt-1',
+      ),
       artifacts: [{
         id: 'preview-1',
         kind: 'preview-frame',
@@ -923,7 +929,7 @@ describe('content studio local application server', () => {
           return { attempts: [receipt], receipt }
         },
       },
-      productionOutputRoot: '/tmp/content-studio-runtime-recording',
+      productionOutputRoot,
       project,
       projectChannelBindings: [{
         channel: 'youtube',
@@ -977,14 +983,14 @@ describe('content studio local application server', () => {
 
     try {
       await mkdir(join(
-        '/tmp/content-studio-runtime-recording',
+        productionOutputRoot,
         project.projectId,
         taskId,
         'attempt-1',
         'previews',
       ), { recursive: true })
       await writeFile(join(
-        '/tmp/content-studio-runtime-recording',
+        productionOutputRoot,
         project.projectId,
         taskId,
         'attempt-1',
@@ -1008,7 +1014,7 @@ describe('content studio local application server', () => {
         task: { status: 'composing' },
       })
       expect(recordingInput?.outputDirectory).toBe(
-        join('/tmp/content-studio-runtime-recording', project.projectId, taskId),
+        join(productionOutputRoot, project.projectId, taskId),
       )
       expect(recordingInput?.plan).toMatchObject({
         campaignId: 'video-campaign',
@@ -1043,7 +1049,7 @@ describe('content studio local application server', () => {
     }
     finally {
       await running.close()
-      await rm('/tmp/content-studio-runtime-recording', { force: true, recursive: true })
+      await rm(productionOutputRoot, { force: true, recursive: true })
     }
   })
 
