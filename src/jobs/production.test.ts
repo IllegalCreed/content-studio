@@ -29,13 +29,14 @@ const plan: VideoPlan = {
 
 function createReceipt(
   outcome: RecorderAttemptReceipt['outcome'],
+  attempt = 1,
 ): RecordingJobResult {
   return {
     attempts: [],
     receipt: {
-      artifactDirectory: '/tmp/content-studio-test/attempt-1',
+      artifactDirectory: `/tmp/content-studio-test/attempt-${attempt}`,
       artifacts: [],
-      attempt: 1,
+      attempt,
       campaignId: plan.campaignId,
       completedActions: outcome === 'succeeded' ? 0 : 0,
       completedScenes: 0,
@@ -115,6 +116,7 @@ describe('production task executor', () => {
       receipt: { outcome: 'succeeded' },
       task: { status: 'composing' },
     })
+    expect(store.listRecordingReceipts(projectId, taskId)).toEqual([result.receipt])
     expect(store.listEvents(projectId, taskId).map(event => event.kind))
       .toEqual(['task-created', 'status-changed', 'status-changed', 'status-changed'])
   })
@@ -139,6 +141,38 @@ describe('production task executor', () => {
       receipt: { outcome: 'failed' },
       task: { status: 'failed' },
     })
+  })
+
+  it('continues receipt attempt numbering when a task is retried', async () => {
+    const store = createStore()
+    const inputs: RecordingJobInput[] = []
+    await runProductionTask(
+      store,
+      createInput(),
+      {
+        record: async (input) => {
+          inputs.push(input)
+          return createReceipt('failed', input.initialAttempt)
+        },
+      },
+    )
+
+    store.retryTask(projectId, taskId)
+    store.transitionTask(projectId, taskId, 'generating')
+    await runProductionTask(
+      store,
+      createInput(),
+      {
+        record: async (input) => {
+          inputs.push(input)
+          return createReceipt('succeeded', input.initialAttempt)
+        },
+      },
+    )
+
+    expect(inputs.map(input => input.initialAttempt)).toEqual([1, 2])
+    expect(store.listRecordingReceipts(projectId, taskId).map(receipt => receipt.attempt))
+      .toEqual([1, 2])
   })
 
   it('fails closed before changing state for an invalid project origin or task', async () => {

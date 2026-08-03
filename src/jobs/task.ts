@@ -8,6 +8,7 @@ import type {
   ExecutionTaskStore,
   ExecutionTaskStoreState,
   ExecutionTaskTransitionOptions,
+  RecorderAttemptReceipt,
 } from '../types'
 import { CAMPAIGN_JOB_TRANSITIONS } from '../constants'
 
@@ -42,17 +43,23 @@ export class TaskStateError extends Error {
 export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
   private readonly events = new Map<string, ExecutionTaskEvent[]>()
 
+  private readonly recordingReceipts = new Map<string, RecorderAttemptReceipt[]>()
+
   private readonly tasks = new Map<string, ExecutionTask>()
 
   exportState(): ExecutionTaskStoreState {
     return {
       events: [...this.events.values()].flatMap(events => events).map(clone),
+      recordingReceipts: [...this.recordingReceipts.values()]
+        .flatMap(receipts => receipts)
+        .map(clone),
       tasks: this.listTasks(),
     }
   }
 
   restoreState(state: ExecutionTaskStoreState): void {
     this.events.clear()
+    this.recordingReceipts.clear()
     this.tasks.clear()
     for (const task of state.tasks)
       this.tasks.set(taskKey(task.projectId, task.taskId), clone(task))
@@ -61,6 +68,13 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
       this.events.set(key, [
         ...(this.events.get(key) ?? []),
         clone(event),
+      ])
+    }
+    for (const receipt of state.recordingReceipts ?? []) {
+      const key = taskKey(receipt.projectId, receipt.jobId)
+      this.recordingReceipts.set(key, [
+        ...(this.recordingReceipts.get(key) ?? []),
+        clone(receipt),
       ])
     }
   }
@@ -120,6 +134,38 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
   listEvents(projectId: string, taskId: string): ExecutionTaskEvent[] {
     this.requireTask(projectId, taskId)
     return clone(this.events.get(taskKey(projectId, taskId)) ?? [])
+  }
+
+  listRecordingReceipts(
+    projectId: string,
+    taskId: string,
+  ): RecorderAttemptReceipt[] {
+    this.requireTask(projectId, taskId)
+    return clone(this.recordingReceipts.get(taskKey(projectId, taskId)) ?? [])
+  }
+
+  saveRecordingReceipt(
+    projectId: string,
+    taskId: string,
+    receipt: RecorderAttemptReceipt,
+  ): RecorderAttemptReceipt {
+    const task = this.requireTask(projectId, taskId)
+    if (task.kind !== 'production')
+      throw new TaskStateError('Only production tasks can save recording receipts')
+    if (receipt.projectId !== projectId || receipt.jobId !== taskId) {
+      throw new TaskStateError(
+        'Recording receipt must match the project and task that produced it',
+      )
+    }
+    const key = taskKey(projectId, taskId)
+    const receipts = this.recordingReceipts.get(key) ?? []
+    if (receipts.some(candidate => candidate.attempt === receipt.attempt)) {
+      throw new TaskStateError(
+        `Recording receipt attempt ${receipt.attempt} already exists for task ${taskId}`,
+      )
+    }
+    this.recordingReceipts.set(key, [...receipts, clone(receipt)])
+    return clone(receipt)
   }
 
   transitionTask(

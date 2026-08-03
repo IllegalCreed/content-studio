@@ -6,6 +6,7 @@ import type {
   ProjectSnapshot,
   RecorderAttemptReceipt,
 } from '../types'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
@@ -886,8 +887,14 @@ describe('content studio local application server', () => {
     }
     let recordingInput: { outputDirectory: string, plan: unknown } | undefined
     const receipt: RecorderAttemptReceipt = {
-      artifactDirectory: '/tmp/content-studio-runtime-recording/attempt-1',
-      artifacts: [],
+      artifactDirectory: '/tmp/content-studio-runtime-recording/project-a/production-video-content/attempt-1',
+      artifacts: [{
+        id: 'preview-1',
+        kind: 'preview-frame',
+        relativePath: 'previews/preview-1.png',
+        sha256: 'a'.repeat(64),
+        sizeBytes: 7,
+      }],
       attempt: 1,
       campaignId: 'video-campaign',
       completedActions: 1,
@@ -969,6 +976,21 @@ describe('content studio local application server', () => {
     const running = await listen(handle.server)
 
     try {
+      await mkdir(join(
+        '/tmp/content-studio-runtime-recording',
+        project.projectId,
+        taskId,
+        'attempt-1',
+        'previews',
+      ), { recursive: true })
+      await writeFile(join(
+        '/tmp/content-studio-runtime-recording',
+        project.projectId,
+        taskId,
+        'attempt-1',
+        'previews',
+        'preview-1.png',
+      ), 'preview')
       const response = await fetch(
         `${running.baseUrl}/api/v1/projects/${project.projectId}/tasks/${taskId}/record`,
         {
@@ -992,9 +1014,36 @@ describe('content studio local application server', () => {
         campaignId: 'video-campaign',
         scenes: [{ id: 'quick-sort' }],
       })
+      const artifactResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/tasks/${taskId}/recording-attempts/1/artifacts/preview-1`,
+      )
+      expect(artifactResponse.status).toBe(200)
+      expect(artifactResponse.headers.get('content-type')).toBe('image/png')
+      expect(await artifactResponse.text()).toBe('preview')
+      const projectResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}`,
+      )
+      const projectView = await projectResponse.json() as {
+        recordingReceipts: Array<Record<string, unknown>>
+      }
+      expect(projectView.recordingReceipts).toHaveLength(1)
+      expect(projectView.recordingReceipts[0]).toMatchObject({
+        attempt: 1,
+        jobId: taskId,
+      })
+      expect(projectView.recordingReceipts[0]).not.toHaveProperty('artifactDirectory')
+      const invalidAttemptResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/tasks/${taskId}/recording-attempts/0/artifacts/preview-1`,
+      )
+      expect(invalidAttemptResponse.status).toBe(400)
+      const missingArtifactResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/tasks/${taskId}/recording-attempts/1/artifacts/missing`,
+      )
+      expect(missingArtifactResponse.status).toBe(404)
     }
     finally {
       await running.close()
+      await rm('/tmp/content-studio-runtime-recording', { force: true, recursive: true })
     }
   })
 

@@ -30,6 +30,9 @@ import type {
   PublicationPlan,
   PublicationReceipt,
   PublishingActivity,
+  RecorderArtifact,
+  RecorderAttemptReceipt,
+  RecordingAttemptRecord,
   VideoPlan,
 } from '../types'
 import { runProductionTask as executeProductionTask } from '../jobs/production'
@@ -589,6 +592,11 @@ export class ContentStudioApplicationService {
       ownerHandoffs: this.repository.listOwnerHandoffs(projectId),
       publicationPlans: this.repository.listPublicationPlans(projectId),
       publicationReceipts: this.repository.listPublicationReceipts(projectId),
+      recordingReceipts: tasks.flatMap(task =>
+        this.taskStore
+          .listRecordingReceipts(projectId, task.taskId)
+          .map(toRecordingAttemptRecord),
+      ),
       project,
       projectAssets: this.repository.listProjectAssets(projectId),
       projectChannelBindings: this.repository.listProjectChannelBindings(projectId),
@@ -749,6 +757,27 @@ export class ContentStudioApplicationService {
   listTaskEvents(projectId: string, taskId: string): ExecutionTaskEvent[] {
     this.requireProject(projectId)
     return this.taskStore.listEvents(projectId, taskId)
+  }
+
+  getRecordingArtifact(
+    projectId: string,
+    taskId: string,
+    attempt: number,
+    artifactId: string,
+  ): { artifact: RecorderArtifact, artifactDirectory: string } {
+    this.requireProject(projectId)
+    const receipt = this.taskStore
+      .listRecordingReceipts(projectId, taskId)
+      .find(candidate => candidate.attempt === attempt)
+    if (receipt === undefined)
+      throw new RecordNotFoundError('RecordingAttempt', `${taskId}:${attempt}`)
+    const artifact = receipt.artifacts.find(candidate => candidate.id === artifactId)
+    if (artifact === undefined)
+      throw new RecordNotFoundError('RecordingArtifact', artifactId)
+    return {
+      artifact,
+      artifactDirectory: receipt.artifactDirectory,
+    }
   }
 
   reviseActivity(input: ActivityRevisionInput): PublishingActivity {
@@ -1218,6 +1247,13 @@ export class ContentStudioApplicationService {
       taskId,
     })
   }
+}
+
+function toRecordingAttemptRecord(
+  receipt: RecorderAttemptReceipt,
+): RecordingAttemptRecord {
+  const { artifactDirectory: _artifactDirectory, ...record } = receipt
+  return record
 }
 
 function getScopedRecord<T extends { projectId: string }>(

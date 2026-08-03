@@ -81,6 +81,11 @@ export async function runProductionTask(
   const baseUrl = validateProjectOrigin(input.baseUrl, input.projectOrigin)
   const outputDirectory = validateOutputDirectory(input.outputDirectory)
   const maxAttempts = validateMaxAttempts(input.maxAttempts)
+  const previousReceipts = store.listRecordingReceipts(input.projectId, input.taskId)
+  const initialAttempt = previousReceipts.reduce(
+    (latest, receipt) => Math.max(latest, receipt.attempt),
+    0,
+  ) + 1
 
   store.transitionTask(input.projectId, input.taskId, 'recording')
 
@@ -89,6 +94,7 @@ export async function runProductionTask(
     result = await dependencies.record(
       {
         baseUrl,
+        initialAttempt,
         jobId: input.taskId,
         maxAttempts,
         outputDirectory,
@@ -106,6 +112,9 @@ export async function runProductionTask(
     store.transitionTask(input.projectId, input.taskId, 'failed')
     throw error
   }
+
+  for (const receipt of result.attempts.length > 0 ? result.attempts : [result.receipt])
+    store.saveRecordingReceipt(input.projectId, input.taskId, receipt)
 
   const nextStatus = result.receipt.outcome === 'succeeded'
     ? 'composing'

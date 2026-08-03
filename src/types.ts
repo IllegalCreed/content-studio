@@ -168,6 +168,7 @@ export interface ContentStudioProjectView {
   ownerHandoffs: OwnerHandoff[]
   publicationPlans: PublicationPlan[]
   publicationReceipts: PublicationReceipt[]
+  recordingReceipts: RecordingAttemptRecord[]
   project: ProjectRecord
   projectAssets: ProjectAsset[]
   projectChannelBindings: ProjectChannelBinding[]
@@ -523,6 +524,7 @@ export interface ExecutionTaskEvent {
 
 export interface ExecutionTaskStoreState {
   events: ExecutionTaskEvent[]
+  recordingReceipts: RecorderAttemptReceipt[]
   tasks: ExecutionTask[]
 }
 
@@ -531,7 +533,13 @@ export interface ExecutionTaskStore {
   createTask: (input: CreateExecutionTaskInput) => ExecutionTask
   getTask: (projectId: string, taskId: string) => ExecutionTask | undefined
   listEvents: (projectId: string, taskId: string) => ExecutionTaskEvent[]
+  listRecordingReceipts: (projectId: string, taskId: string) => RecorderAttemptReceipt[]
   listTasks: (projectId?: string) => ExecutionTask[]
+  saveRecordingReceipt: (
+    projectId: string,
+    taskId: string,
+    receipt: RecorderAttemptReceipt,
+  ) => RecorderAttemptReceipt
   retryTask: (projectId: string, taskId: string) => ExecutionTask
   skipStage: (
     projectId: string,
@@ -605,6 +613,12 @@ export interface RecorderAttemptReceipt {
   totalScenes: number
 }
 
+/**
+ * Safe project-view representation of a recorder receipt. The local absolute
+ * artifact directory never crosses the runtime boundary.
+ */
+export type RecordingAttemptRecord = Omit<RecorderAttemptReceipt, 'artifactDirectory'>
+
 export interface RecordingContext {
   captureMode: ProjectCaptureMode
   humanIntervention: boolean
@@ -646,6 +660,7 @@ export interface RecordingProgressEvent {
 
 export interface RecordingJobInput {
   baseUrl: string
+  initialAttempt?: number
   jobId: string
   maxAttempts?: number
   outputDirectory: string

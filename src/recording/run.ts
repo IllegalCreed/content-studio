@@ -56,6 +56,8 @@ export async function runRecordingJob(
   )
   const attempts: RecorderAttemptReceipt[] = []
   let sequence = 0
+  const firstAttempt = validatedInput.initialAttempt ?? 1
+  const lastAttempt = firstAttempt + validatedInput.maxAttempts - 1
 
   const emit = async (
     attempt: number,
@@ -82,8 +84,8 @@ export async function runRecordingJob(
   }
 
   for (
-    let attempt = 1;
-    attempt <= validatedInput.maxAttempts;
+    let attempt = firstAttempt;
+    attempt <= lastAttempt;
     attempt += 1
   ) {
     const artifactDirectory = resolve(
@@ -281,7 +283,7 @@ export async function runRecordingJob(
       completedActions,
       `Recording attempt ${attempt} failed with ${failure!.code}.`,
     )
-    if (!failure!.retryable || attempt === validatedInput.maxAttempts) {
+    if (!failure!.retryable || attempt === lastAttempt) {
       return {
         attempts,
         receipt,
@@ -326,9 +328,15 @@ function validateRecordingJobInput(
     )
   }
 
+  const initialAttempt = input.initialAttempt ?? 1
+  if (!Number.isInteger(initialAttempt) || initialAttempt < 1) {
+    throw new Error('Recording initialAttempt must be a positive integer')
+  }
+
   return {
     ...input,
     baseUrl: baseUrl.origin,
+    initialAttempt,
     maxAttempts,
     outputDirectory: validateOutputDirectory(input.outputDirectory),
     ...(input.recordingContext === undefined

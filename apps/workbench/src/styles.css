@@ -701,13 +701,33 @@ main {
   content: '';
 }
 
-.preview-frame > p {
+.preview-caption {
   position: absolute;
   right: 1rem;
   bottom: 0;
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
   color: #b5b9ad;
   font-family: 'DM Mono', monospace;
   font-size: 0.62rem;
+}
+
+.preview-caption span {
+  color: var(--acid);
+}
+
+.preview-caption p {
+  margin: 0;
+}
+
+.preview-image {
+  display: block;
+  width: min(100%, 32rem);
+  max-height: 20rem;
+  object-fit: contain;
+  border: 1px solid rgb(217 255 67 / 35%);
+  background: #10130f;
 }
 
 .preview-bars {
@@ -778,6 +798,66 @@ main {
   color: var(--muted);
   font-size: 0.7rem;
   line-height: 1.5;
+}
+
+.recording-evidence {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--stroke);
+}
+
+.recording-evidence .eyebrow {
+  margin-bottom: 0.55rem;
+}
+
+.recording-evidence ul {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recording-evidence li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.45rem;
+  align-items: center;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+}
+
+.recording-evidence li span {
+  color: var(--acid);
+}
+
+.recording-evidence li a {
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recording-evidence li small {
+  color: var(--muted);
+}
+
+.recording-log-summary,
+.recording-log-list {
+  margin: 0;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  line-height: 1.6;
+}
+
+.recording-log-list {
+  margin-top: 0.45rem;
+  padding-left: 1rem;
 }
 
 .job-actions {
@@ -2805,7 +2885,9 @@ footer {
   .activity-detail-grid,
   .asset-library-layout,
   .project-overview-grid,
-  .report-list {
+  .recording-evidence,
+  .report-list,
+  .video-grid {
     grid-template-columns: 1fr;
   }
 

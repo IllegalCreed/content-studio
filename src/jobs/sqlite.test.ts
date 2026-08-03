@@ -1,5 +1,6 @@
 // @env node
 
+import type { RecorderAttemptReceipt } from '../types'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -37,6 +38,52 @@ describe('sqlite execution task store', () => {
     })
     expect(second.listEvents('project-a', 'task-a').map(event => event.kind))
       .toEqual(['task-created', 'status-changed'])
+    second.close()
+  })
+
+  it('restores recording receipts and their artifact metadata after reopening', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-task-store-'))
+    temporaryDirectories.push(directory)
+    const databasePath = join(directory, 'tasks.sqlite')
+    const first = new SqliteExecutionTaskStore(databasePath)
+    first.createTask({
+      activityId: 'activity-a',
+      kind: 'production',
+      projectId: 'project-a',
+      taskId: 'task-a',
+    })
+    const receipt: RecorderAttemptReceipt = {
+      artifactDirectory: '/narrow/output/attempt-1',
+      artifacts: [{
+        id: 'preview-1',
+        kind: 'preview-frame',
+        relativePath: 'previews/preview-1.png',
+        sha256: 'a'.repeat(64),
+        sizeBytes: 42,
+      }],
+      attempt: 1,
+      campaignId: 'activity-a',
+      completedActions: 2,
+      completedScenes: 1,
+      jobId: 'task-a',
+      logs: {
+        consoleErrors: 0,
+        consoleWarnings: 0,
+        entries: ['preview-ready'],
+        pageErrors: 0,
+      },
+      outcome: 'succeeded',
+      planSha256: 'b'.repeat(64),
+      projectId: 'project-a',
+      receiptVersion: 1,
+      totalActions: 2,
+      totalScenes: 1,
+    }
+    first.saveRecordingReceipt('project-a', 'task-a', receipt)
+    first.close()
+
+    const second = new SqliteExecutionTaskStore(databasePath)
+    expect(second.listRecordingReceipts('project-a', 'task-a')).toEqual([receipt])
     second.close()
   })
 

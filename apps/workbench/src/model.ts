@@ -6,6 +6,7 @@ import type {
   ExecutionTask,
   ExecutionTaskEvent,
   ObservationMetric,
+  RecordingAttemptRecord,
   VideoFormat,
 } from '@content-studio/core-types'
 
@@ -231,6 +232,14 @@ function reportMetrics(
 }
 
 export interface VideoJobProjection {
+  artifacts: Array<{
+    id: string
+    kind: 'diagnostic' | 'preview-frame' | 'video-clip'
+    name: string
+    relativePath: string
+    size: string
+    url: string
+  }>
   attempt: number
   completedActions: number
   events: Array<{
@@ -238,9 +247,88 @@ export interface VideoJobProjection {
     message: string
     sequence: number
   }>
+  failure?: string
   jobId: string
+  logs: {
+    consoleErrors: number
+    consoleWarnings: number
+    entries: string[]
+    pageErrors: number
+  }
+  outcome: '已取消' | '已完成' | '失败'
   previewLabel: string
+  previewUrl?: string
   totalActions: number
+}
+
+export function recordingReceiptToVideoJob(
+  receipt: RecordingAttemptRecord,
+): VideoJobProjection {
+  const artifacts = receipt.artifacts.map(artifact => ({
+    id: artifact.id,
+    kind: artifact.kind,
+    name: fileName(artifact.relativePath),
+    relativePath: artifact.relativePath,
+    size: formatBytes(artifact.sizeBytes),
+    url: recordingArtifactUrl(receipt.projectId, receipt.jobId, receipt.attempt, artifact.id),
+  }))
+  const preview = receipt.artifacts.find(artifact => artifact.kind === 'preview-frame')
+  const outcome = receipt.outcome === 'succeeded'
+    ? '已完成'
+    : receipt.outcome === 'cancelled'
+      ? '已取消'
+      : '失败'
+  const outcomeKind = receipt.outcome === 'succeeded'
+    ? 'attempt-completed'
+    : receipt.outcome === 'cancelled'
+      ? 'attempt-cancelled'
+      : 'attempt-failed'
+  const events = [
+    {
+      kind: outcomeKind,
+      message: receipt.outcome === 'succeeded'
+        ? `本轮完成，共生成 ${receipt.artifacts.length} 个产物。`
+        : receipt.failure?.message ?? `本轮${outcome}`,
+      sequence: 1,
+    },
+    ...receipt.logs.entries.map((entry, index) => ({
+      kind: 'log',
+      message: entry,
+      sequence: index + 2,
+    })),
+  ]
+  return {
+    artifacts,
+    attempt: receipt.attempt,
+    completedActions: receipt.completedActions,
+    events,
+    ...(receipt.failure === undefined ? {} : { failure: receipt.failure.message }),
+    jobId: receipt.jobId,
+    logs: receipt.logs,
+    outcome,
+    previewLabel: preview === undefined ? '暂无预览帧' : fileName(preview.relativePath),
+    ...(preview === undefined
+      ? {}
+      : { previewUrl: recordingArtifactUrl(receipt.projectId, receipt.jobId, receipt.attempt, preview.id) }),
+    totalActions: receipt.totalActions,
+  }
+}
+
+function recordingArtifactUrl(
+  projectId: string,
+  taskId: string,
+  attempt: number,
+  artifactId: string,
+): string {
+  return `/api/v1/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/recording-attempts/${attempt}/artifacts/${encodeURIComponent(artifactId)}`
+}
+
+function formatBytes(sizeBytes: number): string {
+  if (sizeBytes < 1024)
+    return `${sizeBytes} B`
+  if (sizeBytes < 1024 * 1024)
+    return `${Math.round(sizeBytes / 1024)} KB`
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 export interface VideoPlanSceneProjection {
@@ -698,6 +786,7 @@ export const snapshot: WorkbenchSnapshot = {
         ],
       },
       videoJob: {
+        artifacts: [],
         attempt: 2,
         completedActions: 7,
         events: [
@@ -718,6 +807,13 @@ export const snapshot: WorkbenchSnapshot = {
           },
         ],
         jobId: 'quick-sort-guide-recording',
+        logs: {
+          consoleErrors: 0,
+          consoleWarnings: 0,
+          entries: [],
+          pageErrors: 0,
+        },
+        outcome: '已完成',
         previewLabel: '分区动画 · 第 20 帧',
         totalActions: 12,
       },
@@ -805,6 +901,7 @@ export const snapshot: WorkbenchSnapshot = {
       version: 1,
       videoPlan: null,
       videoJob: {
+        artifacts: [],
         attempt: 1,
         completedActions: 9,
         events: [
@@ -815,6 +912,13 @@ export const snapshot: WorkbenchSnapshot = {
           },
         ],
         jobId: 'release-notes-recording',
+        logs: {
+          consoleErrors: 0,
+          consoleWarnings: 0,
+          entries: [],
+          pageErrors: 0,
+        },
+        outcome: '已完成',
         previewLabel: '版本更新概览 · 最终帧',
         totalActions: 9,
       },

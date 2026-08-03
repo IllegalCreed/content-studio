@@ -9,9 +9,9 @@ const props = defineProps<{
 }>()
 
 const progress = computed(() =>
-  Math.round(
-    (props.job.completedActions / props.job.totalActions) * 100,
-  ),
+  props.job.totalActions === 0
+    ? 0
+    : Math.round((props.job.completedActions / props.job.totalActions) * 100),
 )
 </script>
 
@@ -37,16 +37,27 @@ const progress = computed(() =>
         role="img"
         :aria-label="job.previewLabel"
       >
-        <div class="preview-orbit orbit-one" />
-        <div class="preview-orbit orbit-two" />
-        <div class="preview-bars">
-          <span
-            v-for="height in [36, 68, 48, 82, 56, 72, 42]"
-            :key="height"
-            :style="{ height: `${height}%` }"
-          />
+        <img
+          v-if="job.previewUrl"
+          class="preview-image"
+          :src="job.previewUrl"
+          :alt="job.previewLabel"
+        >
+        <template v-else>
+          <div class="preview-orbit orbit-one" />
+          <div class="preview-orbit orbit-two" />
+          <div class="preview-bars">
+            <span
+              v-for="height in [36, 68, 48, 82, 56, 72, 42]"
+              :key="height"
+              :style="{ height: `${height}%` }"
+            />
+          </div>
+        </template>
+        <div class="preview-caption">
+          <span>{{ job.outcome }}</span>
+          <p>{{ job.previewLabel }}</p>
         </div>
-        <p>{{ job.previewLabel }}</p>
       </div>
 
       <div class="event-stream">
@@ -65,6 +76,38 @@ const progress = computed(() =>
             </div>
           </li>
         </ol>
+      </div>
+    </div>
+
+    <div class="recording-evidence">
+      <div>
+        <p class="eyebrow">录制产物</p>
+        <ul v-if="job.artifacts.length > 0">
+          <li
+            v-for="artifact in job.artifacts"
+            :key="artifact.id"
+          >
+            <span>{{ artifact.kind }}</span>
+            <a
+              :href="artifact.url"
+              download
+              target="_blank"
+              rel="noreferrer"
+            >{{ artifact.name }}</a>
+            <small>{{ artifact.size }}</small>
+          </li>
+        </ul>
+        <p v-else class="muted-value">本轮没有登记产物。</p>
+      </div>
+      <div>
+        <p class="eyebrow">日志摘要</p>
+        <p class="recording-log-summary">
+          控制台错误 {{ job.logs.consoleErrors }} · 警告 {{ job.logs.consoleWarnings }} · 页面错误 {{ job.logs.pageErrors }}
+        </p>
+        <p v-if="job.failure" class="form-error">{{ job.failure }}</p>
+        <ul v-if="job.logs.entries.length > 0" class="recording-log-list">
+          <li v-for="entry in job.logs.entries" :key="entry">{{ entry }}</li>
+        </ul>
       </div>
     </div>
 

@@ -5,6 +5,7 @@ import type {
 } from '@content-studio/core-types'
 import { describe, expect, it } from 'vitest'
 import {
+  recordingReceiptToVideoJob,
   runtimeActivityArtifacts,
   runtimeProjectAssets,
   runtimeReports,
@@ -50,6 +51,7 @@ function projectView(overrides: Partial<ContentStudioProjectView> = {}): Content
       publicationId: 'publication-a',
     }],
     publicationReceipts: [],
+    recordingReceipts: [],
     project: {
       captureMode: 'deterministic',
       currentSnapshotId: 'snapshot-a',
@@ -90,6 +92,56 @@ function projectView(overrides: Partial<ContentStudioProjectView> = {}): Content
 }
 
 describe('runtime report projection', () => {
+  it('projects a persisted recording receipt into real video evidence', () => {
+    const job = recordingReceiptToVideoJob({
+      artifacts: [{
+        id: 'preview-1',
+        kind: 'preview-frame',
+        relativePath: 'previews/preview-1.png',
+        sha256: 'a'.repeat(64),
+        sizeBytes: 42,
+      }],
+      attempt: 2,
+      campaignId: 'activity-a',
+      completedActions: 2,
+      completedScenes: 1,
+      jobId: 'task-a',
+      logs: {
+        consoleErrors: 0,
+        consoleWarnings: 1,
+        entries: ['console:warning'],
+        pageErrors: 0,
+      },
+      outcome: 'succeeded',
+      planSha256: 'b'.repeat(64),
+      projectId: 'project-a',
+      receiptVersion: 1,
+      totalActions: 3,
+      totalScenes: 1,
+    })
+
+    expect(job).toMatchObject({
+      attempt: 2,
+      completedActions: 2,
+      jobId: 'task-a',
+      outcome: '已完成',
+      previewLabel: 'preview-1.png',
+      previewUrl: '/api/v1/projects/project-a/tasks/task-a/recording-attempts/2/artifacts/preview-1',
+      totalActions: 3,
+    })
+    expect(job.artifacts).toEqual([expect.objectContaining({
+      id: 'preview-1',
+      name: 'preview-1.png',
+      size: '42 B',
+    })])
+    expect(job.logs).toEqual({
+      consoleErrors: 0,
+      consoleWarnings: 1,
+      entries: ['console:warning'],
+      pageErrors: 0,
+    })
+  })
+
   it('shows a pending report before a publication receipt arrives', () => {
     const [report] = runtimeReports(projectView())
 

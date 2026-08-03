@@ -29,8 +29,9 @@ import type {
   VideoOutlineScene,
 } from '../types'
 import { Buffer } from 'node:buffer'
+import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { CHANNEL_BLUEPRINTS } from '../constants'
 import {
   ContentStudioApplicationService,
@@ -206,6 +207,46 @@ async function handleRequest(
         projectId,
         status: 'ready',
       })
+      return
+    }
+
+    if (
+      request.method === 'GET'
+      && segments.length === 10
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'tasks'
+      && segments[6] === 'recording-attempts'
+      && segments[8] === 'artifacts'
+    ) {
+      const projectId = identifierField(decodeSegment(segments[3]!), 'projectId')
+      const taskId = identifierField(decodeSegment(segments[5]!), 'taskId')
+      const attempt = positiveIntegerField(
+        Number(decodeSegment(segments[7]!)),
+        'attempt',
+      )
+      const artifactId = identifierField(decodeSegment(segments[9]!), 'artifactId')
+      const resource = service.getRecordingArtifact(
+        projectId,
+        taskId,
+        attempt,
+        artifactId,
+      )
+      const artifactPath = resolve(resource.artifactDirectory, resource.artifact.relativePath)
+      const artifactRelativePath = relative(resource.artifactDirectory, artifactPath)
+      if (
+        artifactRelativePath === ''
+        || artifactRelativePath.startsWith('..')
+        || isAbsolute(artifactRelativePath)
+      ) {
+        throw new RequestError(400, 'Recording artifact path is unsafe')
+      }
+      const content = await readFile(artifactPath)
+      response.setHeader('Cache-Control', 'private, max-age=60')
+      response.setHeader('Content-Type', recordingArtifactContentType(artifactPath))
+      response.writeHead(200)
+      response.end(content)
       return
     }
 
@@ -1270,6 +1311,21 @@ function sendJson(
     'content-length': Buffer.byteLength(body),
   })
   response.end(body)
+}
+
+function recordingArtifactContentType(path: string): string {
+  const extension = extname(path).toLowerCase()
+  return extension === '.png'
+    ? 'image/png'
+    : extension === '.jpg' || extension === '.jpeg'
+      ? 'image/jpeg'
+      : extension === '.webm'
+        ? 'video/webm'
+        : extension === '.mp4'
+          ? 'video/mp4'
+          : extension === '.json'
+            ? 'application/json; charset=utf-8'
+            : 'application/octet-stream'
 }
 
 function closeServer(

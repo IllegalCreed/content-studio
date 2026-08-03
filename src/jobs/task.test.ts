@@ -1,3 +1,4 @@
+import type { RecorderAttemptReceipt } from '../types'
 import { describe, expect, it } from 'vitest'
 import {
   InMemoryExecutionTaskStore,
@@ -30,6 +31,68 @@ describe('通用执行任务', () => {
         'status-changed',
         'status-changed',
       ])
+  })
+
+  it('保存制作回执并按项目和任务隔离尝试证据', () => {
+    const store = new InMemoryExecutionTaskStore()
+    store.createTask({
+      activityId: 'activity-a',
+      kind: 'production',
+      projectId: 'project-a',
+      taskId: 'video-task',
+    })
+    store.createTask({
+      activityId: 'activity-a',
+      kind: 'production',
+      projectId: 'project-a',
+      taskId: 'other-task',
+    })
+    const receipt: RecorderAttemptReceipt = {
+      artifactDirectory: '/narrow/output/attempt-1',
+      artifacts: [{
+        id: 'preview-1',
+        kind: 'preview-frame',
+        relativePath: 'previews/preview-1.png',
+        sha256: 'a'.repeat(64),
+        sizeBytes: 42,
+      }],
+      attempt: 1,
+      campaignId: 'activity-a',
+      completedActions: 2,
+      completedScenes: 1,
+      jobId: 'video-task',
+      logs: {
+        consoleErrors: 0,
+        consoleWarnings: 0,
+        entries: ['preview-ready'],
+        pageErrors: 0,
+      },
+      outcome: 'succeeded',
+      planSha256: 'b'.repeat(64),
+      projectId: 'project-a',
+      receiptVersion: 1,
+      totalActions: 2,
+      totalScenes: 1,
+    }
+
+    expect(store.saveRecordingReceipt('project-a', 'video-task', receipt)).toEqual(receipt)
+    expect(store.listRecordingReceipts('project-a', 'video-task')).toEqual([receipt])
+    expect(store.listRecordingReceipts('project-a', 'other-task')).toEqual([])
+    expect(() => store.saveRecordingReceipt('project-b', 'video-task', receipt))
+      .toThrow(/not available in project/i)
+    expect(() => store.saveRecordingReceipt('project-a', 'video-task', receipt))
+      .toThrow(/already exists/i)
+    expect(() => store.saveRecordingReceipt('project-a', 'other-task', receipt))
+      .toThrow(/match the project and task/i)
+
+    store.createTask({
+      activityId: 'activity-a',
+      kind: 'publication',
+      projectId: 'project-a',
+      taskId: 'publication-task',
+    })
+    expect(() => store.saveRecordingReceipt('project-a', 'publication-task', receipt))
+      .toThrow(/only production tasks/i)
   })
 
   it('允许文章明确跳过录制，并留下跳过事件', () => {
@@ -163,5 +226,18 @@ describe('通用执行任务', () => {
     ).toThrow(TaskStateError)
     expect(() => store.retryTask('project-a', 'invalid-task'))
       .toThrow(TaskStateError)
+    expect(() => store.transitionTask('project-a', 'invalid-task', 'queued'))
+      .toThrow(TaskStateError)
+    expect(() => store.transitionTask('project-a', 'invalid-task', 'composing'))
+      .toThrow(TaskStateError)
+    expect(() => store.cancelTask('project-a', 'invalid-task'))
+      .not
+      .toThrow()
+  })
+
+  it('对不存在的任务返回明确的任务错误', () => {
+    const store = new InMemoryExecutionTaskStore()
+    expect(() => store.listRecordingReceipts('project-a', 'missing-task'))
+      .toThrow(/was not found/i)
   })
 })

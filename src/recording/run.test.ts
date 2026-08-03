@@ -55,6 +55,71 @@ const preview: RecorderArtifact = {
 }
 
 describe('recording job runner', () => {
+  it('rejects an invalid initial attempt number', async () => {
+    await expect(runRecordingJob(
+      {
+        baseUrl: 'http://127.0.0.1:11000',
+        initialAttempt: 0,
+        jobId: 'recording-job-invalid-attempt',
+        outputDirectory: '/tmp/content-studio-recording-job-invalid-attempt',
+        plan,
+        projectId: 'algorithm-visualizer',
+      },
+      { createSession: async () => createSession(() => ({})) },
+    )).rejects.toThrow(/initialAttempt/i)
+  })
+
+  it('can continue task attempt numbering without reusing an output directory', async () => {
+    const attempts: number[] = []
+    const result = await runRecordingJob(
+      {
+        baseUrl: 'http://127.0.0.1:11000',
+        initialAttempt: 3,
+        jobId: 'recording-job-continue',
+        maxAttempts: 1,
+        outputDirectory: '/tmp/content-studio-recording-job-continue',
+        plan,
+        projectId: 'algorithm-visualizer',
+      },
+      {
+        createSession: async (context) => {
+          attempts.push(context.attempt)
+          return createSession(() => ({}))
+        },
+      },
+    )
+
+    expect(attempts).toEqual([3])
+    expect(result.receipt).toMatchObject({
+      attempt: 3,
+      previousAttempt: 2,
+    })
+  })
+
+  it('stops at the configured retry limit after a continued attempt', async () => {
+    const result = await runRecordingJob(
+      {
+        baseUrl: 'http://127.0.0.1:11000',
+        initialAttempt: 3,
+        jobId: 'recording-job-continued-failure',
+        maxAttempts: 1,
+        outputDirectory: '/tmp/content-studio-recording-job-continued-failure',
+        plan,
+        projectId: 'algorithm-visualizer',
+      },
+      {
+        createSession: async () => {
+          throw new Error('browser process exited')
+        },
+      },
+    )
+
+    expect(result.receipt).toMatchObject({
+      attempt: 3,
+      outcome: 'failed',
+    })
+  })
+
   it('retries a retryable isolated attempt and emits ordered progress', async () => {
     const attempts: number[] = []
     const events: Array<{ attempt: number, kind: string, sequence: number }> = []

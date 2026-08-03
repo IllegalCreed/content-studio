@@ -9,6 +9,7 @@ import type {
   ExecutionTaskStore,
   ExecutionTaskStoreState,
   ExecutionTaskTransitionOptions,
+  RecorderAttemptReceipt,
 } from '../types'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
@@ -20,6 +21,10 @@ interface PersistedTaskRow {
 }
 
 interface PersistedTaskEventRow {
+  payload: string
+}
+
+interface PersistedRecordingReceiptRow {
   payload: string
 }
 
@@ -54,6 +59,13 @@ export class SqliteExecutionTaskStore implements ExecutionTaskStore {
         payload TEXT NOT NULL,
         PRIMARY KEY (project_id, task_id, sequence)
       );
+      CREATE TABLE IF NOT EXISTS content_studio_task_recording_receipts (
+        project_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        attempt INTEGER NOT NULL,
+        payload TEXT NOT NULL,
+        PRIMARY KEY (project_id, task_id, attempt)
+      );
     `)
     this.loadState()
   }
@@ -74,6 +86,23 @@ export class SqliteExecutionTaskStore implements ExecutionTaskStore {
 
   listEvents(projectId: string, taskId: string): ExecutionTaskEvent[] {
     return this.memory.listEvents(projectId, taskId)
+  }
+
+  listRecordingReceipts(
+    projectId: string,
+    taskId: string,
+  ): RecorderAttemptReceipt[] {
+    return this.memory.listRecordingReceipts(projectId, taskId)
+  }
+
+  saveRecordingReceipt(
+    projectId: string,
+    taskId: string,
+    receipt: RecorderAttemptReceipt,
+  ): RecorderAttemptReceipt {
+    const saved = this.memory.saveRecordingReceipt(projectId, taskId, receipt)
+    this.persistState()
+    return saved
   }
 
   transitionTask(
@@ -123,8 +152,12 @@ export class SqliteExecutionTaskStore implements ExecutionTaskStore {
     const events = this.database
       .prepare('SELECT payload FROM content_studio_task_events ORDER BY project_id, task_id, sequence')
       .all() as unknown as PersistedTaskEventRow[]
+    const recordingReceipts = this.database
+      .prepare('SELECT payload FROM content_studio_task_recording_receipts ORDER BY project_id, task_id, attempt')
+      .all() as unknown as PersistedRecordingReceiptRow[]
     this.memory.restoreState({
       events: events.map(row => JSON.parse(row.payload) as ExecutionTaskEvent),
+      recordingReceipts: recordingReceipts.map(row => JSON.parse(row.payload) as RecorderAttemptReceipt),
       tasks: tasks.map(row => JSON.parse(row.payload) as ExecutionTask),
     })
   }
@@ -134,7 +167,7 @@ export class SqliteExecutionTaskStore implements ExecutionTaskStore {
     const state: ExecutionTaskStoreState = this.memory.exportState()
     this.database.exec('BEGIN')
     try {
-      this.database.exec('DELETE FROM content_studio_tasks; DELETE FROM content_studio_task_events;')
+      this.database.exec('DELETE FROM content_studio_tasks; DELETE FROM content_studio_task_events; DELETE FROM content_studio_task_recording_receipts;')
       const taskStatement = this.database.prepare(`
         INSERT INTO content_studio_tasks (project_id, task_id, payload)
         VALUES (?, ?, ?)
@@ -148,6 +181,13 @@ export class SqliteExecutionTaskStore implements ExecutionTaskStore {
       `)
       for (const event of state.events)
         eventStatement.run(event.projectId, event.taskId, event.sequence, JSON.stringify(event))
+      const receiptStatement = this.database.prepare(`
+        INSERT INTO content_studio_task_recording_receipts
+          (project_id, task_id, attempt, payload)
+        VALUES (?, ?, ?, ?)
+      `)
+      for (const receipt of state.recordingReceipts)
+        receiptStatement.run(receipt.projectId, receipt.jobId, receipt.attempt, JSON.stringify(receipt))
       this.database.exec('COMMIT')
     }
     catch (error: unknown) {

@@ -245,6 +245,7 @@ describe('content studio application service', () => {
       ownerHandoffs: [],
       publicationPlans: [],
       publicationReceipts: [],
+      recordingReceipts: [],
       monitoringObservations: [],
       project,
       projectAssets: [],
@@ -560,6 +561,15 @@ describe('content studio application service', () => {
         },
       },
     )).resolves.toMatchObject({ task: { status: 'composing' } })
+    expect(service.getProjectView('video-project').recordingReceipts).toEqual([
+      expect.objectContaining({
+        attempt: 1,
+        artifacts: [],
+        jobId: taskId,
+      }),
+    ])
+    const recordingReceipts = service.getProjectView('video-project').recordingReceipts
+    expect(recordingReceipts[0]).not.toHaveProperty('artifactDirectory')
     expect(recorderInputs[0]?.plan).toMatchObject({
       campaignId: 'video-campaign',
       scenes: [{ id: 'quick-sort' }],

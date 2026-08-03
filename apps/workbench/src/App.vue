@@ -29,6 +29,7 @@ import type {
   ProjectChannelBinding,
   PublicationPlan,
   PublishingActivity,
+  RecordingAttemptRecord,
 } from '@content-studio/core-types'
 import {
   activityArtifactProjections,
@@ -38,6 +39,7 @@ import {
   runtimeActivityArtifacts,
   runtimeProjectAssets,
   runtimeReports,
+  recordingReceiptToVideoJob,
   taskEventSummary,
   snapshot as snapshotSeed,
   taskLifecycleProjection,
@@ -770,6 +772,8 @@ function activityToCampaign(
   ownerHandoffs: OwnerHandoff[] = [],
   activityArtifacts: ActivityArtifact[] = [],
   projectAssets: ProjectAsset[] = [],
+  productionTasks: ExecutionTask[] = [],
+  recordingReceipts: RecordingAttemptRecord[] = [],
 ): CampaignProjection {
   const topic = activity.topic['zh-CN'] ?? activity.topic.en
   const groups = contentGroups
@@ -794,6 +798,19 @@ function activityToCampaign(
   const videoPlan = activity.video === undefined
     ? null
     : createVideoPlanProjection(activity, captureFlows)
+  const videoTask = productionTasks.find(task =>
+    task.activityId === activity.activityId
+    && task.kind === 'production'
+    && task.productionType === 'video',
+  )
+  const latestVideoReceipt = videoTask === undefined
+    ? undefined
+    : recordingReceipts
+      .filter(receipt => receipt.jobId === videoTask.taskId)
+      .sort((left, right) => right.attempt - left.attempt)[0]
+  const videoJob = latestVideoReceipt === undefined
+    ? null
+    : recordingReceiptToVideoJob(latestVideoReceipt)
   const referencedAssetIds = new Set(
     channelContents
       .filter(content => content.activityId === activity.activityId)
@@ -819,7 +836,7 @@ function activityToCampaign(
     campaignId: activity.activityId,
     channels: activity.channels.map(channel => channel.id),
     contentGroups: groups,
-    executionStatus: 'queued',
+    executionStatus: videoTask?.status ?? 'queued',
     handoffs: ownerHandoffs
       .filter(handoff => handoff.activityId === activity.activityId)
       .map(handoff => ({
@@ -833,15 +850,17 @@ function activityToCampaign(
         reason: '等待渠道授权人完成登录、审核和最终点击',
         status: handoff.status === 'pending' ? 'waiting' : 'ready',
       })),
-    nextAction: groups.length > 0
-      ? '渠道内容已保存，下一步进入制作任务。'
-      : '等待 AI 生成内容和拍摄大纲。',
+    nextAction: videoJob?.outcome === '失败'
+      ? '录制失败，请查看日志摘要后重试。'
+      : groups.length > 0
+        ? '渠道内容已保存，下一步进入制作任务。'
+        : '等待 AI 生成内容和拍摄大纲。',
     referencedAssets: [...referencedAssetIds],
     title: topic,
     topic,
     version: activity.version,
     videoPlan,
-    videoJob: null,
+    videoJob,
   }
 }
 
@@ -976,6 +995,8 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
         projectView.ownerHandoffs,
         projectView.activityArtifacts,
         projectView.projectAssets,
+        projectView.tasks,
+        projectView.recordingReceipts,
       ),
     )
     snapshot.projectAssets = runtimeProjectAssets(projectView)
