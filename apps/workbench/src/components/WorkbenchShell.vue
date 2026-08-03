@@ -25,6 +25,7 @@ const props = defineProps<{
   projectName: string
   routeQueryFor?: (moduleId: ModuleId) => LocationQueryRaw
   runtimeConnected: boolean
+  runtimeLoading?: boolean
 }>()
 
 const route = useRoute()
@@ -142,7 +143,7 @@ function toggleProjectPicker(): void {
       <header class="topbar">
         <div>
           <span class="live-dot" />
-          本地控制面 · {{ props.runtimeConnected ? '实时数据' : '演示数据' }}
+          本地控制面 · {{ props.runtimeLoading ? '正在连接' : props.runtimeConnected ? '实时数据' : '演示数据' }}
         </div>
         <div class="project-control">
           <button

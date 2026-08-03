@@ -72,6 +72,7 @@ import {
   parseWorkbenchUiQuery,
   type WorkbenchUiRouteState,
 } from './stores/workbench-ui-route'
+import { useWorkbenchStore } from './stores/workbench'
 
 type ModuleId = WorkbenchModuleId
 
@@ -153,6 +154,7 @@ const snapshot = reactive(snapshotSeed)
 const route = useRoute()
 const router = useRouter()
 const uiStore = useWorkbenchUiStore()
+const runtimeStore = useWorkbenchStore()
 const {
   activeModule,
   activeTaskScope,
@@ -163,9 +165,17 @@ const {
   selectedChannelId,
   selectedTaskId,
 } = storeToRefs(uiStore)
+const {
+  loading: runtimeLoading,
+  runtimeConnected,
+  runtimeError,
+} = storeToRefs(runtimeStore)
 uiStore.setActiveModule(moduleForPath(route.path))
 applyRouteUiState(route.query)
-const runtimeError = ref<string | null>(null)
+// 子页面暂时仍从快照读取这个兼容字段；连接状态的唯一来源已经是 runtimeStore。
+watch(runtimeConnected, value => {
+  snapshot.runtimeConnected = value
+}, { immediate: true })
 const workbenchRuntime = createWorkbenchRuntime()
 const currentSnapshotId = ref(`${snapshot.project.projectId}-snapshot-1`)
 const activityComposerOpen = ref(false)
@@ -301,14 +311,14 @@ const selectedCampaignIsRuntime = computed(() =>
 )
 
 const canConfirmSelectedVideoPlan = computed(() =>
-  snapshot.runtimeConnected
+  runtimeConnected.value
   && selectedCampaignIsRuntime.value
   && selectedCampaign.value.videoPlan?.reviewStatus === '待确认'
   && !videoPlanActionPending.value,
 )
 
 const canReviseSelectedVideoPlan = computed(() =>
-  snapshot.runtimeConnected
+  runtimeConnected.value
   && selectedCampaignIsRuntime.value
   && selectedCampaign.value.videoPlan !== null
   && !videoPlanRevisionPending.value
@@ -328,27 +338,27 @@ const selectedTaskIsRuntime = computed(() =>
 
 const canCancelSelectedTask = computed(() =>
   selectedTaskIsRuntime.value
-  && snapshot.runtimeConnected
+  && runtimeConnected.value
   && ['awaiting-owner', 'composing', 'generating', 'queued', 'recording'].includes(selectedTask.value.status),
 )
 
 const canStartSelectedTask = computed(() =>
   selectedTaskIsRuntime.value
-  && snapshot.runtimeConnected
+  && runtimeConnected.value
   && selectedTask.value.kind === '制作'
   && selectedTask.value.status === 'queued',
 )
 
 const canRecordSelectedTask = computed(() =>
   selectedTaskIsRuntime.value
-  && snapshot.runtimeConnected
+  && runtimeConnected.value
   && selectedTask.value.kind === '制作'
   && selectedTask.value.status === 'generating',
 )
 
 const canRetrySelectedTask = computed(() =>
   selectedTaskIsRuntime.value
-  && snapshot.runtimeConnected
+  && runtimeConnected.value
   && ['cancelled', 'failed'].includes(selectedTask.value.status),
 )
 
@@ -817,7 +827,7 @@ function deliveryModeForChannel(channel: ChannelProjection): ProjectChannelBindi
 }
 
 async function saveChannelBinding(): Promise<void> {
-  if (!snapshot.runtimeConnected || channelBindingSaving.value)
+  if (!runtimeConnected.value || channelBindingSaving.value)
     return
   channelBindingSaving.value = true
   channelBindingSaveError.value = null
@@ -885,7 +895,7 @@ function closeContentComposer(): void {
 }
 
 async function saveChannelContent(): Promise<void> {
-  if (!snapshot.runtimeConnected || contentForm.title.trim() === '' || contentForm.body.trim() === '')
+  if (!runtimeConnected.value || contentForm.title.trim() === '' || contentForm.body.trim() === '')
     return
   contentSaving.value = true
   contentSaveError.value = null
@@ -930,7 +940,7 @@ function hasPublicationTask(contentId: string): boolean {
 }
 
 async function createPublicationPlanForContent(content: ChannelContentProjection): Promise<void> {
-  if (!snapshot.runtimeConnected || !selectedCampaignIsRuntime.value || hasPublicationTask(content.contentId))
+  if (!runtimeConnected.value || !selectedCampaignIsRuntime.value || hasPublicationTask(content.contentId))
     return
   publicationPlanActionPending.value = content.contentId
   publicationPlanActionError.value = null
@@ -976,7 +986,7 @@ async function promoteActivityArtifact(artifact: ActivityArtifactProjection): Pr
   const kind = projectAssetKindForArtifact(artifact)
   if (
     kind === null
-    || !snapshot.runtimeConnected
+    || !runtimeConnected.value
     || assetPromotionPending.value !== null
     || isArtifactPromoted(artifact)
   ) {
@@ -1004,7 +1014,7 @@ async function promoteActivityArtifact(artifact: ActivityArtifactProjection): Pr
 }
 
 async function toggleStorageCleanupPreview(): Promise<void> {
-  if (!snapshot.runtimeConnected)
+  if (!runtimeConnected.value)
     return
   storagePreviewOpen.value = !storagePreviewOpen.value
   if (!storagePreviewOpen.value || storagePreviewLoading.value)
@@ -1037,7 +1047,7 @@ function formatStorageBytes(bytes: number): string {
 }
 
 async function saveActivity(): Promise<void> {
-  if (!snapshot.runtimeConnected || activityForm.topic.trim() === '' || activityForm.channels.length === 0) {
+  if (!runtimeConnected.value || activityForm.topic.trim() === '' || activityForm.channels.length === 0) {
     if (activityForm.channels.length === 0)
       activitySaveError.value = '至少选择一个项目渠道'
     return
@@ -1271,17 +1281,16 @@ onMounted(() => {
 })
 
 async function connectLocalRuntime(): Promise<void> {
+  runtimeStore.beginRuntimeLoad()
   try {
     const health = await workbenchRuntime.health()
     const projectView = await workbenchRuntime.project(snapshot.project.projectId)
-    snapshot.runtimeConnected = health.status === 'ready'
+    if (health.status === 'ready')
+      runtimeStore.markRuntimeReady()
     applyProjectView(projectView)
   }
   catch (error: unknown) {
-    snapshot.runtimeConnected = false
-    runtimeError.value = error instanceof Error
-      ? error.message
-      : '本地运行时暂时不可用'
+    runtimeStore.markRuntimeUnavailable(error)
   }
 }
 
@@ -1345,7 +1354,7 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
     snapshot.campaigns = preferRuntimeData(
       runtimeCampaigns,
       snapshot.campaigns,
-      snapshot.runtimeConnected,
+      runtimeConnected.value,
     )
     runtimeActivityIds.value = new Set(projectView.activities.map(activity => activity.activityId))
     runtimeTaskIds.value = new Set(projectView.tasks.map(task => task.taskId))
@@ -1355,7 +1364,7 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
     snapshot.tasks = preferRuntimeData(
       runtimeTasks,
       snapshot.tasks,
-      snapshot.runtimeConnected,
+      runtimeConnected.value,
     )
     snapshot.reports = runtimeReports(projectView)
     syncChannelBindingForm()
@@ -1372,7 +1381,8 @@ async function refreshProjectView(): Promise<void> {
     :project-id="snapshot.project.projectId"
     :project-name="snapshot.project.name"
     :route-query-for="routeQueryForModule"
-    :runtime-connected="snapshot.runtimeConnected"
+    :runtime-connected="runtimeConnected"
+    :runtime-loading="runtimeLoading"
     @navigate="selectModule"
   >
 
@@ -1394,13 +1404,13 @@ async function refreshProjectView(): Promise<void> {
           </p>
         </div>
         <div class="workspace-actions">
-          <span class="connection-pill">{{ snapshot.runtimeConnected ? '运行时已连接' : '只读演示' }}</span>
+          <span class="connection-pill">{{ runtimeLoading ? '正在连接运行时' : runtimeConnected ? '运行时已连接' : '只读演示' }}</span>
           <button
             type="button"
-            :disabled="activeModule !== 'activities' || !snapshot.runtimeConnected"
+            :disabled="activeModule !== 'activities' || runtimeLoading || !runtimeConnected"
             @click="openActivityComposer"
           >
-            {{ activeModule === 'activities' ? (snapshot.runtimeConnected ? '新建发布活动' : '等待运行时') : '操作暂不可用' }}
+            {{ activeModule === 'activities' ? (runtimeLoading ? '连接中…' : runtimeConnected ? '新建发布活动' : '等待运行时') : '操作暂不可用' }}
           </button>
         </div>
       </section>
@@ -1428,7 +1438,7 @@ async function refreshProjectView(): Promise<void> {
           :project-account-alias="projectAccountAlias"
           :project-account-options="projectAccountOptions"
           :project-accounts="projectAccounts"
-          :runtime-connected="snapshot.runtimeConnected"
+          :runtime-connected="runtimeConnected"
           :selected-channel="selectedChannel"
           :snapshot="snapshot"
           @go-activities="selectModule('activities')"
@@ -1491,7 +1501,7 @@ async function refreshProjectView(): Promise<void> {
           :can-retry-selected-task="canRetrySelectedTask"
           :can-start-selected-task="canStartSelectedTask"
           :project-name="snapshot.project.name"
-          :runtime-connected="snapshot.runtimeConnected"
+          :runtime-connected="runtimeConnected"
           :selected-task="selectedTask"
           :selected-task-campaign="selectedTaskCampaign"
           :task-action-error="taskActionError"
@@ -1509,7 +1519,7 @@ async function refreshProjectView(): Promise<void> {
           :channel-snapshot-count="channelSnapshotCount"
           :enabled-channels="enabledChannels"
           :project-account-for="projectAccountFor"
-          :runtime-connected="snapshot.runtimeConnected"
+          :runtime-connected="runtimeConnected"
           :selected-channel="selectedChannel"
           :selected-channel-account="selectedChannelAccount"
           :snapshot="snapshot"
@@ -1527,7 +1537,7 @@ async function refreshProjectView(): Promise<void> {
           :format-storage-bytes="formatStorageBytes"
           :is-artifact-promoted="isArtifactPromoted"
           :project-asset-kind-for-artifact="projectAssetKindForArtifact"
-          :runtime-connected="snapshot.runtimeConnected"
+          :runtime-connected="runtimeConnected"
           :selected-asset="selectedAsset"
           :snapshot="snapshot"
           :storage-preview="storagePreview"

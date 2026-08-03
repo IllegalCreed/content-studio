@@ -19,21 +19,34 @@ export const useWorkbenchStore = defineStore('workbench', () => {
 
   const activities = computed(() => projectView.value?.activities ?? [])
 
-  async function refresh(): Promise<void> {
+  function beginRuntimeLoad(): void {
     loading.value = true
     runtimeError.value = null
+  }
+
+  function markRuntimeReady(): void {
+    loading.value = false
+    runtimeConnected.value = true
+    runtimeError.value = null
+  }
+
+  function markRuntimeUnavailable(error: unknown): void {
+    loading.value = false
+    runtimeConnected.value = false
+    runtimeError.value = error instanceof Error ? error.message : '本地运行时暂时不可用'
+  }
+
+  async function refresh(): Promise<void> {
+    beginRuntimeLoad()
     try {
       const health = await runtime.health()
       const view = await runtime.project(projectId)
-      runtimeConnected.value = health.status === 'ready'
+      if (health.status === 'ready')
+        markRuntimeReady()
       projectView.value = view
     }
     catch (error: unknown) {
-      runtimeConnected.value = false
-      runtimeError.value = error instanceof Error ? error.message : '本地运行时暂时不可用'
-    }
-    finally {
-      loading.value = false
+      markRuntimeUnavailable(error)
     }
   }
 
@@ -66,8 +79,11 @@ export const useWorkbenchStore = defineStore('workbench', () => {
 
   return {
     activities,
+    beginRuntimeLoad,
     confirmActivityVideoPlan,
     loading,
+    markRuntimeReady,
+    markRuntimeUnavailable,
     projectId,
     projectView,
     refresh,

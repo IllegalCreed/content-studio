@@ -368,11 +368,12 @@ watch(videoPlan, syncViewportDraft, { immediate: true })
     :project-id="store.snapshot.project.projectId"
     :project-name="store.snapshot.project.name"
     :runtime-connected="store.runtimeConnected"
+    :runtime-loading="store.loading"
   >
     <section class="detail-page" data-testid="activity-detail-page">
     <div class="detail-page-topbar">
       <button type="button" class="back-link" @click="router.push('/project/activities')">← 返回活动列表</button>
-      <span class="connection-pill">{{ store.runtimeConnected ? '运行时已连接' : '演示数据' }}</span>
+      <span class="connection-pill">{{ store.loading ? '正在连接运行时' : store.runtimeConnected ? '运行时已连接' : '演示数据' }}</span>
     </div>
 
     <header class="detail-page-header">
