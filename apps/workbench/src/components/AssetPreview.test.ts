@@ -27,4 +27,20 @@ describe('asset preview', () => {
       props: { kind: 'audio', label: 'Audio', src: '/preview/audio.mp3' },
     }).get('audio').attributes('controls')).toBeDefined()
   })
+
+  it('在媒体加载元数据后显示尺寸和时长', async () => {
+    const video = mount(AssetPreview, {
+      props: { kind: 'video', label: 'Video', src: '/preview/video.mp4' },
+    })
+    const videoElement = video.get('video').element as HTMLVideoElement
+    Object.defineProperties(videoElement, {
+      duration: { configurable: true, value: 12.5 },
+      videoHeight: { configurable: true, value: 1080 },
+      videoWidth: { configurable: true, value: 1920 },
+    })
+    await video.get('video').trigger('loadedmetadata')
+
+    expect(video.get('[data-testid="asset-preview-metadata"]').text()).toContain('1920 × 1080')
+    expect(video.get('[data-testid="asset-preview-metadata"]').text()).toContain('0:13')
+  })
 })

@@ -7,10 +7,15 @@ interface OwnerHandoffProjection {
   expiresAt: string
   officialTargetUrl: string
   reason: string
+  taskId?: string
 }
 
-defineProps<{
+const props = defineProps<{
   ownerHandoffs: OwnerHandoffProjection[]
+}>()
+
+const emit = defineEmits<{
+  'open-task': [taskId: string]
 }>()
 </script>
 
@@ -29,7 +34,13 @@ defineProps<{
         <ul class="handoff-checklist"><li v-for="item in ownerHandoffs[0]!.checklist" :key="item">{{ item }}</li></ul>
         <p>官方地址：<code>{{ ownerHandoffs[0]!.officialTargetUrl }}</code> · 失效时间：{{ ownerHandoffs[0]!.expiresAt }}</p>
       </div>
-      <button type="button" disabled>运行时未连接</button>
+      <button
+        v-if="props.ownerHandoffs[0]!.taskId"
+        type="button"
+        class="primary-button"
+        @click="emit('open-task', props.ownerHandoffs[0]!.taskId!)"
+      >查看对应任务</button>
+      <button v-else type="button" disabled>任务尚未建立</button>
     </div>
     <div v-else class="empty-handoff">当前没有需要人工接管的内容。</div>
   </section>

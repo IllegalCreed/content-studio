@@ -12,6 +12,7 @@ import StatusRail from './components/StatusRail.vue'
 import SelectMenu from './components/SelectMenu.vue'
 import TaskBoardPage from './components/TaskBoardPage.vue'
 import WorkbenchShell from './components/WorkbenchShell.vue'
+import { preferRuntimeData } from './projections'
 import VideoJobPanel from './components/VideoJobPanel.vue'
 import AssetPreview from './components/AssetPreview.vue'
 import type {
@@ -422,10 +423,18 @@ const selectedCampaignTaskCounts = computed(() => ({
 
 const ownerHandoffs = computed(() =>
   snapshot.campaigns.flatMap(campaign =>
-    campaign.handoffs.map(handoff => ({
-      ...handoff,
-      campaignTitle: campaign.title,
-    })),
+    campaign.handoffs.map((handoff) => {
+      const task = snapshot.tasks.find(candidate =>
+        candidate.activityId === campaign.campaignId
+        && candidate.kind === '发布'
+        && candidate.channel === handoff.channel,
+      )
+      return {
+        ...handoff,
+        campaignTitle: campaign.title,
+        ...(task === undefined ? {} : { taskId: task.taskId }),
+      }
+    }),
   ),
 )
 
@@ -522,6 +531,12 @@ function openActivityDetail(campaignId: string): void {
 function selectTask(taskId: string): void {
   selectedTaskId.value = taskId
   activeModule.value = 'tasks'
+}
+
+function openOwnerTask(taskId: string): void {
+  selectedTaskId.value = taskId
+  activeTaskScope.value = '当前项目'
+  void router.push('/project/tasks')
 }
 
 function selectAsset(assetId: string): void {
@@ -1216,25 +1231,21 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
       projectSize: '未统计',
       retention: '按项目配置',
     }
-    snapshot.campaigns = [
-      ...runtimeCampaigns,
-      ...snapshot.campaigns.filter(campaign =>
-        !runtimeCampaigns.some(runtimeCampaign =>
-          runtimeCampaign.campaignId === campaign.campaignId,
-        ),
-      ),
-    ]
+    snapshot.campaigns = preferRuntimeData(
+      runtimeCampaigns,
+      snapshot.campaigns,
+      snapshot.runtimeConnected,
+    )
     runtimeActivityIds.value = new Set(projectView.activities.map(activity => activity.activityId))
     runtimeTaskIds.value = new Set(projectView.tasks.map(task => task.taskId))
     const runtimeTasks = projectView.tasks.map(task =>
       taskToProjection(task, projectView.taskEvents[task.taskId] ?? []),
     )
-    snapshot.tasks = [
-      ...runtimeTasks,
-      ...snapshot.tasks.filter(task =>
-        !runtimeTasks.some(runtimeTask => runtimeTask.taskId === task.taskId),
-      ),
-    ]
+    snapshot.tasks = preferRuntimeData(
+      runtimeTasks,
+      snapshot.tasks,
+      snapshot.runtimeConnected,
+    )
     snapshot.reports = runtimeReports(projectView)
     syncChannelBindingForm()
     syncVideoPlanViewportDraft()
@@ -1420,7 +1431,7 @@ async function refreshProjectView(): Promise<void> {
         />
       </template>
       <template v-else-if="activeModule === 'owner'">
-        <OwnerInboxPage :owner-handoffs="ownerHandoffs" />
+        <OwnerInboxPage :owner-handoffs="ownerHandoffs" @open-task="openOwnerTask" />
       </template>
 
       <template v-else-if="activeModule === 'reports'">
