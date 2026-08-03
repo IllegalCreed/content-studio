@@ -204,8 +204,10 @@ const emit = defineEmits<{
           <span class="arrow">↗</span>
         </button>
       </div>
-
-      <article class="campaign-detail">
+      <p v-if="props.snapshot.campaigns.length === 0" class="empty-state campaign-empty-state">
+        当前运行时还没有发布活动。可以点击右上角“新建发布活动”，先保存主题和项目渠道。
+      </p>
+      <article v-else class="campaign-detail">
         <div class="detail-heading">
           <div>
             <p class="eyebrow">当前活动</p>

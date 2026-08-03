@@ -1,6 +1,8 @@
+import type { WorkbenchSnapshot } from './model'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { describe, expect, it } from 'vitest'
+import { nextTick } from 'vue'
 import { createWorkbenchRouter } from './router'
 import WorkbenchApp from './WorkbenchApp.vue'
 import './styles.css'
@@ -125,5 +127,26 @@ describe('content studio workbench', () => {
     await wrapper.get('a[data-module="reports"]').trigger('click')
     expect(wrapper.get('h1').text()).toContain('项目报告')
     expect(wrapper.text()).toContain('演示数据')
+  })
+
+  it('运行时返回空项目时显示空状态而不是读取不存在的活动', async () => {
+    const router = createWorkbenchRouter(true)
+    await router.push('/project/activities')
+    await router.isReady()
+    const wrapper = mount(WorkbenchApp, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+
+    const viewModel = wrapper.vm as unknown as { snapshot: WorkbenchSnapshot }
+    viewModel.snapshot.runtimeConnected = true
+    viewModel.snapshot.campaigns = []
+    viewModel.snapshot.tasks = []
+    await nextTick()
+
+    expect(wrapper.text()).toContain('0 个活动')
+    expect(wrapper.text()).toContain('当前运行时还没有发布活动')
+    expect(wrapper.text()).not.toContain('Cannot read properties of undefined')
   })
 })

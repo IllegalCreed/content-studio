@@ -189,6 +189,42 @@ const videoPlanViewportDraft = reactive({
   height: 1080,
   width: 1920,
 })
+
+const emptyCampaign: CampaignProjection = {
+  activityArtifacts: [],
+  activityStatus: '草稿',
+  assets: 0,
+  campaignId: '__empty__',
+  channels: [],
+  contentGroups: [],
+  executionStatus: 'queued',
+  handoffs: [],
+  nextAction: '当前项目还没有发布活动，可以从右上角新建一个。',
+  referencedAssets: [],
+  title: '尚未创建发布活动',
+  topic: '当前项目还没有可展示的活动。',
+  version: 0,
+  videoJob: null,
+  videoPlan: null,
+}
+
+const emptyTask: WorkbenchSnapshot['tasks'][number] = {
+  accountAlias: '未绑定账号',
+  activityId: '',
+  activityTitle: '尚未创建发布活动',
+  attempt: 0,
+  attempts: [],
+  channel: 'github',
+  contentTitle: '暂无渠道内容',
+  detail: '当前项目还没有制作、发布或监测任务。',
+  events: [],
+  kind: '制作',
+  progress: 0,
+  status: 'queued',
+  steps: [],
+  taskId: '__empty__',
+  title: '尚未创建执行任务',
+}
 const activityForm = reactive<{
   channels: ChannelId[]
   topic: string
@@ -260,7 +296,7 @@ const currentModule = computed(() =>
 const selectedCampaign = computed(() =>
   snapshot.campaigns.find(
     campaign => campaign.campaignId === selectedCampaignId.value,
-  ) ?? snapshot.campaigns[0]!,
+  ) ?? snapshot.campaigns[0] ?? emptyCampaign,
 )
 
 const selectedCampaignIsRuntime = computed(() =>
@@ -285,7 +321,8 @@ const canReviseSelectedVideoPlan = computed(() =>
 
 const selectedTask = computed(() =>
   snapshot.tasks.find(task => task.taskId === selectedTaskId.value)
-  ?? snapshot.tasks[0]!,
+  ?? snapshot.tasks[0]
+  ?? emptyTask,
 )
 
 const selectedTaskIsRuntime = computed(() =>
@@ -353,7 +390,8 @@ const selectedCampaignTasks = computed(() =>
 
 const selectedTaskCampaign = computed(() =>
   snapshot.campaigns.find(campaign => campaign.campaignId === selectedTask.value.activityId)
-  ?? snapshot.campaigns[0]!,
+  ?? snapshot.campaigns[0]
+  ?? emptyCampaign,
 )
 
 const selectedChannel = computed(() =>
