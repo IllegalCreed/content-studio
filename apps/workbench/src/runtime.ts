@@ -1,5 +1,6 @@
 import type {
   ActivityArtifact,
+  ActivityRevisionInput,
   ChannelContent,
   ContentGroup,
   ContentStudioProjectView,
@@ -49,6 +50,7 @@ export interface WorkbenchRuntime {
   health: () => Promise<RuntimeHealth>
   project: (projectId: string) => Promise<ContentStudioProjectView>
   promoteActivityArtifact: (input: PromoteActivityArtifactInput) => Promise<ProjectAsset>
+  reviseActivity: (input: ActivityRevisionInput) => Promise<PublishingActivity>
   recordTask: (
     projectId: string,
     taskId: string,
@@ -130,6 +132,13 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
     ),
     promoteActivityArtifact: input => request<ProjectAsset>(
       `/projects/${encodeURIComponent(input.projectId)}/activity-artifacts/${encodeURIComponent(input.artifactId)}/promote`,
+      {
+        body: JSON.stringify(input),
+        method: 'POST',
+      },
+    ),
+    reviseActivity: input => request<PublishingActivity>(
+      `/projects/${encodeURIComponent(input.projectId)}/activities/${encodeURIComponent(input.activityId)}/revise`,
       {
         body: JSON.stringify(input),
         method: 'POST',

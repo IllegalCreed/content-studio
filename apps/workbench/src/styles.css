@@ -1630,6 +1630,86 @@ footer {
   font-size: 0.62rem;
 }
 
+.video-plan-toggle {
+  display: flex !important;
+  gap: 0.25rem !important;
+  padding: 0.75rem;
+  border: 1px solid var(--stroke);
+  background: rgb(217 255 67 / 4%);
+}
+
+.video-plan-toggle > span {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink);
+}
+
+.video-plan-toggle input {
+  min-height: auto;
+  accent-color: var(--acid);
+}
+
+.video-plan-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--stroke);
+}
+
+.video-plan-fields legend {
+  padding: 0 0.25rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.video-viewport-editor {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+  padding: 0.8rem;
+  border: 1px dashed var(--stroke);
+}
+
+.video-viewport-editor .eyebrow {
+  margin-bottom: 0.2rem;
+}
+
+.video-viewport-editor small {
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.video-viewport-fields {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.65rem;
+}
+
+.video-viewport-fields label {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.video-viewport-fields input {
+  width: 8rem;
+  min-height: 2.35rem;
+  padding: 0.55rem 0.6rem;
+  color: var(--ink);
+  border: 1px solid var(--stroke);
+  background: #10130f;
+  font: inherit;
+}
+
+.video-viewport-fields button {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 .empty-state {
   margin: 0.8rem 0;
   color: var(--muted);
@@ -3074,6 +3154,7 @@ footer {
   .channel-account-detail,
   .channel-binding-fields,
   .project-channel-config-grid,
+  .video-plan-fields,
   .cleanup-summary-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -3103,10 +3184,24 @@ footer {
     flex-direction: column;
   }
 
+  .video-viewport-fields {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .video-viewport-fields input {
+    width: 100%;
+  }
+
+  .video-viewport-fields button {
+    margin-left: 0;
+  }
+
   .channel-overview-grid,
   .channel-detail-grid,
   .channel-account-detail,
   .channel-binding-fields,
+  .video-plan-fields,
   .project-channel-config-grid,
   .report-metrics,
   .cleanup-summary-grid {

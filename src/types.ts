@@ -223,6 +223,7 @@ export interface ActivityRevisionInput {
   baseVersion: number
   projectId: string
   topic: LocalizedText
+  video?: CampaignVideo
 }
 
 export interface ConfirmActivityVideoPlanInput {

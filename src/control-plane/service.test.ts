@@ -754,6 +754,36 @@ describe('content studio application service', () => {
       .toBe('A revised topic')
   })
 
+  it('revises a video plan and requires confirmation for the new version', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'project-a', [{
+      id: 'quick-sort',
+      startPath: '/quick-sort',
+      steps: [{ kind: 'capture', label: 'partition' }],
+      title: { 'en': 'Quick sort', 'zh-CN': '快速排序' },
+    }])
+    enableYouTube(service, 'project-a')
+    const activity = createActivity(service)
+    const revised = service.reviseActivity({
+      activityId: activity.activityId,
+      baseVersion: activity.version,
+      projectId: 'project-a',
+      topic: activity.topic,
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        viewport: { height: 768, width: 1366 },
+      },
+    })
+
+    expect(revised.version).toBe(2)
+    expect(revised.video?.viewport).toEqual({ height: 768, width: 1366 })
+    expect(revised.videoPlanReviewStatus).toBe('pending')
+    expect(repository.getActivity('project-a', activity.activityId, 1)?.video?.viewport)
+      .toBeUndefined()
+  })
+
   it('binds publication receipts to the exact activity, content, and channel', () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)

@@ -5,6 +5,7 @@ import type { ContentStudioRepository } from '../control-plane/service'
 import type { ProductionTaskDependencies } from '../jobs/production'
 import type {
   ActivityArtifact,
+  ActivityRevisionInput,
   ChannelContentFormat,
   ChannelId,
   ContentStudioProjectView,
@@ -444,6 +445,32 @@ async function handleRequest(
       && segments[1] === 'v1'
       && segments[2] === 'projects'
       && segments[4] === 'activities'
+      && segments[6] === 'revise'
+    ) {
+      const projectId = identifierField(
+        decodeSegment(segments[3]!),
+        'projectId',
+      )
+      const activityId = identifierField(
+        decodeSegment(segments[5]!),
+        'activityId',
+      )
+      const input = parseReviseActivityInput(
+        await readJsonBody(request),
+        projectId,
+        activityId,
+      )
+      sendJson(response, 200, service.reviseActivity(input))
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'activities'
       && segments[6] === 'content-groups'
     ) {
       const projectId = decodeSegment(segments[3]!)
@@ -773,6 +800,34 @@ export function parseCreateActivityInput(
     targetUrl,
     topic: localizedTextField(value.topic, 'topic'),
     ...(value.video === undefined ? {} : { video: videoField(value.video) }),
+  }
+}
+
+export function parseReviseActivityInput(
+  input: unknown,
+  projectId: string,
+  activityId: string,
+): ActivityRevisionInput {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'activity revision')
+  const supportedKeys = new Set(['activityId', 'baseVersion', 'projectId', 'topic', 'video'])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key))
+      throw new RequestError(400, `activity revision contains unsupported field: ${key}`)
+  }
+  const inputProjectId = stringField(value.projectId, 'projectId')
+  if (inputProjectId !== projectId)
+    throw new RequestError(400, 'projectId must match the URL')
+  const inputActivityId = identifierField(value.activityId, 'activityId')
+  if (inputActivityId !== activityId)
+    throw new RequestError(400, 'activityId must match the URL')
+  const video = value.video === undefined ? undefined : videoField(value.video)
+  return {
+    activityId,
+    baseVersion: positiveIntegerField(value.baseVersion, 'baseVersion'),
+    projectId,
+    topic: localizedTextField(value.topic, 'topic'),
+    ...(video === undefined ? {} : { video }),
   }
 }
 
@@ -1180,6 +1235,11 @@ function statusField(input: unknown): CreatePublishingActivityInput['status'] {
 
 function videoField(input: unknown): NonNullable<CreatePublishingActivityInput['video']> {
   const value = asRecord(input, 'video')
+  const supportedKeys = new Set(['flowIds', 'format', 'outline', 'planVersion', 'viewport'])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key))
+      throw new RequestError(400, `video contains unsupported field: ${key}`)
+  }
   if (!Array.isArray(value.flowIds) || value.flowIds.length === 0)
     throw new RequestError(400, 'video.flowIds must be a non-empty array')
   const flowIds = value.flowIds.map((flowId, index) =>

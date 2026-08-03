@@ -1,6 +1,7 @@
 import type {
   ActivityArtifact,
   CampaignJobStatus,
+  CampaignVideo,
   ChannelId,
   ContentStudioProjectView,
   ExecutionTask,
@@ -8,6 +9,7 @@ import type {
   ObservationMetric,
   RecordingAttemptRecord,
   VideoFormat,
+  VideoViewport,
 } from '@content-studio/core-types'
 
 export interface ProjectProjection {
@@ -373,6 +375,17 @@ export interface VideoPlanProjection {
   planVersion: number
   reviewStatus: '已确认' | '待确认'
   scenes: VideoPlanSceneProjection[]
+  viewport: VideoViewport
+}
+
+export function videoViewportForFormat(
+  video: Pick<CampaignVideo, 'format' | 'viewport'>,
+): VideoViewport {
+  return video.viewport ?? {
+    landscape: { height: 1080, width: 1920 },
+    portrait: { height: 1920, width: 1080 },
+    square: { height: 1080, width: 1080 },
+  }[video.format]
 }
 
 export interface OwnerHandoffProjection {
@@ -813,6 +826,7 @@ export const snapshot: WorkbenchSnapshot = {
         format: 'portrait',
         planVersion: 2,
         reviewStatus: '待确认',
+        viewport: { height: 1920, width: 1080 },
         scenes: [
           {
             flowId: 'quick-sort',

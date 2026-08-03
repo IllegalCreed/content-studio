@@ -21,6 +21,7 @@ import {
   parsePromoteActivityArtifactInput,
   parseRecordMonitoringObservationInput,
   parseRecordPublicationReceiptInput,
+  parseReviseActivityInput,
   parseUpdateProjectChannelBindingInput,
 } from './server'
 
@@ -166,6 +167,48 @@ describe('content studio local application server', () => {
         },
       },
     }, 'project-a')).toThrow(/viewport/i)
+
+    expect(() => parseCreateActivityInput({
+      activityId: 'activity-a',
+      campaignId: 'campaign-a',
+      channels: [{ id: 'github', locale: 'en' }],
+      goal: 'education',
+      projectId: 'project-a',
+      projectSnapshotId: 'project-a-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://project-a.example.com/guide',
+      topic: {
+        'en': 'A guide',
+        'zh-CN': '一篇指南',
+      },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        browserArgs: ['--ignore-certificate-errors'],
+      },
+    }, 'project-a')).toThrow(/unsupported field/i)
+  })
+
+  it('parses a video plan revision with a custom viewport', () => {
+    expect(parseReviseActivityInput({
+      activityId: 'activity-a',
+      baseVersion: 1,
+      projectId: 'project-a',
+      topic: {
+        'en': 'A revised guide',
+        'zh-CN': '修订指南',
+      },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        viewport: { height: 768, width: 1366 },
+      },
+    }, 'project-a', 'activity-a')).toMatchObject({
+      baseVersion: 1,
+      video: {
+        viewport: { height: 768, width: 1366 },
+      },
+    })
   })
 
   it('parses channel content artifact ids, defaulting to empty and rejecting duplicates', () => {
@@ -1337,6 +1380,31 @@ describe('content studio local application server', () => {
       expect(await response.json()).toMatchObject({
         version: 2,
         videoPlanReviewStatus: 'confirmed',
+      })
+
+      const reviseResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/activities/${activity.activityId}/revise`,
+        {
+          body: JSON.stringify({
+            activityId: activity.activityId,
+            baseVersion: 2,
+            projectId: project.projectId,
+            topic: activity.topic,
+            video: {
+              flowIds: ['quick-sort'],
+              format: 'landscape',
+              viewport: { height: 768, width: 1366 },
+            },
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(reviseResponse.status).toBe(200)
+      expect(await reviseResponse.json()).toMatchObject({
+        version: 3,
+        video: { viewport: { height: 768, width: 1366 } },
+        videoPlanReviewStatus: 'pending',
       })
     }
     finally {

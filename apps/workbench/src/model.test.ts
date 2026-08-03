@@ -10,6 +10,7 @@ import {
   runtimeProjectAssets,
   runtimeReports,
   taskLifecycleProjection,
+  videoViewportForFormat,
 } from './model'
 
 function projectView(overrides: Partial<ContentStudioProjectView> = {}): ContentStudioProjectView {
@@ -90,6 +91,19 @@ function projectView(overrides: Partial<ContentStudioProjectView> = {}): Content
     ...overrides,
   }
 }
+
+describe('video plan projection', () => {
+  it('keeps custom viewport settings visible to the workbench', () => {
+    expect(videoViewportForFormat({
+      format: 'landscape',
+      viewport: { height: 768, width: 1366 },
+    })).toEqual({ height: 768, width: 1366 })
+    expect(videoViewportForFormat({ format: 'portrait' })).toEqual({
+      height: 1920,
+      width: 1080,
+    })
+  })
+})
 
 describe('runtime report projection', () => {
   it('projects a persisted recording receipt into real video evidence', () => {

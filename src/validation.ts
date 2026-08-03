@@ -429,6 +429,11 @@ function parseCampaignVideo(
   captureFlows: CaptureFlow[],
 ): NonNullable<CampaignSpec['video']> {
   const value = asRecord(input, 'video')
+  const supportedKeys = new Set(['flowIds', 'format', 'outline', 'planVersion', 'viewport'])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key))
+      throw new Error(`video contains unsupported field: ${key}`)
+  }
   const flowIds = parseStringArray(value.flowIds, 'video.flowIds')
   if (flowIds.length === 0)
     throw new Error('video.flowIds must not be empty')

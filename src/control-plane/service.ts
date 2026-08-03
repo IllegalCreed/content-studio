@@ -38,6 +38,7 @@ import type {
 import { runProductionTask as executeProductionTask } from '../jobs/production'
 import { InMemoryExecutionTaskStore } from '../jobs/task'
 import { compileVideoPlan } from '../video/compile'
+import { validateVideoViewport } from '../video/viewport'
 
 export class ProjectScopeError extends Error {
   constructor(projectId: string, recordId: string) {
@@ -803,9 +804,18 @@ export class ContentStudioApplicationService {
         `Activity ${input.activityId} has moved past version ${input.baseVersion}`,
       )
     }
+    const snapshot = this.requireSnapshot(input.projectId, current.projectSnapshotId)
+    if (input.video !== undefined)
+      this.assertActivityVideo(input.video, snapshot)
     return this.repository.saveActivity({
       ...current,
       topic: input.topic,
+      ...(input.video === undefined
+        ? {}
+        : {
+            video: input.video,
+            videoPlanReviewStatus: 'pending' as const,
+          }),
       version: current.version + 1,
     })
   }
@@ -1198,6 +1208,8 @@ export class ContentStudioApplicationService {
       throw new Error('Activity video flow ids must be unique')
     if (!['landscape', 'portrait', 'square'].includes(video.format))
       throw new Error(`Unsupported activity video format: ${video.format}`)
+    if (video.viewport !== undefined)
+      validateVideoViewport(video.viewport, video.format)
     if (video.planVersion !== undefined
       && (!Number.isInteger(video.planVersion) || video.planVersion < 1)) {
       throw new Error('Activity video planVersion must be a positive integer')

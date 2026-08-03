@@ -32,6 +32,7 @@ import type {
   PublishingActivity,
   RecordingAttemptRecord,
   StorageCleanupPreview,
+  VideoFormat,
 } from '@content-studio/core-types'
 import {
   activityArtifactProjections,
@@ -45,6 +46,7 @@ import {
   taskEventSummary,
   snapshot as snapshotSeed,
   taskLifecycleProjection,
+  videoViewportForFormat,
 } from './model'
 import { createWorkbenchRuntime } from './runtime'
 
@@ -167,16 +169,31 @@ const channelBindingSaving = ref(false)
 const channelBindingSaveError = ref<string | null>(null)
 const runtimeTaskIds = ref<Set<string>>(new Set())
 const runtimeActivityIds = ref<Set<string>>(new Set())
+const projectCaptureFlowIds = ref<string[]>([])
 const taskActionError = ref<string | null>(null)
 const taskActionPending = ref<'cancel' | 'record' | 'retry' | 'start' | null>(null)
 const videoPlanActionError = ref<string | null>(null)
 const videoPlanActionPending = ref(false)
+const videoPlanRevisionError = ref<string | null>(null)
+const videoPlanRevisionPending = ref(false)
+const videoPlanViewportDraft = reactive({
+  height: 1080,
+  width: 1920,
+})
 const activityForm = reactive<{
   channels: ChannelId[]
   topic: string
+  videoEnabled: boolean
+  videoFormat: VideoFormat
+  videoHeight: number
+  videoWidth: number
 }>({
   channels: ['github'],
   topic: '',
+  videoEnabled: false,
+  videoFormat: 'landscape',
+  videoHeight: 1080,
+  videoWidth: 1920,
 })
 const contentForm = reactive<{
   body: string
@@ -220,6 +237,12 @@ const contentLocaleOptions = [
   { label: 'English', value: 'en' },
 ]
 
+const videoFormatOptions: Array<{ label: string, value: VideoFormat }> = [
+  { label: '横屏', value: 'landscape' },
+  { label: '竖屏', value: 'portrait' },
+  { label: '方形', value: 'square' },
+]
+
 const currentModule = computed(() =>
   moduleDefinitions.find(module => module.id === activeModule.value)
   ?? moduleDefinitions[0]!,
@@ -240,6 +263,15 @@ const canConfirmSelectedVideoPlan = computed(() =>
   && selectedCampaignIsRuntime.value
   && selectedCampaign.value.videoPlan?.reviewStatus === '待确认'
   && !videoPlanActionPending.value,
+)
+
+const canReviseSelectedVideoPlan = computed(() =>
+  snapshot.runtimeConnected
+  && selectedCampaignIsRuntime.value
+  && selectedCampaign.value.videoPlan !== null
+  && !videoPlanRevisionPending.value
+  && videoPlanViewportDraft.width > 0
+  && videoPlanViewportDraft.height > 0,
 )
 
 const selectedTask = computed(() =>
@@ -435,6 +467,7 @@ function toggleProjectPicker(): void {
 
 function selectCampaign(campaignId: string): void {
   selectedCampaignId.value = campaignId
+  syncVideoPlanViewportDraft()
   activeModule.value = 'activities'
 }
 
@@ -491,6 +524,70 @@ async function confirmSelectedVideoPlan(): Promise<void> {
   }
   finally {
     videoPlanActionPending.value = false
+  }
+}
+
+function defaultVideoViewport(format: VideoFormat): { height: number, width: number } {
+  if (format === 'portrait')
+    return { height: 1920, width: 1080 }
+  if (format === 'square')
+    return { height: 1080, width: 1080 }
+  return { height: 1080, width: 1920 }
+}
+
+function applyActivityVideoFormat(format: string): void {
+  if (!['landscape', 'portrait', 'square'].includes(format))
+    return
+  activityForm.videoFormat = format as VideoFormat
+  const viewport = defaultVideoViewport(activityForm.videoFormat)
+  activityForm.videoHeight = viewport.height
+  activityForm.videoWidth = viewport.width
+}
+
+function syncVideoPlanViewportDraft(): void {
+  const videoPlan = selectedCampaign.value.videoPlan
+  if (videoPlan === null)
+    return
+  const viewport = videoPlan.viewport ?? defaultVideoViewport(videoPlan.format)
+  videoPlanViewportDraft.height = viewport.height
+  videoPlanViewportDraft.width = viewport.width
+  videoPlanRevisionError.value = null
+}
+
+async function reviseSelectedVideoPlan(): Promise<void> {
+  if (!canReviseSelectedVideoPlan.value)
+    return
+  videoPlanRevisionPending.value = true
+  videoPlanRevisionError.value = null
+  try {
+    const projectView = await workbenchRuntime.project(snapshot.project.projectId)
+    const activity = projectView.activities.find(candidate =>
+      candidate.activityId === selectedCampaign.value.campaignId,
+    )
+    if (activity?.video === undefined)
+      throw new Error('当前活动没有视频制作计划')
+    await workbenchRuntime.reviseActivity({
+      activityId: activity.activityId,
+      baseVersion: activity.version,
+      projectId: activity.projectId,
+      topic: activity.topic,
+      video: {
+        ...activity.video,
+        viewport: {
+          height: videoPlanViewportDraft.height,
+          width: videoPlanViewportDraft.width,
+        },
+      },
+    })
+    await refreshProjectView()
+  }
+  catch (error: unknown) {
+    videoPlanRevisionError.value = error instanceof Error
+      ? error.message
+      : '拍摄计划修订失败'
+  }
+  finally {
+    videoPlanRevisionPending.value = false
   }
 }
 
@@ -583,6 +680,10 @@ async function saveChannelBinding(): Promise<void> {
 function openActivityComposer(): void {
   activityForm.channels = enabledChannels.value.slice(0, 1).map(channel => channel.channel)
   activityForm.topic = ''
+  activityForm.videoEnabled = false
+  activityForm.videoFormat = 'landscape'
+  activityForm.videoHeight = 1080
+  activityForm.videoWidth = 1920
   activitySaveError.value = null
   activityComposerOpen.value = true
 }
@@ -767,6 +868,10 @@ async function saveActivity(): Promise<void> {
       activitySaveError.value = '至少选择一个项目渠道'
     return
   }
+  if (activityForm.videoEnabled && projectCaptureFlowIds.value.length === 0) {
+    activitySaveError.value = '当前项目没有登记可录制流程，暂时不能创建视频制作计划'
+    return
+  }
   activitySaving.value = true
   activitySaveError.value = null
   const activityId = `activity-${Date.now()}`
@@ -783,6 +888,18 @@ async function saveActivity(): Promise<void> {
       'en': activityForm.topic,
       'zh-CN': activityForm.topic,
     },
+    ...(activityForm.videoEnabled
+      ? {
+          video: {
+            flowIds: projectCaptureFlowIds.value,
+            format: activityForm.videoFormat,
+            viewport: {
+              height: activityForm.videoHeight,
+              width: activityForm.videoWidth,
+            },
+          },
+        }
+      : {}),
   }
   try {
     const activity = await workbenchRuntime.createActivity(input)
@@ -915,6 +1032,7 @@ function createVideoPlanProjection(
     format: video.format,
     planVersion: video.planVersion ?? activity.version,
     reviewStatus: activity.videoPlanReviewStatus === 'confirmed' ? '已确认' : '待确认',
+    viewport: videoViewportForFormat(video),
     scenes: video.flowIds.map((flowId) => {
       const flow = flowById.get(flowId)
       const outline = outlineByFlowId.get(flowId)
@@ -995,6 +1113,7 @@ async function connectLocalRuntime(): Promise<void> {
 
 function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntime.project>>): void {
     currentSnapshotId.value = projectView.snapshot.snapshotId
+    projectCaptureFlowIds.value = projectView.snapshot.manifest.captureFlows.map(flow => flow.id)
     snapshot.project = {
       ...snapshot.project,
       facts: projectView.snapshot.manifest.facts.map(fact =>
@@ -1070,6 +1189,7 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
     ]
     snapshot.reports = runtimeReports(projectView)
     syncChannelBindingForm()
+    syncVideoPlanViewportDraft()
 }
 
 async function refreshProjectView(): Promise<void> {
@@ -1489,6 +1609,29 @@ async function refreshProjectView(): Promise<void> {
                   </label>
                   <small v-if="enabledChannels.length === 0" class="form-hint">请先在渠道管理中启用项目渠道。</small>
                 </fieldset>
+                <label class="video-plan-toggle field-wide">
+                  <span>
+                    <input v-model="activityForm.videoEnabled" type="checkbox" />
+                    <strong>同时建立视频制作计划</strong>
+                  </span>
+                  <small>会把当前项目登记的拍摄流程交给 AI/录制任务继续生成。</small>
+                </label>
+                <fieldset v-if="activityForm.videoEnabled" class="video-plan-fields field-wide">
+                  <legend>视频录制配置</legend>
+                  <label>
+                    画幅
+                    <SelectMenu v-model="activityForm.videoFormat" aria-label="视频画幅" :options="videoFormatOptions" @update:model-value="applyActivityVideoFormat" />
+                  </label>
+                  <label>
+                    录制宽度（CSS 像素）
+                    <input v-model.number="activityForm.videoWidth" min="320" max="3840" required type="number" />
+                  </label>
+                  <label>
+                    录制高度（CSS 像素）
+                    <input v-model.number="activityForm.videoHeight" min="320" max="3840" required type="number" />
+                  </label>
+                  <p class="form-hint field-wide">尺寸会同时用于目标网站视口和 Playwright 录制文件，保存时还会经过服务端安全校验。</p>
+                </fieldset>
             </div>
             <p v-if="activitySaveError" class="form-error">{{ activitySaveError }}</p>
             <div class="form-actions">
@@ -1594,6 +1737,32 @@ async function refreshProjectView(): Promise<void> {
                 <div class="shooting-plan-meta">
                   <span>第 {{ selectedCampaign.videoPlan.planVersion }} 版</span>
                   <span>{{ selectedCampaign.videoPlan.format }} · {{ selectedCampaign.videoPlan.scenes.length }} 个场景</span>
+                  <span>录制视口 {{ selectedCampaign.videoPlan.viewport.width }} × {{ selectedCampaign.videoPlan.viewport.height }}</span>
+                </div>
+                <div v-if="selectedCampaignIsRuntime" class="video-viewport-editor">
+                  <div>
+                    <p class="eyebrow">调整本次活动的录制尺寸</p>
+                    <small>保存后会生成新版本，并重新等待确认；不会修改项目源代码。</small>
+                  </div>
+                  <div class="video-viewport-fields">
+                    <label>
+                      宽度
+                      <input v-model.number="videoPlanViewportDraft.width" min="320" max="3840" type="number" />
+                    </label>
+                    <label>
+                      高度
+                      <input v-model.number="videoPlanViewportDraft.height" min="320" max="3840" type="number" />
+                    </label>
+                    <button
+                      type="button"
+                      class="primary-button"
+                      :disabled="!canReviseSelectedVideoPlan"
+                      @click="reviseSelectedVideoPlan"
+                    >
+                      {{ videoPlanRevisionPending ? '保存中…' : '保存尺寸并生成新版本' }}
+                    </button>
+                  </div>
+                  <p v-if="videoPlanRevisionError" class="form-error">{{ videoPlanRevisionError }}</p>
                 </div>
                 <ol class="shooting-plan-scenes">
                   <li v-for="(scene, index) in selectedCampaign.videoPlan.scenes" :key="scene.flowId">

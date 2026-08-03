@@ -230,4 +230,49 @@ describe('workbench runtime client', () => {
       }),
     )
   })
+
+  it('revises an activity video plan through the local runtime', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        version: 2,
+        video: {
+          format: 'landscape',
+          viewport: { height: 768, width: 1366 },
+        },
+        videoPlanReviewStatus: 'pending',
+      }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const runtime = createWorkbenchRuntime('/api/v1')
+    const result = await runtime.reviseActivity({
+      activityId: 'activity-a',
+      baseVersion: 1,
+      projectId: 'project-a',
+      topic: { 'en': 'A guide', 'zh-CN': '指南' },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        viewport: { height: 768, width: 1366 },
+      },
+    })
+    expect(result).toMatchObject({ version: 2, videoPlanReviewStatus: 'pending' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/project-a/activities/activity-a/revise',
+      expect.objectContaining({
+        body: JSON.stringify({
+          activityId: 'activity-a',
+          baseVersion: 1,
+          projectId: 'project-a',
+          topic: { 'en': 'A guide', 'zh-CN': '指南' },
+          video: {
+            flowIds: ['quick-sort'],
+            format: 'landscape',
+            viewport: { height: 768, width: 1366 },
+          },
+        }),
+        method: 'POST',
+      }),
+    )
+  })
 })
