@@ -10,6 +10,7 @@ import type {
   ObservationMetric,
   OwnerHandoff,
   ProjectAsset,
+  ProjectChannelBinding,
   PublishingActivity,
   RecordingAttemptRecord,
 } from '@content-studio/core-types'
@@ -19,6 +20,7 @@ import type {
   AssetProjection,
   CampaignProjection,
   ChannelContentProjection,
+  ChannelProjection,
   ContentGroupProjection,
   ReportProjection,
   TaskProjection,
@@ -37,6 +39,28 @@ export function preferRuntimeData<T>(
   runtimeConnected: boolean,
 ): T[] {
   return [...(runtimeConnected ? runtimeItems : demoItems)]
+}
+
+export interface ProjectChannelsInput {
+  bindings: readonly ProjectChannelBinding[]
+  channels: readonly ChannelProjection[]
+}
+
+export function projectChannels({
+  bindings,
+  channels,
+}: ProjectChannelsInput): ChannelProjection[] {
+  const bindingByChannel = new Map(
+    bindings.map(binding => [binding.channel, binding]),
+  )
+  return channels.map((channel) => {
+    const binding = bindingByChannel.get(channel.channel)
+    return {
+      ...channel,
+      enabled: binding?.enabled ?? false,
+      projectAccountId: binding?.accountRef ?? null,
+    }
+  })
 }
 
 export function runtimeActivityArtifacts(

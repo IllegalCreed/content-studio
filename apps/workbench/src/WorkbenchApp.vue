@@ -16,6 +16,7 @@ import WorkbenchShell from './components/WorkbenchShell.vue'
 import {
   activityToCampaign,
   preferRuntimeData,
+  projectChannels,
   runtimeActivityArtifacts,
   runtimeProjectAssets,
   runtimeReports,
@@ -1136,18 +1137,9 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
       version: `v${projectView.snapshot.version}`,
       canonicalUrl: projectView.snapshot.manifest.canonicalUrl,
     }
-    const bindingByChannel = new Map(
-      projectView.projectChannelBindings.map(binding => [binding.channel, binding]),
-    )
-    const enabledChannels = new Set(
-      projectView.projectChannelBindings
-        .filter(binding => binding.enabled)
-        .map(binding => binding.channel),
-    )
-    snapshot.channels.forEach((channel) => {
-      channel.enabled = enabledChannels.has(channel.channel)
-      const binding = bindingByChannel.get(channel.channel)
-      channel.projectAccountId = binding?.accountRef ?? null
+    snapshot.channels = projectChannels({
+      bindings: projectView.projectChannelBindings,
+      channels: snapshot.channels,
     })
     const runtimeCampaigns = projectView.activities.map(activity => activityToCampaign({
       accountAliasForChannel: projectAccountAliasForChannel,

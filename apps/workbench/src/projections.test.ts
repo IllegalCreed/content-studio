@@ -3,12 +3,15 @@ import type {
   ContentGroup,
   ExecutionTask,
   OwnerHandoff,
+  ProjectChannelBinding,
   PublishingActivity,
 } from '@content-studio/core-types'
+import type { ChannelProjection } from './model'
 import { describe, expect, it } from 'vitest'
 import {
   activityToCampaign,
   preferRuntimeData,
+  projectChannels,
   taskToProjection,
 } from './projections'
 
@@ -19,6 +22,43 @@ describe('workbench runtime projections', () => {
 
   it('运行时未连接时保留只读演示数据', () => {
     expect(preferRuntimeData([], ['演示活动'], false)).toEqual(['演示活动'])
+  })
+
+  it('把项目渠道绑定投影到全局渠道目录，不改动全局规格', () => {
+    const channels: ChannelProjection[] = [{
+      accounts: [],
+      adapterReady: true,
+      alias: 'Global account',
+      bodyLimit: 12000,
+      channel: 'github',
+      delivery: '全自动候选',
+      enabled: true,
+      format: '文章',
+      health: '已就绪',
+      metrics: ['发布回执'],
+      nextAction: null,
+      projectAccountId: 'global-account',
+      statusSource: 'marketing-ops',
+      titleLimit: 128,
+    }]
+    const bindings: ProjectChannelBinding[] = [{
+      accountRef: 'project-account',
+      channel: 'github',
+      delivery: 'owner-assisted',
+      enabled: false,
+      projectId: 'project-a',
+    }]
+
+    const [projected] = projectChannels({ bindings, channels })
+
+    expect(projected).toMatchObject({
+      bodyLimit: 12000,
+      channel: 'github',
+      enabled: false,
+      projectAccountId: 'project-account',
+      titleLimit: 128,
+    })
+    expect(channels[0]?.enabled).toBe(true)
   })
 
   it('把活动、内容组和人工交接整理成活动详情投影', () => {
