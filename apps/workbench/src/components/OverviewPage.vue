@@ -86,7 +86,7 @@ const emit = defineEmits<{
     <article class="module-card project-rollup-card">
       <div class="module-card-heading">
         <div><p class="eyebrow">项目汇总</p><h2>{{ props.projectCount }} 个项目</h2></div>
-        <span>跨项目索引</span>
+        <span class="project-rollup-scope" data-testid="project-rollup-scope">跨项目索引</span>
       </div>
       <div class="project-rollup-list">
         <div class="project-rollup-item">
