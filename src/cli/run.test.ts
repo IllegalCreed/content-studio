@@ -1,4 +1,4 @@
-import { access, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -142,6 +142,113 @@ describe('content-studio CLI', () => {
         ),
       ).resolves.toBe(0)
       expect(messages[0]).toContain('Validated algorithm-visualizer')
+    }
+    finally {
+      await rm(temporaryDirectory, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
+
+  it('runs a local doctor without creating project or database directories', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-doctor-'))
+    const projectPath = join(temporaryDirectory, 'project.json')
+    const messages: string[] = []
+
+    try {
+      await writeFile(projectPath, JSON.stringify(project), 'utf8')
+      await expect(runCli(
+        [
+          'doctor',
+          '--project',
+          projectPath,
+          '--db',
+          join(temporaryDirectory, '.content-studio', 'state.sqlite'),
+        ],
+        {
+          cwd: temporaryDirectory,
+          write: message => messages.push(message),
+        },
+      )).resolves.toBe(0)
+
+      const report = messages.join('\n')
+      expect(report).toContain('Content Studio doctor')
+      expect(report).toContain('项目模式')
+      expect(report).toContain('SQLite 目录')
+      expect(report).toContain('不会自动读取凭据')
+      await expect(access(join(temporaryDirectory, '.content-studio'))).rejects.toThrow()
+    }
+    finally {
+      await rm(temporaryDirectory, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
+
+  it('reports assisted projects and unsafe local directories without modifying them', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-doctor-'))
+    const projectPath = join(temporaryDirectory, 'project.json')
+    const assistedProjectPath = join(temporaryDirectory, 'assisted-project.json')
+    const messages: string[] = []
+
+    try {
+      await writeFile(projectPath, JSON.stringify(project), 'utf8')
+      await writeFile(assistedProjectPath, JSON.stringify({
+        ...project,
+        captureMode: 'assisted',
+        sourceAccess: 'web-assisted',
+      }), 'utf8')
+      await mkdir(join(temporaryDirectory, '.content-studio'), { recursive: true })
+
+      await expect(runCli(
+        [
+          'doctor',
+          '--project',
+          projectPath,
+          '--db',
+          join(temporaryDirectory, '.content-studio', 'state.sqlite'),
+        ],
+        {
+          cwd: temporaryDirectory,
+          write: message => messages.push(message),
+        },
+      )).resolves.toBe(0)
+      expect(messages.join('\n')).toContain('[✓] 产物目录')
+
+      messages.length = 0
+      await expect(runCli(
+        [
+          'doctor',
+          '--project',
+          assistedProjectPath,
+          '--db',
+          join(temporaryDirectory, 'missing', 'nested', 'state.sqlite'),
+        ],
+        {
+          cwd: temporaryDirectory,
+          write: message => messages.push(message),
+        },
+      )).resolves.toBe(1)
+      expect(messages.join('\n')).toContain('辅助模式')
+      expect(messages.join('\n')).toContain('父目录不可写')
+
+      messages.length = 0
+      await expect(runCli(
+        [
+          'doctor',
+          '--project',
+          projectPath,
+          '--db',
+          '/dev/null/content-studio/state.sqlite',
+        ],
+        {
+          cwd: temporaryDirectory,
+          write: message => messages.push(message),
+        },
+      )).resolves.toBe(1)
+      expect(messages.join('\n')).toContain('不可写')
     }
     finally {
       await rm(temporaryDirectory, {

@@ -166,6 +166,14 @@ node dist/cli.mjs generate \
 产品层把 Campaign 称为“发布活动”。V0.1 CLI 和数据契约暂时保留
 `--campaign`、`campaignId` 等兼容名称。
 
+检查本地运行条件（不会创建目录、读取凭据或配置渠道）：
+
+```bash
+node dist/cli.mjs doctor \
+  --project path/to/project.json \
+  --db .content-studio/content-studio.sqlite
+```
+
 对明确启动或连接的项目预览执行录制：
 
 ```bash
@@ -217,6 +225,9 @@ node dist/cli.mjs mcp --stdio \
 
 工作台会通过 `/api` 代理连接 11001 的本地应用服务；服务未启动时自动退回只读演示。
 当前 UI 开放“创建发布活动”以及本地制作任务的取消、重试；不会模拟发布或监测成功。
+
+录制回执会写入同一份 SQLite，并在项目活动的视频详情中显示预览帧、产物下载链接、文件
+大小、日志摘要和失败原因。项目视图不会暴露本地绝对路径；真实渠道发布仍不会由该服务触发。
 
 ## 项目对接
 

@@ -22,6 +22,7 @@ import { recordWithPlaywright } from '../recording/playwright'
 import { createContentStudioApplication, createContentStudioServer } from '../runtime/server'
 import { validateCampaign, validateProjectManifest } from '../validation'
 import { compileVideoPlan } from '../video/compile'
+import { runDoctor } from './doctor'
 
 export interface CliRuntime {
   cwd: string
@@ -64,6 +65,7 @@ export async function runCli(
     && command !== 'record'
     && command !== 'serve'
     && command !== 'mcp'
+    && command !== 'doctor'
     && command !== 'validate'
   ) {
     throw new Error(`Unknown command: ${command}`)
@@ -76,15 +78,17 @@ export async function runCli(
       ? new Set(['campaign', 'db', 'port', 'project'])
       : isMcp
         ? new Set(['campaign', 'db', 'project', 'stdio'])
-        : command === 'record'
-          ? new Set(['attempts', 'base-url', 'campaign', 'out', 'project'])
-          : new Set(['campaign', 'out', 'project']),
+        : command === 'doctor'
+          ? new Set(['db', 'project'])
+          : command === 'record'
+            ? new Set(['attempts', 'base-url', 'campaign', 'out', 'project'])
+            : new Set(['campaign', 'out', 'project']),
     isMcp ? new Set(['stdio']) : new Set(),
   )
   if (isMcp && !options.has('stdio'))
     throw new Error('content-studio mcp requires --stdio')
   const projectPath = requireOption(options, 'project')
-  const serveCampaignPath = command === 'serve' || isMcp
+  const serveCampaignPath = command === 'serve' || isMcp || command === 'doctor'
     ? options.get('campaign')
     : requireOption(options, 'campaign')
   const project = validateProjectManifest(
@@ -108,6 +112,8 @@ export async function runCli(
         )
     return runMcp(project, campaign, options, runtime)
   }
+  if (command === 'doctor')
+    return runDoctor(project, options, runtime)
 
   const campaignPath = requireOption(options, 'campaign')
   const campaign = validateCampaign(
@@ -258,6 +264,7 @@ function renderHelp(): string {
     'content-studio record --project <project.json> --campaign <campaign.json> --base-url <url> --out <directory> [--attempts <1-3>]',
     'content-studio serve --project <project.json> [--campaign <campaign.json>] [--db <path>] [--port <11001>]',
     'content-studio mcp --stdio --project <project.json> [--campaign <campaign.json>] [--db <path>]',
+    'content-studio doctor --project <project.json> [--db <path>]',
     'content-studio validate --project <project.json> --campaign <campaign.json>',
   ].join('\n')
 }
