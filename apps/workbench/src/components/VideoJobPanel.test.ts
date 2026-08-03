@@ -41,5 +41,19 @@ describe('video job panel', () => {
     expect(wrapper.text()).toContain('preview-1.png')
     expect(wrapper.text()).toContain('控制台错误 0 · 警告 1 · 页面错误 0')
     expect(wrapper.get('a[download]').attributes('href')).toBe(job.artifacts[0]!.url)
+    expect(wrapper.find('.preview-placeholder').exists()).toBe(false)
+  })
+
+  it('没有预览帧时明确显示缺失状态，不伪造录制画面', () => {
+    const wrapper = mount(VideoJobPanel, {
+      props: {
+        job: { ...job, previewUrl: undefined, previewLabel: '暂无预览帧' },
+        runtimeConnected: false,
+      },
+    })
+
+    expect(wrapper.get('.preview-placeholder').text()).toContain('暂无预览帧')
+    expect(wrapper.find('.preview-orbit').exists()).toBe(false)
+    expect(wrapper.find('.preview-bars').exists()).toBe(false)
   })
 })

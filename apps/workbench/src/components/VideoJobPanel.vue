@@ -46,14 +46,10 @@ const progress = computed(() =>
           decoding="async"
         >
         <template v-else>
-          <div class="preview-orbit orbit-one" />
-          <div class="preview-orbit orbit-two" />
-          <div class="preview-bars">
-            <span
-              v-for="height in [36, 68, 48, 82, 56, 72, 42]"
-              :key="height"
-              :style="{ height: `${height}%` }"
-            />
+          <div class="preview-placeholder">
+            <span class="preview-placeholder-mark">◎</span>
+            <strong>{{ job.previewLabel }}</strong>
+            <p>本轮尚未生成可预览帧</p>
           </div>
         </template>
         <div class="preview-caption">

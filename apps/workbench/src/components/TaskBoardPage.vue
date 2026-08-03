@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import VideoJobPanel from './VideoJobPanel.vue'
 import StatusRail from './StatusRail.vue'
-import type { CampaignProjection, WorkbenchSnapshot } from '../model'
+import type { CampaignProjection, OwnerHandoffProjection, WorkbenchSnapshot } from '../model'
 import { humanizeStatus, humanizeTaskEventKind } from '../model'
 
 type TaskScope = '全部项目' | '当前项目'
 type TaskAction = 'cancel' | 'record' | 'retry' | 'start'
 type TaskProjection = WorkbenchSnapshot['tasks'][number]
+type TaskOwnerHandoff = OwnerHandoffProjection & {
+  campaignTitle: string
+  taskId?: string
+}
 
 const props = defineProps<{
   activeTaskScope: TaskScope
@@ -14,6 +18,7 @@ const props = defineProps<{
   canRecordSelectedTask: boolean
   canRetrySelectedTask: boolean
   canStartSelectedTask: boolean
+  ownerHandoffs: TaskOwnerHandoff[]
   projectCount: number
   projectName: string
   runtimeConnected: boolean
@@ -28,8 +33,15 @@ const props = defineProps<{
 const emit = defineEmits<{
   'change-task': [action: TaskAction]
   'go-activities': []
+  'go-owner': []
   'select-task': [taskId: string]
 }>()
+
+const taskSummaryCopy: Record<'制作' | '发布' | '监测', string> = {
+  制作: '文章、图片、视频',
+  发布: '渠道交付与发布回执',
+  监测: '播放量、阅读量、回复',
+}
 </script>
 
 <template>
@@ -37,11 +49,42 @@ const emit = defineEmits<{
     <p class="task-scope-note" data-testid="task-scope-note">
       {{ props.activeTaskScope === '全部项目' ? `${props.projectCount} 个已接入项目 · 统一执行记录` : `当前项目 · ${props.projectName}` }}
     </p>
-    <div class="task-summary">
-      <div v-for="(count, kind) in props.taskCounts" :key="kind" class="task-summary-card">
-        <span>{{ kind }}任务</span><strong>{{ count }}</strong>
+    <div class="task-summary" aria-label="任务统计">
+      <div v-for="(count, kind) in props.taskCounts" :key="kind" class="overview-stat task-summary-card" data-testid="task-summary-card">
+        <span>{{ kind }}任务</span>
+        <strong>{{ count }}</strong>
+        <small>{{ taskSummaryCopy[kind] }}</small>
+      </div>
+      <div class="overview-stat task-summary-card" data-testid="task-summary-owner">
+        <span>待人工</span>
+        <strong>{{ props.ownerHandoffs.length }}</strong>
+        <small>登录、审核、最终确认</small>
       </div>
     </div>
+    <section v-if="props.ownerHandoffs.length > 0" class="task-attention-panel" data-testid="task-attention-panel">
+      <div class="task-attention-heading">
+        <div>
+          <p class="eyebrow">任务暂停点</p>
+          <h2>待人工处理</h2>
+        </div>
+        <button type="button" class="primary-button" @click="emit('go-owner')">打开处理清单</button>
+      </div>
+      <p class="task-attention-copy">以下任务正在等待授权人完成登录、验证码、审核或最终点击。系统不会读取或保存凭据，完成后回到处理清单确认即可。</p>
+      <div class="task-attention-list">
+        <article v-for="handoff in props.ownerHandoffs" :key="handoff.handoffId" class="task-attention-item">
+          <span class="channel-badge">{{ handoff.channel }}</span>
+          <div>
+            <p class="eyebrow">{{ handoff.campaignTitle }} · {{ handoff.accountAlias }}</p>
+            <h3>{{ handoff.reason }}</h3>
+            <small>官方页面：<code>{{ handoff.officialTargetUrl }}</code> · 处理窗口截至 {{ handoff.expiresAt }}</small>
+          </div>
+          <div class="task-attention-actions">
+            <a :href="handoff.officialTargetUrl" target="_blank" rel="noreferrer">打开官方页面</a>
+            <button v-if="handoff.taskId" type="button" @click="emit('select-task', handoff.taskId)">查看对应任务</button>
+          </div>
+        </article>
+      </div>
+    </section>
     <div v-if="props.visibleTasks.length === 0" class="task-empty-state" data-testid="tasks-empty-state">
       <p class="eyebrow">当前范围没有执行记录</p>
       <h3>{{ props.runtimeConnected ? '还没有制作、发布或监测任务' : '没有可展示的演示任务' }}</h3>

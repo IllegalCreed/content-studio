@@ -482,6 +482,10 @@ const ownerHandoffs = computed(() =>
   ),
 )
 
+const pendingOwnerHandoffs = computed(() =>
+  ownerHandoffs.value.filter(handoff => handoff.status === 'ready' || handoff.status === 'waiting'),
+)
+
 const enabledChannels = computed(() =>
   snapshot.channels.filter(channel => channel.enabled),
 )
@@ -1279,7 +1283,7 @@ async function refreshProjectView(): Promise<void> {
       <template v-if="activeModule === 'overview'">
         <OverviewPage
           :activity-task-summary="activityTaskSummary"
-          :owner-handoff-count="ownerHandoffs.length"
+          :owner-handoff-count="pendingOwnerHandoffs.length"
           :pending-task-count="pendingTaskCount"
           :project-count="snapshot.registeredProjectCount"
           :snapshot="snapshot"
@@ -1363,6 +1367,7 @@ async function refreshProjectView(): Promise<void> {
           :can-record-selected-task="canRecordSelectedTask"
           :can-retry-selected-task="canRetrySelectedTask"
           :can-start-selected-task="canStartSelectedTask"
+          :owner-handoffs="pendingOwnerHandoffs"
           :project-count="snapshot.registeredProjectCount"
           :project-name="snapshot.project.name"
           :runtime-connected="runtimeConnected"
@@ -1374,6 +1379,7 @@ async function refreshProjectView(): Promise<void> {
           :visible-tasks="visibleTasks"
           @change-task="changeSelectedTask"
           @go-activities="selectModule('activities')"
+          @go-owner="selectModule('owner')"
           @select-task="selectTask"
         />
       </template>
