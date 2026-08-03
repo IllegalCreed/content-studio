@@ -56,7 +56,6 @@ import {
   runtimeReports,
   recordingReceiptToVideoJob,
   taskEventSummary,
-  snapshot as snapshotSeed,
   taskLifecycleProjection,
   videoViewportForFormat,
 } from './model'
@@ -150,11 +149,11 @@ const moduleDefinitions: ModuleDefinition[] = [
   },
 ]
 
-const snapshot = reactive(snapshotSeed)
 const route = useRoute()
 const router = useRouter()
 const uiStore = useWorkbenchUiStore()
 const runtimeStore = useWorkbenchStore()
+const snapshot = runtimeStore.snapshot
 const {
   activeModule,
   activeTaskScope,

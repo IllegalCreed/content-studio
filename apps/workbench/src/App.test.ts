@@ -4,6 +4,7 @@ import { createPinia } from 'pinia'
 import { describe, expect, it } from 'vitest'
 import { nextTick } from 'vue'
 import { createWorkbenchRouter } from './router'
+import { useWorkbenchStore } from './stores/workbench'
 import { useWorkbenchUiStore } from './stores/workbench-ui'
 import WorkbenchApp from './WorkbenchApp.vue'
 import './styles.css'
@@ -173,16 +174,19 @@ describe('content studio workbench', () => {
     const router = createWorkbenchRouter(true)
     await router.push('/project/activities')
     await router.isReady()
+    const pinia = createPinia()
     const wrapper = mount(WorkbenchApp, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [pinia, router],
       },
     })
+    const runtimeStore = useWorkbenchStore(pinia)
 
     const viewModel = wrapper.vm as unknown as { snapshot: WorkbenchSnapshot }
     viewModel.snapshot.runtimeConnected = true
     viewModel.snapshot.campaigns = []
     viewModel.snapshot.tasks = []
+    expect(runtimeStore.snapshot.campaigns).toEqual([])
     await nextTick()
 
     expect(wrapper.text()).toContain('0 个活动')
