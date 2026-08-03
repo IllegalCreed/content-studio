@@ -431,11 +431,6 @@ main {
   background: var(--panel);
 }
 
-.overview-stat-primary {
-  border-color: #596233;
-  background: linear-gradient(145deg, rgb(217 255 67 / 7%), transparent 60%), var(--panel);
-}
-
 .overview-stat span,
 .overview-stat small {
   display: block;

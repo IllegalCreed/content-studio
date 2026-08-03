@@ -33,6 +33,7 @@ describe('content studio workbench', () => {
     expect(wrapper.get('[data-testid="overview-scope-note"]').text()).toContain('跨项目汇总')
     expect(wrapper.get('.overview-stats').text()).toContain('发布活动')
     expect(wrapper.get('.overview-stats').text()).not.toContain('项目渠道')
+    expect(wrapper.find('.overview-stat-primary').exists()).toBe(false)
     expect(wrapper.find('.project-context-card').exists()).toBe(false)
     expect(wrapper.get('[data-testid="project-rollup-scope"]').classes()).toContain('project-rollup-scope')
 

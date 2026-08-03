@@ -30,7 +30,7 @@ const emit = defineEmits<{
   </section>
 
   <section class="overview-stats" aria-label="全局总览">
-    <div class="overview-stat overview-stat-primary">
+    <div class="overview-stat">
       <span>待处理任务</span>
       <strong>{{ props.pendingTaskCount }}</strong>
       <small>制作、发布、监测</small>
