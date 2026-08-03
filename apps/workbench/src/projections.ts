@@ -4,8 +4,10 @@ import type {
   ChannelContent,
   ChannelId,
   ContentGroup,
+  ContentStudioProjectView,
   ExecutionTask,
   ExecutionTaskEvent,
+  ObservationMetric,
   OwnerHandoff,
   ProjectAsset,
   PublishingActivity,
@@ -15,6 +17,7 @@ import type {
   CampaignProjection,
   ChannelContentProjection,
   ContentGroupProjection,
+  ReportProjection,
   TaskProjection,
   VideoPlanProjection,
 } from './model'
@@ -32,6 +35,117 @@ export function preferRuntimeData<T>(
   runtimeConnected: boolean,
 ): T[] {
   return [...(runtimeConnected ? runtimeItems : demoItems)]
+}
+
+const reportMetricLabels: Record<ObservationMetric, string> = {
+  clicks: '点击量',
+  comments: '评论',
+  favorites: '收藏',
+  likes: '点赞',
+  reads: '阅读量',
+  replies: '回复',
+  shares: '转发',
+  views: '播放量',
+}
+
+const reportMetricOrder: ObservationMetric[] = [
+  'views',
+  'reads',
+  'likes',
+  'comments',
+  'favorites',
+  'replies',
+  'shares',
+  'clicks',
+]
+
+export function runtimeReports(
+  projectView: ContentStudioProjectView,
+): ReportProjection[] {
+  const activityById = new Map(
+    projectView.activities.map(activity => [activity.activityId, activity]),
+  )
+  const contentById = new Map(
+    projectView.channelContents.map(content => [content.contentId, content]),
+  )
+  const receiptByPublication = new Map(
+    projectView.publicationReceipts.map(receipt => [receipt.publicationId, receipt]),
+  )
+  const observationsByPublication = new Map<string, ContentStudioProjectView['monitoringObservations']>()
+  for (const observation of projectView.monitoringObservations) {
+    const observations = observationsByPublication.get(observation.publicationId) ?? []
+    observations.push(observation)
+    observationsByPublication.set(observation.publicationId, observations)
+  }
+  const accountAliasByChannel = new Map(
+    projectView.projectChannelBindings.map(binding => [
+      binding.channel,
+      binding.accountAlias ?? '项目账号',
+    ]),
+  )
+
+  return projectView.publicationPlans.map((plan) => {
+    const activity = activityById.get(plan.activityId)
+    const content = contentById.get(plan.contentId)
+    const receipt = receiptByPublication.get(plan.publicationId)
+    const latestObservation = [...(observationsByPublication.get(plan.publicationId) ?? [])]
+      .sort((left, right) => right.collectedAt.localeCompare(left.collectedAt))[0]
+    const metrics = latestObservation === undefined
+      ? defaultReportMetrics(content?.format)
+      : reportMetrics(latestObservation.metrics, content?.format)
+    const status = receipt?.status === 'failed'
+      ? '发布失败'
+      : latestObservation !== undefined
+        ? '监测中'
+        : receipt?.status === 'published'
+          ? '等待监测数据'
+          : '等待发布回执'
+    return {
+      activityId: plan.activityId,
+      activityTitle: activity?.topic['zh-CN'] ?? activity?.topic.en ?? plan.activityId,
+      accountAlias: accountAliasByChannel.get(plan.channel) ?? '项目账号待绑定',
+      channel: plan.channel,
+      contentType: content?.format === 'video' ? '视频' : '文章',
+      lastChecked: latestObservation === undefined
+        ? receipt?.status === 'published' ? '已发布 · 尚未采集' : '尚未采集 · 无成功发布回执'
+        : `最近采集 · ${latestObservation.collectedAt}`,
+      metrics,
+      note: receipt?.status === 'failed'
+        ? '渠道回执标记为失败，请检查授权人处理结果。'
+        : latestObservation === undefined
+          ? receipt?.status === 'published'
+            ? '已收到成功发布回执，等待第一条监测数据。'
+            : '发布安排已创建，等待匹配的 marketing-ops 发布回执。'
+          : `数据来源：${latestObservation.source}`,
+      status,
+    }
+  })
+}
+
+function defaultReportMetrics(format: 'article' | 'video' | undefined): ReportProjection['metrics'] {
+  const keys: ObservationMetric[] = format === 'video'
+    ? ['views', 'likes', 'comments', 'favorites']
+    : ['reads', 'likes', 'comments', 'shares']
+  return keys.map(key => ({ label: reportMetricLabels[key], value: '—' }))
+}
+
+function reportMetrics(
+  metrics: Partial<Record<ObservationMetric, number | null>>,
+  format: 'article' | 'video' | undefined,
+): ReportProjection['metrics'] {
+  const preferredKeys: ObservationMetric[] = format === 'video'
+    ? ['views', 'likes', 'comments', 'favorites']
+    : ['reads', 'likes', 'comments', 'shares']
+  const keys = [
+    ...preferredKeys,
+    ...reportMetricOrder.filter(key => !preferredKeys.includes(key) && metrics[key] !== undefined),
+  ]
+  return keys.map(key => ({
+    label: reportMetricLabels[key],
+    value: metrics[key] === null || metrics[key] === undefined
+      ? '—'
+      : metrics[key]!.toLocaleString('zh-CN'),
+  }))
 }
 
 export interface ActivityProjectionInput {

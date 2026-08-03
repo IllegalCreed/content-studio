@@ -16,6 +16,7 @@ import WorkbenchShell from './components/WorkbenchShell.vue'
 import {
   activityToCampaign,
   preferRuntimeData,
+  runtimeReports,
   taskToProjection,
 } from './projections'
 import VideoJobPanel from './components/VideoJobPanel.vue'
@@ -46,7 +47,6 @@ import {
   humanizeStatus,
   runtimeActivityArtifacts,
   runtimeProjectAssets,
-  runtimeReports,
   videoViewportForFormat,
 } from './model'
 import { createWorkbenchRuntime } from './runtime'

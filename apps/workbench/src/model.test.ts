@@ -8,10 +8,10 @@ import {
   recordingReceiptToVideoJob,
   runtimeActivityArtifacts,
   runtimeProjectAssets,
-  runtimeReports,
   taskLifecycleProjection,
   videoViewportForFormat,
 } from './model'
+import { runtimeReports } from './projections'
 
 function projectView(overrides: Partial<ContentStudioProjectView> = {}): ContentStudioProjectView {
   return {
