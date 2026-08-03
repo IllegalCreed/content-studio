@@ -29,7 +29,7 @@ import type {
   VideoOutlineScene,
 } from '../types'
 import { Buffer } from 'node:buffer'
-import { readFile } from 'node:fs/promises'
+import { readFile, realpath } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { CHANNEL_BLUEPRINTS } from '../constants'
@@ -247,6 +247,56 @@ async function handleRequest(
       response.setHeader('Content-Type', recordingArtifactContentType(artifactPath))
       response.writeHead(200)
       response.end(content)
+      return
+    }
+
+    if (
+      request.method === 'GET'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'activity-artifacts'
+      && segments[6] === 'preview'
+    ) {
+      const projectId = identifierField(decodeSegment(segments[3]!), 'projectId')
+      const artifactId = identifierField(decodeSegment(segments[5]!), 'artifactId')
+      const artifact = service.getActivityArtifact(projectId, artifactId)
+      if (artifact === undefined)
+        throw new RecordNotFoundError('Activity artifact', artifactId)
+      await serveRegisteredPreview(
+        response,
+        production.outputRoot,
+        projectId,
+        artifact.relativePath,
+        artifact.sha256,
+        artifact.version,
+      )
+      return
+    }
+
+    if (
+      request.method === 'GET'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'project-assets'
+      && segments[6] === 'preview'
+    ) {
+      const projectId = identifierField(decodeSegment(segments[3]!), 'projectId')
+      const assetId = identifierField(decodeSegment(segments[5]!), 'assetId')
+      const asset = service.getProjectAsset(projectId, assetId)
+      if (asset === undefined)
+        throw new RecordNotFoundError('Project asset', assetId)
+      await serveRegisteredPreview(
+        response,
+        production.outputRoot,
+        projectId,
+        asset.relativePath,
+        asset.sha256,
+        asset.version,
+      )
       return
     }
 
@@ -1319,13 +1369,84 @@ function recordingArtifactContentType(path: string): string {
     ? 'image/png'
     : extension === '.jpg' || extension === '.jpeg'
       ? 'image/jpeg'
-      : extension === '.webm'
-        ? 'video/webm'
-        : extension === '.mp4'
-          ? 'video/mp4'
-          : extension === '.json'
-            ? 'application/json; charset=utf-8'
-            : 'application/octet-stream'
+      : extension === '.gif'
+        ? 'image/gif'
+        : extension === '.svg'
+          ? 'image/svg+xml'
+          : extension === '.webm'
+            ? 'video/webm'
+            : extension === '.mp4'
+              ? 'video/mp4'
+              : extension === '.mp3'
+                ? 'audio/mpeg'
+                : extension === '.wav'
+                  ? 'audio/wav'
+                  : extension === '.ogg' || extension === '.oga'
+                    ? 'audio/ogg'
+                    : extension === '.md' || extension === '.markdown'
+                      ? 'text/markdown; charset=utf-8'
+                      : extension === '.txt'
+                        ? 'text/plain; charset=utf-8'
+                        : extension === '.json'
+                          ? 'application/json; charset=utf-8'
+                          : 'application/octet-stream'
+}
+
+async function serveRegisteredPreview(
+  response: ServerResponse,
+  outputRoot: string,
+  projectId: string,
+  relativePath: string,
+  sha256: string,
+  version: number,
+): Promise<void> {
+  const projectRoot = resolve(outputRoot, projectId)
+  const candidatePath = resolve(projectRoot, relativePath)
+  const candidateRelativePath = relative(projectRoot, candidatePath)
+  if (
+    candidateRelativePath === ''
+    || candidateRelativePath.startsWith('..')
+    || isAbsolute(candidateRelativePath)
+  ) {
+    throw new RequestError(400, 'Registered preview path is unsafe')
+  }
+
+  let safePath: string
+  try {
+    const [safeProjectRoot, safeCandidatePath] = await Promise.all([
+      realpath(projectRoot),
+      realpath(candidatePath),
+    ])
+    const safeRelativePath = relative(safeProjectRoot, safeCandidatePath)
+    if (
+      safeRelativePath === ''
+      || safeRelativePath.startsWith('..')
+      || isAbsolute(safeRelativePath)
+    ) {
+      throw new RequestError(400, 'Registered preview path is unsafe')
+    }
+    safePath = safeCandidatePath
+  }
+  catch (error: unknown) {
+    if (error instanceof RequestError)
+      throw error
+    throw new RequestError(404, 'Registered preview file is unavailable')
+  }
+
+  let content: Buffer
+  try {
+    content = await readFile(safePath)
+  }
+  catch {
+    throw new RequestError(404, 'Registered preview file is unavailable')
+  }
+  response.setHeader('Cache-Control', 'private, max-age=60')
+  response.setHeader('Content-Length', content.byteLength)
+  response.setHeader('Content-Type', recordingArtifactContentType(safePath))
+  response.setHeader('X-Content-Studio-Sha256', sha256)
+  response.setHeader('X-Content-Studio-Version', String(version))
+  response.writeHead(200)
+  response.end(content)
 }
 
 function closeServer(

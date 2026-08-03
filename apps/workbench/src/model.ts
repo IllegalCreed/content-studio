@@ -133,6 +133,8 @@ export function activityArtifactProjections(
     artifactId: artifact.artifactId,
     kind: activityArtifactKindLabel(artifact.kind),
     name: fileName(artifact.relativePath),
+    previewKind: activityArtifactPreviewKind(artifact.kind),
+    previewUrl: `/api/v1/projects/${encodeURIComponent(artifact.projectId)}/activity-artifacts/${encodeURIComponent(artifact.artifactId)}/preview`,
     size: '未记录',
     status: '已登记',
   }))
@@ -176,6 +178,8 @@ export function runtimeProjectAssets(
     assetId: asset.assetId,
     kind: asset.kind,
     name: fileName(asset.relativePath),
+    previewKind: projectAssetPreviewKind(asset.kind),
+    previewUrl: `/api/v1/projects/${encodeURIComponent(asset.projectId)}/project-assets/${encodeURIComponent(asset.assetId)}/preview`,
     referencedBy: [...(assetReferences.get(asset.assetId) ?? new Set<string>())],
     retention: '长期保留',
     size: '未记录',
@@ -198,6 +202,32 @@ function activityArtifactKindLabel(
           : kind === 'image'
             ? '图片'
             : '音频'
+}
+
+function activityArtifactPreviewKind(
+  kind: ContentStudioProjectView['activityArtifacts'][number]['kind'],
+): AssetPreviewKind {
+  return kind === 'article-version'
+    ? 'text'
+    : kind === 'audio'
+      ? 'audio'
+      : kind === 'image' || kind === 'preview-frame'
+        ? 'image'
+        : kind === 'video' || kind === 'video-clip'
+          ? 'video'
+          : 'unsupported'
+}
+
+function projectAssetPreviewKind(
+  kind: ContentStudioProjectView['projectAssets'][number]['kind'],
+): AssetPreviewKind {
+  return kind === 'audio'
+    ? 'audio'
+    : kind === 'image' || kind === 'logo'
+      ? 'image'
+      : kind === 'video'
+        ? 'video'
+        : 'unsupported'
 }
 
 function fileName(relativePath: string): string {
@@ -565,6 +595,7 @@ function completedTask(task: ExecutionTask): boolean {
 export interface ChannelContentProjection {
   accountAlias?: string
   artifactIds?: string[]
+  body?: string
   channel: ChannelId
   contentId: string
   format: '文章' | '视频'
@@ -584,6 +615,8 @@ export interface AssetProjection {
   assetId: string
   kind: 'audio' | 'font' | 'image' | 'logo' | 'template' | 'video'
   name: string
+  previewKind?: AssetPreviewKind
+  previewUrl?: string
   referencedBy: string[]
   retention: '长期保留' | '可回收'
   size: string
@@ -596,9 +629,13 @@ export interface ActivityArtifactProjection {
   artifactId: string
   kind: '文章版本' | '图片' | '音频' | '预览帧' | '视频片段' | '视频'
   name: string
+  previewKind?: AssetPreviewKind
+  previewUrl?: string
   size: string
   status: '中间产物' | '最终产物' | '已登记'
 }
+
+export type AssetPreviewKind = 'audio' | 'image' | 'text' | 'unsupported' | 'video'
 
 export interface TaskProjection {
   accountAlias: string

@@ -1047,6 +1047,87 @@ describe('content studio local application server', () => {
     }
   })
 
+  it('serves previews only for registered activity artifacts and project assets', async () => {
+    const { project, snapshot } = createProject()
+    const productionOutputRoot = '/tmp/content-studio-asset-preview'
+    const artifactPath = join(
+      productionOutputRoot,
+      project.projectId,
+      'activities/activity-a/article.md',
+    )
+    const assetPath = join(
+      productionOutputRoot,
+      project.projectId,
+      'assets/logo.png',
+    )
+    await mkdir(join(productionOutputRoot, project.projectId, 'activities/activity-a'), { recursive: true })
+    await mkdir(join(productionOutputRoot, project.projectId, 'assets'), { recursive: true })
+    await writeFile(artifactPath, '# Preview article')
+    await writeFile(assetPath, 'fake-png')
+    const handle = createContentStudioServer({
+      productionOutputRoot,
+      project,
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    handle.service.createActivity({
+      activityId: 'activity-a',
+      campaignId: 'campaign-a',
+      channels: [],
+      goal: 'education',
+      projectId: project.projectId,
+      projectSnapshotId: snapshot.snapshotId,
+      status: 'draft',
+      targetUrl: project.projectId === 'project-a'
+        ? 'https://project-a.example.com'
+        : 'https://project.example.com',
+      topic: { 'en': 'Preview', 'zh-CN': '预览' },
+    })
+    handle.service.createActivityArtifact({
+      activityId: 'activity-a',
+      artifactId: 'article-artifact',
+      kind: 'article-version',
+      projectId: project.projectId,
+      relativePath: 'activities/activity-a/article.md',
+      sha256: 'a'.repeat(64),
+    })
+    handle.repository.saveProjectAsset({
+      assetId: 'logo-asset',
+      kind: 'logo',
+      projectId: project.projectId,
+      relativePath: 'assets/logo.png',
+      sha256: 'b'.repeat(64),
+      version: 1,
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const artifactResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/activity-artifacts/article-artifact/preview`,
+      )
+      expect(artifactResponse.status).toBe(200)
+      expect(artifactResponse.headers.get('content-type')).toBe('text/markdown; charset=utf-8')
+      expect(await artifactResponse.text()).toBe('# Preview article')
+      expect(artifactResponse.headers.get('x-content-studio-sha256')).toBe('a'.repeat(64))
+
+      const assetResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/project-assets/logo-asset/preview`,
+      )
+      expect(assetResponse.status).toBe(200)
+      expect(assetResponse.headers.get('content-type')).toBe('image/png')
+      expect(await assetResponse.text()).toBe('fake-png')
+
+      const missingResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/project-assets/unknown/preview`,
+      )
+      expect(missingResponse.status).toBe(404)
+    }
+    finally {
+      await running.close()
+      await rm(productionOutputRoot, { force: true, recursive: true })
+    }
+  })
+
   it('confirms a stored activity video plan through the local runtime', async () => {
     const { project, snapshot: baseSnapshot } = createProject()
     const snapshot: ProjectSnapshot = {

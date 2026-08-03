@@ -610,6 +610,22 @@ export class ContentStudioApplicationService {
     }
   }
 
+  getActivityArtifact(
+    projectId: string,
+    artifactId: string,
+    version?: number,
+  ): ActivityArtifact | undefined {
+    return this.repository.getActivityArtifact(projectId, artifactId, version)
+  }
+
+  getProjectAsset(
+    projectId: string,
+    assetId: string,
+    version?: number,
+  ): ProjectAsset | undefined {
+    return this.repository.getProjectAsset(projectId, assetId, version)
+  }
+
   registerProject(
     project: ProjectRecord,
     snapshot: ProjectSnapshot,

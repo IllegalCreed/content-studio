@@ -2830,6 +2830,79 @@ footer {
   font-size: 0.7rem;
 }
 
+.asset-preview {
+  margin-top: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--stroke);
+  background: #0b0f0b;
+}
+
+.asset-preview pre {
+  max-height: 15rem;
+  margin: 0;
+  overflow: auto;
+  padding: 0.8rem;
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.asset-preview img,
+.asset-preview video {
+  display: block;
+  width: 100%;
+  max-height: 18rem;
+  object-fit: contain;
+}
+
+.asset-preview audio {
+  display: block;
+  width: calc(100% - 1rem);
+  margin: 0.5rem;
+}
+
+.asset-preview-empty {
+  margin: 0;
+  padding: 0.7rem;
+  color: var(--muted);
+  font-size: 0.65rem;
+  line-height: 1.45;
+}
+
+.asset-preview-download {
+  display: inline-block;
+  margin: 0 0.7rem 0.7rem;
+  color: var(--acid);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.58rem;
+}
+
+.content-preview-details {
+  margin-top: 0.55rem;
+  border-top: 1px solid var(--stroke);
+}
+
+.content-preview-details summary {
+  padding-top: 0.45rem;
+  color: var(--acid);
+  cursor: pointer;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.58rem;
+}
+
+.content-preview-details pre {
+  max-height: 12rem;
+  margin: 0.55rem 0 0;
+  overflow: auto;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
 .asset-detail-card > button {
   margin-top: 1rem;
   padding: 0.55rem 0.75rem;

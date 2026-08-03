@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import StatusRail from './components/StatusRail.vue'
 import SelectMenu from './components/SelectMenu.vue'
 import VideoJobPanel from './components/VideoJobPanel.vue'
+import AssetPreview from './components/AssetPreview.vue'
 import type {
   AssetProjection,
   ActivityArtifactProjection,
@@ -785,6 +786,7 @@ function activityToCampaign(
         .map<ChannelContentProjection>(content => ({
           accountAlias: projectAccountAliasForChannel(content.channel),
           artifactIds: content.artifactIds,
+          body: content.body,
           channel: content.channel,
           contentId: content.contentId,
           format: content.format === 'article' ? '文章' : '视频',
@@ -1614,6 +1616,10 @@ async function refreshProjectView(): Promise<void> {
                           <span>{{ content.format }}成品 · {{ content.channel }} · {{ content.accountAlias ?? '项目账号待绑定' }}</span>
                           <strong>{{ content.title }}</strong>
                           <small>{{ content.locale }} · {{ content.status }}</small>
+                          <details v-if="content.body" class="content-preview-details">
+                            <summary>查看文字预览</summary>
+                            <pre>{{ content.body }}</pre>
+                          </details>
                           <button
                             type="button"
                             class="content-action-button"
@@ -1890,6 +1896,13 @@ async function refreshProjectView(): Promise<void> {
               </dl>
               <p class="eyebrow">被这些活动引用</p>
               <div class="chip-list"><span v-for="activity in selectedAsset.referencedBy" :key="activity">{{ activity }}</span></div>
+              <AssetPreview
+                v-if="snapshot.runtimeConnected && selectedAsset.previewKind && selectedAsset.previewUrl"
+                :kind="selectedAsset.previewKind"
+                :label="selectedAsset.name"
+                :src="selectedAsset.previewUrl"
+              />
+              <p v-else class="asset-preview-empty">连接本地运行时后，这里会显示已登记文件的预览。</p>
               <button type="button" disabled>编辑素材（等待应用服务）</button>
             </article>
           </div>
@@ -1902,6 +1915,12 @@ async function refreshProjectView(): Promise<void> {
                   <strong>{{ artifact.name }}</strong>
                   <span>{{ artifact.kind }} · {{ artifact.size }} · {{ artifact.status }}</span>
                 </button>
+                <AssetPreview
+                  v-if="snapshot.runtimeConnected && artifact.previewKind && artifact.previewUrl"
+                  :kind="artifact.previewKind"
+                  :label="artifact.name"
+                  :src="artifact.previewUrl"
+                />
                 <button
                   type="button"
                   class="artifact-promote-button"
