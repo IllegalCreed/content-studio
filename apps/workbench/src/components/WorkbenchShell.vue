@@ -28,6 +28,10 @@ const props = defineProps<{
 const route = useRoute()
 const projectPickerOpen = ref(false)
 
+const emit = defineEmits<{
+  navigate: [moduleId: ModuleId]
+}>()
+
 const globalModules: ModuleLink[] = [
   { id: 'overview', label: '总览', scope: 'global' },
   { id: 'tasks', label: '任务面板', scope: 'global' },
@@ -102,6 +106,7 @@ function toggleProjectPicker(): void {
           :data-module="module.id"
           :class="{ active: module.id === activeModule }"
           :aria-current="module.id === activeModule ? 'page' : undefined"
+          @click="emit('navigate', module.id)"
         >
           <span>{{ String(index + 1).padStart(2, '0') }}</span>
           {{ module.label }}
@@ -117,6 +122,7 @@ function toggleProjectPicker(): void {
           :data-module="module.id"
           :class="{ active: module.id === activeModule }"
           :aria-current="module.id === activeModule ? 'page' : undefined"
+          @click="emit('navigate', module.id)"
         >
           <span>{{ String(index + 1).padStart(2, '0') }}</span>
           {{ module.label }}
@@ -151,7 +157,7 @@ function toggleProjectPicker(): void {
               <path d="m2.25 4.25 3.75 3.75 3.75-3.75" />
             </svg>
           </button>
-          <div v-if="projectPickerOpen" class="project-menu" role="listbox" aria-label="项目列表">
+          <div v-if="projectPickerOpen" class="project-menu" data-testid="project-menu" role="listbox" aria-label="项目列表">
             <p class="project-menu-label">切换项目</p>
             <button type="button" class="project-option active" role="option" aria-selected="true" disabled>
               <span><strong>{{ props.projectName }}</strong><small>{{ props.projectId }}</small></span>

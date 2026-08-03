@@ -40,17 +40,17 @@ describe('content studio workbench', () => {
     expect(wrapper.find('[data-testid="project-menu"]').exists()).toBe(false)
 
     expect(wrapper.get('[data-testid="module-nav"]').text()).toContain('渠道管理')
-    await wrapper.get('button[data-module="channels"]').trigger('click')
+    await wrapper.get('a[data-module="channels"]').trigger('click')
     expect(wrapper.get('h1').text()).toContain('渠道管理')
     expect(wrapper.text()).toContain('账号引用项目数')
     await wrapper.get('button[data-channel-id="github"]').trigger('click')
     expect(wrapper.get('.channel-account-list').text()).toContain('1 个项目引用')
-    await wrapper.get('button[data-module="project"]').trigger('click')
+    await wrapper.get('a[data-module="project"]').trigger('click')
     expect(wrapper.get('h1').text()).toContain('项目概览')
     expect(wrapper.text()).toContain('有源项目')
     expect(wrapper.text()).toContain('项目适配器')
     expect(wrapper.text()).toContain('账号绑定')
-    await wrapper.get('button[data-module="activities"]').trigger('click')
+    await wrapper.get('a[data-module="activities"]').trigger('click')
 
     expect(wrapper.get('h1').text()).toContain('发布活动')
     expect(wrapper.text()).toContain('内容素材与渠道成品')
@@ -65,7 +65,7 @@ describe('content studio workbench', () => {
     expect(wrapper.text()).toContain('版本更新发布')
     expect(wrapper.text()).toContain('等待人工')
 
-    await wrapper.get('button[data-module="tasks"]').trigger('click')
+    await wrapper.get('a[data-module="tasks"]').trigger('click')
     expect(wrapper.get('h1').text()).toContain('任务面板')
     expect(wrapper.get('[data-testid="runtime-status"]').text()).toContain(
       '运行时未连接',
@@ -83,7 +83,7 @@ describe('content studio workbench', () => {
       wrapper.get('button[aria-label="Cancel recording job"]').attributes(),
     ).toHaveProperty('disabled')
 
-    await wrapper.get('button[data-module="channels"]').trigger('click')
+    await wrapper.get('a[data-module="channels"]').trigger('click')
     expect(wrapper.get('h1').text()).toContain('渠道管理')
     expect(wrapper.text()).toContain('发布助手状态')
     expect(wrapper.text()).toContain('全局规格')
@@ -98,7 +98,7 @@ describe('content studio workbench', () => {
     await wrapper.get('button[data-channel-id="x"]').trigger('click')
     expect(wrapper.get('.channel-detail-card').text()).toContain('尚未读取渠道快照')
 
-    await wrapper.get('button[data-module="project"]').trigger('click')
+    await wrapper.get('a[data-module="project"]').trigger('click')
     expect(wrapper.get('[data-testid="project-channel-config"]').text()).toContain('项目渠道配置')
     expect(wrapper.get('[data-testid="project-channel-config"] [data-testid="save-channel-binding"]').attributes()).toHaveProperty('disabled')
     await wrapper.get('button[data-project-channel-id="github"]').trigger('click')
@@ -112,17 +112,17 @@ describe('content studio workbench', () => {
     expect(getComputedStyle(saveChannelButton.element).fontSize).toBe(getComputedStyle(retryButton.element).fontSize)
     expect(getComputedStyle(saveChannelButton.element).padding).toBe(getComputedStyle(retryButton.element).padding)
 
-    await wrapper.get('button[data-module="assets"]').trigger('click')
+    await wrapper.get('a[data-module="assets"]').trigger('click')
     expect(wrapper.get('h1').text()).toContain('项目素材库')
     expect(wrapper.text()).toContain('Algorithm Visualizer 主 Logo')
     expect(wrapper.get('.artifact-promote-button').attributes()).toHaveProperty('disabled')
     await wrapper.get('button[data-asset-filter="template"]').trigger('click')
     expect(wrapper.find('[data-asset-id="quick-sort-template"]').exists()).toBe(true)
 
-    await wrapper.get('button[data-module="project-tasks"]').trigger('click')
+    await wrapper.get('a[data-module="project-tasks"]').trigger('click')
     expect(wrapper.get('h1').text()).toContain('项目任务面板')
 
-    await wrapper.get('button[data-module="reports"]').trigger('click')
+    await wrapper.get('a[data-module="reports"]').trigger('click')
     expect(wrapper.get('h1').text()).toContain('项目报告')
     expect(wrapper.text()).toContain('演示数据')
   })

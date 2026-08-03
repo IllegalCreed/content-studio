@@ -10,18 +10,18 @@
 
 ## 当前页面事实
 
-| 页面         | 当前入口                          | 当前状态                       | 结论                                                         |
-| ------------ | --------------------------------- | ------------------------------ | ------------------------------------------------------------ |
-| 总览         | `/overview`                       | `WorkbenchApp.vue` 条件模板    | 已有跨项目概览投影，但仍与其他页面共用一个大组件             |
-| 全局任务面板 | `/tasks`                          | `WorkbenchApp.vue` 条件模板    | 能显示制作/发布/监测三类执行记录；筛选和选中项仍是本地状态   |
-| 全局渠道管理 | `/channels`                       | `WorkbenchApp.vue` 条件模板    | 已有渠道规格、账号、项目引用数和 marketing-ops 状态展示      |
-| 项目概览     | `/project`                        | `WorkbenchApp.vue` 条件模板    | 已有项目渠道开关、唯一账号绑定和项目摘要                     |
-| 发布活动列表 | `/project/activities`             | `WorkbenchApp.vue` 条件模板    | 已有主题列表和创建表单；列表页仍夹带旧的内嵌详情区           |
-| 活动详情     | `/project/activities/:activityId` | `pages/ActivityDetailPage.vue` | 已拆出独立页面，显示主题、渠道、任务、内容组、产物和视频计划 |
-| 项目任务面板 | `/project/tasks`                  | `WorkbenchApp.vue` 条件模板    | 是全局任务数据的当前项目投影，不是活动业务层级               |
-| 项目素材库   | `/project/assets`                 | `WorkbenchApp.vue` 条件模板    | 已区分项目素材与活动产物，并提供预览、晋升和清理预览         |
-| 待人工处理   | `/project/owner`                  | `WorkbenchApp.vue` 条件模板    | 展示 owner handoff；仍需把“待处理事项”与任务上下文连接得更紧 |
-| 项目报告     | `/project/reports`                | `WorkbenchApp.vue` 条件模板    | 已展示回执和监测摘要；当前主要是投影数据                     |
+| 页面         | 当前入口                          | 当前状态                               | 结论                                                         |
+| ------------ | --------------------------------- | -------------------------------------- | ------------------------------------------------------------ |
+| 总览         | `/overview`                       | `components/OverviewPage.vue`          | 已有跨项目概览投影，页面模板已独立                           |
+| 全局任务面板 | `/tasks`                          | `components/TaskBoardPage.vue`         | 能显示制作/发布/监测三类执行记录；筛选和选中项仍是本地状态   |
+| 全局渠道管理 | `/channels`                       | `components/ChannelManagementPage.vue` | 已有渠道规格、账号、项目引用数和 marketing-ops 状态展示      |
+| 项目概览     | `/project`                        | `components/ProjectOverviewPage.vue`   | 已有项目渠道开关、唯一账号绑定和项目摘要                     |
+| 发布活动列表 | `/project/activities`             | `components/ActivityListPage.vue`      | 已有主题列表和创建表单；详情已改为独立路由                   |
+| 活动详情     | `/project/activities/:activityId` | `pages/ActivityDetailPage.vue`         | 已拆出独立页面，显示主题、渠道、任务、内容组、产物和视频计划 |
+| 项目任务面板 | `/project/tasks`                  | `components/TaskBoardPage.vue`         | 是全局任务数据的当前项目投影，不是活动业务层级               |
+| 项目素材库   | `/project/assets`                 | `components/AssetLibraryPage.vue`      | 已区分项目素材与活动产物，并提供预览、晋升和清理预览         |
+| 待人工处理   | `/project/owner`                  | `components/OwnerInboxPage.vue`        | 展示 owner handoff；仍需把“待处理事项”与任务上下文连接得更紧 |
+| 项目报告     | `/project/reports`                | `components/ProjectReportsPage.vue`    | 已展示回执和监测摘要；当前主要是投影数据                     |
 
 根路由现在重定向到 `/overview`，活动详情已经可以深链接和返回活动列表。运行时
 不可用时，页面必须明确显示“演示数据/只读”，不能把演示数据伪装成真实状态。
@@ -32,9 +32,8 @@
 
 - **符合规划**：左侧已经按“全局控制台 / 当前项目”分组；项目渠道账号在项目概览
   配置，活动只选择项目已启用渠道。
-- **需要修正**：活动列表仍在同一个模板里同时承担列表和详情，容易让用户误以为
-  活动只有一张“步骤卡”。活动详情应以独立路由为唯一主视图，列表只负责筛选、创建和
-  进入详情。
+- **已修正第一步**：活动列表已经拆成 `ActivityListPage.vue`，活动详情使用独立路由；
+  列表负责筛选、创建和进入详情，详情负责活动业务对象本身。
 - **需要修正**：页面标题、按钮和状态的来源没有统一放在页面组件中；目前同一业务对象
   的投影逻辑散落在 `WorkbenchApp.vue`、`model.ts` 和详情页。
 
@@ -73,30 +72,31 @@
 
 - 已拆分：`AssetPreview`、`VideoJobPanel`、`StatusRail`、`SelectMenu`、活动详情页和
   Pinia store。
-- **主要结构问题**：`WorkbenchApp.vue` 仍包含导航、布局、项目概览、活动列表、任务、
-  渠道、素材、人工处理和报告全部模板，当前约 2200 行。这是维护和测试的主要瓶颈。
-- **拆分顺序**：先抽 `WorkbenchShell`/导航，再抽活动列表、任务面板、渠道管理、素材库，
-  最后删除旧的活动内嵌详情模板。
+- **已完成第一轮拆分**：`OverviewPage`、`ProjectOverviewPage`、`ActivityListPage`、
+  `TaskBoardPage`、`ChannelManagementPage`、`AssetLibraryPage`、`OwnerInboxPage` 和
+  `ProjectReportsPage` 已成为独立组件；`WorkbenchApp.vue` 只保留工作台壳、页面状态和
+  事件编排。
+- **剩余结构问题**：工作台壳目前仍在 `WorkbenchApp.vue`，详情页已使用
+  `WorkbenchShell.vue`；下一步把主工作台也切换到同一个壳，避免两套导航模板。
 - 共享按钮、表单控件、下拉弹层和焦点样式应集中在基础样式/组件中；禁止页面各自复制
   字号、内阴影、箭头定位和禁用态。
 
 ### 6. 可访问性与交互基线
 
 - 活动详情的运行时错误、加载和操作结果已经使用 `aria-live`。
-- 待补：全局跳过链接、明确的主内容 landmark、导航使用链接语义、表单控件补充 `name`
-  和合适的 autocomplete、所有焦点态统一使用 `:focus-visible`。
-- 待补：素材图片预览补充尺寸/加载策略，视频和音频预览保留原生控件；长标题、长路径
-  和错误消息需要稳定换行。
+- 已补：全局跳过链接、明确的主内容 landmark、活动表单控件 `name`、素材图片懒加载和
+  `aria-live` 错误播报；详情页和新页面导航使用链接语义。
+- 待补：表单 autocomplete、长标题/长路径和错误消息的稳定换行，以及主工作台壳统一。
 - 所有图标按钮必须有可读标签；导航是链接，改变状态才使用按钮。
 
 ## 收口顺序
 
-1. **路由和详情（当前）**：保留 `/project/activities` 列表，所有活动卡片进入
+1. **路由和详情（已完成）**：保留 `/project/activities` 列表，所有活动卡片进入
    `/project/activities/:activityId`；补路由测试。
 2. **状态集中化**：把 WorkbenchApp 的运行时快照、选择状态和异步错误迁移到 Pinia，
    页面只负责展示和事件派发。
-3. **页面组件化**：抽共享壳、导航、活动列表、任务面板、渠道管理和素材库；删除
-   内嵌活动详情，避免同一对象出现两套展示。
+3. **页面组件化（第一轮已完成）**：活动列表、任务面板、渠道管理、素材库、项目概览、
+   总览、人工处理和报告均已拆分；下一步统一主工作台和详情页的共享壳。
 4. **闭环补齐**：补 AI 内容生成入口、发布安排/监测任务创建状态、按渠道报告详情；
    每个动作必须有成功、失败、只读演示和权限边界提示。
 5. **视觉和交互门禁**：统一按钮、select popup、箭头、焦点、空状态、加载态和移动端

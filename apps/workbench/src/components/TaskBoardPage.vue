@@ -1,0 +1,141 @@
+<script setup lang="ts">
+import VideoJobPanel from './VideoJobPanel.vue'
+import StatusRail from './StatusRail.vue'
+import type { CampaignProjection, WorkbenchSnapshot } from '../model'
+import { humanizeStatus, humanizeTaskEventKind } from '../model'
+
+type TaskScope = '全部项目' | '当前项目'
+type TaskAction = 'cancel' | 'record' | 'retry' | 'start'
+type TaskProjection = WorkbenchSnapshot['tasks'][number]
+
+const props = defineProps<{
+  activeTaskScope: TaskScope
+  canCancelSelectedTask: boolean
+  canRecordSelectedTask: boolean
+  canRetrySelectedTask: boolean
+  canStartSelectedTask: boolean
+  projectName: string
+  runtimeConnected: boolean
+  selectedTask: TaskProjection
+  selectedTaskCampaign: CampaignProjection
+  taskActionError: string | null
+  taskActionPending: TaskAction | null
+  taskCounts: Record<'制作' | '发布' | '监测', number>
+  visibleTasks: TaskProjection[]
+}>()
+
+const emit = defineEmits<{
+  'change-task': [action: TaskAction]
+  'select-task': [taskId: string]
+  'set-scope': [scope: TaskScope]
+}>()
+</script>
+
+<template>
+  <section id="tasks" class="module-section">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">执行层投影</p>
+        <h2>{{ props.activeTaskScope === '全部项目' ? '全局任务面板' : '项目任务面板' }}</h2>
+      </div>
+      <span>全局与项目共用同一份执行记录</span>
+    </div>
+    <p class="section-intro">制作、发布、监测是执行任务，不是发布活动里的业务对象。取消和重试最终由本地运行时执行。</p>
+    <div class="task-scope-switch" role="tablist" aria-label="任务范围">
+      <button type="button" :class="{ active: props.activeTaskScope === '全部项目' }" @click="emit('set-scope', '全部项目')">全部项目</button>
+      <button type="button" :class="{ active: props.activeTaskScope === '当前项目' }" @click="emit('set-scope', '当前项目')">当前项目 · {{ props.projectName }}</button>
+    </div>
+    <div class="task-summary">
+      <div v-for="(count, kind) in props.taskCounts" :key="kind" class="task-summary-card">
+        <span>{{ kind }}任务</span><strong>{{ count }}</strong>
+      </div>
+    </div>
+    <div class="task-board">
+      <div class="task-list" role="list" aria-label="执行任务">
+        <button
+          v-for="task in props.visibleTasks"
+          :key="task.taskId"
+          type="button"
+          :data-task-id="task.taskId"
+          :class="{ selected: task.taskId === props.selectedTask.taskId }"
+          @click="emit('select-task', task.taskId)"
+        >
+          <span class="task-kind">{{ task.kind }}</span>
+          <strong>{{ task.title }}</strong>
+          <small>{{ task.activityTitle }} · {{ task.contentTitle }}</small>
+          <small>{{ task.channel }} · {{ task.accountAlias }} · {{ humanizeStatus(task.status) }} · 第 {{ task.attempt }} 次尝试</small>
+        </button>
+      </div>
+      <article class="task-detail">
+        <div class="detail-heading">
+          <div><p class="eyebrow">选中任务 · {{ props.selectedTask.kind }}</p><h3>{{ props.selectedTask.title }}</h3></div>
+          <span class="task-status" :data-status="props.selectedTask.status">{{ humanizeStatus(props.selectedTask.status) }}</span>
+        </div>
+        <p class="task-detail-context">{{ props.selectedTask.activityTitle }} → {{ props.selectedTask.contentTitle }} → {{ props.selectedTask.channel }} → {{ props.selectedTask.accountAlias }}</p>
+        <p class="task-detail-copy">{{ props.selectedTask.detail }}</p>
+        <div v-if="props.selectedTask.progress !== undefined" class="progress-track"><span :style="{ width: props.selectedTask.progress + '%' }" /></div>
+        <StatusRail :steps="props.selectedTask.steps" />
+        <ol class="task-step-list" aria-label="任务阶段">
+          <li v-for="step in props.selectedTask.steps" :key="step.label" :data-step-status="step.status">
+            <span class="step-marker" />
+            <div><strong>{{ step.label }}</strong><small>{{ step.detail }}</small></div>
+          </li>
+        </ol>
+        <div class="task-detail-meta">
+          <span>任务编号 <code>{{ props.selectedTask.taskId }}</code></span>
+          <span>所属活动 <code>{{ props.selectedTask.activityId }}</code></span>
+          <span>当前尝试 <strong>第 {{ props.selectedTask.attempt }} 次</strong></span>
+        </div>
+        <div class="task-attempts">
+          <p class="eyebrow">尝试历史</p>
+          <ol>
+            <li v-for="attempt in props.selectedTask.attempts" :key="props.selectedTask.taskId + '-attempt-' + attempt.attempt">
+              <div><strong>第 {{ attempt.attempt }} 次尝试</strong><span>{{ attempt.status }}</span></div>
+              <small>{{ attempt.eventCount }} 条事件 · {{ attempt.lastEvent }}</small>
+            </li>
+          </ol>
+        </div>
+        <div v-if="props.selectedTask.events.length > 0" class="task-events">
+          <p class="eyebrow">运行事件</p>
+          <ol>
+            <li v-for="event in props.selectedTask.events" :key="props.selectedTask.taskId + '-' + event.sequence">
+              <span>第 {{ event.sequence }} 条 · {{ event.attempt === undefined ? props.selectedTask.attempt : event.attempt }} 次尝试 · {{ humanizeTaskEventKind(event.kind) }}</span>
+              <small>{{ event.summary ?? event.message }}</small>
+            </li>
+          </ol>
+        </div>
+        <div v-if="props.selectedTask.status === 'awaiting-owner'" class="task-handoff-inline">
+          <div><p class="eyebrow">需要人工介入</p><strong>{{ props.selectedTaskCampaign.handoffs[0]?.reason ?? '请完成官方页面确认' }}</strong></div>
+          <span>不会保存凭据</span>
+        </div>
+        <div class="job-actions">
+          <p class="runtime-status" aria-live="polite">
+            <span v-if="props.taskActionError" class="task-action-error">{{ props.taskActionError }}</span>
+            <span v-else-if="!props.runtimeConnected">运行时未连接，演示任务不可操作</span>
+            <span v-else>操作会写入本地任务事件，不会触发渠道发布</span>
+          </p>
+          <div>
+            <button type="button" class="primary-button" data-testid="record-task" :disabled="!props.canRecordSelectedTask || props.taskActionPending !== null" @click="emit('change-task', 'record')">
+              {{ props.taskActionPending === 'record' ? '录制中…' : '开始录制' }}
+            </button>
+            <button type="button" class="primary-button" data-testid="start-task" :disabled="!props.canStartSelectedTask || props.taskActionPending !== null" @click="emit('change-task', 'start')">
+              {{ props.taskActionPending === 'start' ? '启动中…' : '开始制作' }}
+            </button>
+            <button type="button" :disabled="!props.canCancelSelectedTask || props.taskActionPending !== null" @click="emit('change-task', 'cancel')">
+              {{ props.taskActionPending === 'cancel' ? '取消中…' : '取消当前尝试' }}
+            </button>
+            <button type="button" class="primary-button" :disabled="!props.canRetrySelectedTask || props.taskActionPending !== null" @click="emit('change-task', 'retry')">
+              {{ props.taskActionPending === 'retry' ? '重试中…' : '新建重试尝试' }}
+            </button>
+          </div>
+        </div>
+      </article>
+    </div>
+  </section>
+  <VideoJobPanel
+    v-if="props.selectedTaskCampaign.videoJob !== null"
+    id="video"
+    :job="props.selectedTaskCampaign.videoJob"
+    :runtime-connected="props.runtimeConnected"
+  />
+</template>
