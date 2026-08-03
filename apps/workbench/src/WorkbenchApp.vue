@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import ActivityListPage from './components/ActivityListPage.vue'
 import AssetLibraryPage from './components/AssetLibraryPage.vue'
@@ -60,17 +61,14 @@ import {
   videoViewportForFormat,
 } from './model'
 import { createWorkbenchRuntime } from './runtime'
+import {
+  useWorkbenchUiStore,
+  type AssetFilter,
+  type TaskScope,
+  type WorkbenchModuleId,
+} from './stores/workbench-ui'
 
-type ModuleId =
-  | 'overview'
-  | 'project'
-  | 'activities'
-  | 'tasks'
-  | 'project-tasks'
-  | 'channels'
-  | 'assets'
-  | 'owner'
-  | 'reports'
+type ModuleId = WorkbenchModuleId
 
 interface ModuleDefinition {
   description: string
@@ -149,14 +147,18 @@ const moduleDefinitions: ModuleDefinition[] = [
 const snapshot = reactive(snapshotSeed)
 const route = useRoute()
 const router = useRouter()
-const activeModule = ref<ModuleId>(moduleForPath(route.path))
-const selectedCampaignId = ref(snapshot.campaigns[0]!.campaignId)
-const selectedTaskId = ref(snapshot.tasks[0]!.taskId)
-const activeTaskScope = ref<'全部项目' | '当前项目'>('全部项目')
-const selectedAssetId = ref(snapshot.projectAssets[0]!.assetId)
-const assetFilter = ref<'全部' | AssetProjection['kind']>('全部')
-const selectedChannelId = ref(snapshot.channels[0]!.channel)
-const selectedChannelAccountId = ref(snapshot.channels[0]!.projectAccountId)
+const uiStore = useWorkbenchUiStore()
+const {
+  activeModule,
+  activeTaskScope,
+  assetFilter,
+  selectedAssetId,
+  selectedCampaignId,
+  selectedChannelAccountId,
+  selectedChannelId,
+  selectedTaskId,
+} = storeToRefs(uiStore)
+uiStore.setActiveModule(moduleForPath(route.path))
 const runtimeError = ref<string | null>(null)
 const workbenchRuntime = createWorkbenchRuntime()
 const currentSnapshotId = ref(`${snapshot.project.projectId}-snapshot-1`)
@@ -496,13 +498,13 @@ function activityTaskSummary(activityId: string): string {
 }
 
 function selectModule(moduleId: ModuleId): void {
-  activeModule.value = moduleId
+  uiStore.setActiveModule(moduleId)
   void router.push(pathForModule(moduleId))
   if (moduleId === 'tasks') {
-    activeTaskScope.value = '全部项目'
+    uiStore.setTaskScope('全部项目')
   }
   if (moduleId === 'project-tasks') {
-    activeTaskScope.value = '当前项目'
+    uiStore.setTaskScope('当前项目')
   }
 }
 
@@ -543,31 +545,31 @@ function pathForModule(moduleId: ModuleId): string {
 
 watch(() => route.path, (path) => {
   const module = moduleForPath(path)
-  activeModule.value = module
+  uiStore.setActiveModule(module)
   if (module === 'tasks')
-    activeTaskScope.value = '全部项目'
+    uiStore.setTaskScope('全部项目')
   if (module === 'project-tasks')
-    activeTaskScope.value = '当前项目'
+    uiStore.setTaskScope('当前项目')
 })
 
 function openActivityDetail(campaignId: string): void {
-  selectedCampaignId.value = campaignId
+  uiStore.selectCampaign(campaignId)
   void router.push(`/project/activities/${encodeURIComponent(campaignId)}`)
 }
 
 function selectTask(taskId: string): void {
-  selectedTaskId.value = taskId
-  activeModule.value = 'tasks'
+  uiStore.selectTask(taskId)
+  uiStore.setActiveModule('tasks')
 }
 
 function openOwnerTask(taskId: string): void {
-  selectedTaskId.value = taskId
-  activeTaskScope.value = '当前项目'
+  uiStore.selectTask(taskId)
+  uiStore.setTaskScope('当前项目')
   void router.push('/project/tasks')
 }
 
 function selectAsset(assetId: string): void {
-  selectedAssetId.value = assetId
+  uiStore.selectAsset(assetId)
 }
 
 function selectArtifact(activityId: string): void {
@@ -575,7 +577,7 @@ function selectArtifact(activityId: string): void {
 }
 
 function setTaskScope(scope: '全部项目' | '当前项目'): void {
-  activeTaskScope.value = scope
+  uiStore.setTaskScope(scope)
 }
 
 async function cancelSelectedTask(): Promise<void> {
@@ -713,13 +715,15 @@ async function changeSelectedTask(action: 'cancel' | 'record' | 'retry' | 'start
 }
 
 function selectChannel(channelId: ChannelId): void {
-  selectedChannelId.value = channelId
-  selectedChannelAccountId.value = snapshot.channels.find(channel => channel.channel === channelId)?.projectAccountId ?? null
+  uiStore.selectChannel(
+    channelId,
+    snapshot.channels.find(channel => channel.channel === channelId)?.projectAccountId ?? null,
+  )
   syncChannelBindingForm()
 }
 
 function selectChannelAccount(accountId: string): void {
-  selectedChannelAccountId.value = accountId
+  uiStore.selectChannelAccount(accountId)
 }
 
 function syncChannelBindingForm(): void {
@@ -999,9 +1003,9 @@ async function saveActivity(): Promise<void> {
     snapshot.campaigns = [activityToCampaign(activity), ...snapshot.campaigns]
     const projectView = await workbenchRuntime.project(snapshot.project.projectId)
     applyProjectView(projectView)
-    selectedCampaignId.value = activity.activityId
+    uiStore.selectCampaign(activity.activityId)
     activityComposerOpen.value = false
-    activeModule.value = 'activities'
+    uiStore.setActiveModule('activities')
   }
   catch (error: unknown) {
     activitySaveError.value = error instanceof Error
@@ -1455,7 +1459,7 @@ async function refreshProjectView(): Promise<void> {
           @promote-artifact="promoteActivityArtifact"
           @select-asset="selectAsset"
           @select-artifact="selectArtifact"
-          @set-filter="assetFilter = $event"
+            @set-filter="uiStore.setAssetFilter($event)"
           @toggle-cleanup-preview="toggleStorageCleanupPreview"
         />
       </template>

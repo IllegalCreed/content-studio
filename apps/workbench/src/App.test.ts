@@ -4,6 +4,7 @@ import { createPinia } from 'pinia'
 import { describe, expect, it } from 'vitest'
 import { nextTick } from 'vue'
 import { createWorkbenchRouter } from './router'
+import { useWorkbenchUiStore } from './stores/workbench-ui'
 import WorkbenchApp from './WorkbenchApp.vue'
 import './styles.css'
 
@@ -12,11 +13,13 @@ describe('content studio workbench', () => {
     const router = createWorkbenchRouter(true)
     await router.push('/overview')
     await router.isReady()
+    const pinia = createPinia()
     const wrapper = mount(WorkbenchApp, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [pinia, router],
       },
     })
+    const uiStore = useWorkbenchUiStore(pinia)
 
     expect(wrapper.find('[data-testid="workbench-dashboard"]').exists()).toBe(true)
     expect(wrapper.get('h1').text()).toContain('总览')
@@ -69,6 +72,8 @@ describe('content studio workbench', () => {
 
     await wrapper.get('a[data-module="tasks"]').trigger('click')
     expect(wrapper.get('h1').text()).toContain('任务面板')
+    expect(uiStore.activeModule).toBe('tasks')
+    expect(uiStore.activeTaskScope).toBe('全部项目')
     expect(wrapper.get('[data-testid="runtime-status"]').text()).toContain(
       '运行时未连接',
     )
@@ -79,6 +84,7 @@ describe('content studio workbench', () => {
     expect(wrapper.text()).toContain('快速排序可视化指南')
     const retryButton = wrapper.get('[data-testid="retry-task"]')
     await wrapper.get('button[data-task-id="release-notes-publish-x"]').trigger('click')
+    expect(uiStore.selectedTaskId).toBe('release-notes-publish-x')
     expect(wrapper.text()).toContain('需要人工介入')
     expect(wrapper.text()).toContain('等待渠道授权人登录、审核和最终点击')
     expect(
