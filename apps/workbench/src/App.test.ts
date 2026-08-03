@@ -119,7 +119,7 @@ describe('content studio workbench', () => {
     await wrapper.get('a[data-module="channels"]').trigger('click')
     await flushPromises()
     expect(wrapper.get('h1').text()).toContain('渠道管理')
-    expect(wrapper.text()).toContain('全局渠道目录')
+    expect(wrapper.get('#channels h2').text()).toBe('渠道目录')
     expect(wrapper.text()).toContain('可进入发布助手')
     expect(wrapper.text()).toContain('仅生成内容')
     expect(wrapper.findAll('button[data-channel-id]')).toHaveLength(19)

@@ -73,7 +73,7 @@ const selectedChannelReferenceCount = computed(() =>
 <template>
   <section id="channels" class="module-section">
     <div class="section-heading">
-      <div><p class="eyebrow">全局控制台 / 渠道目录</p><h2>全局渠道目录</h2></div>
+      <div><p class="eyebrow">全局控制台 / 渠道目录</p><h2>渠道目录</h2></div>
       <span>{{ props.snapshot.channelBlueprintCount }} 个全局规格 · {{ props.channelSnapshotCount }} 个发布状态快照</span>
     </div>
     <p class="section-intro">这里维护跨项目的平台规格和全局账号。项目是否启用渠道、绑定哪个账号，在项目配置中设置；“仅生成内容”渠道不会进入发布助手。</p>
