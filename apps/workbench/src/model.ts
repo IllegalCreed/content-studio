@@ -2,12 +2,15 @@ import type {
   CampaignJobStatus,
   CampaignVideo,
   ChannelId,
+  ContentFormat,
+  DeliveryMode,
   ExecutionTask,
   ExecutionTaskEvent,
   RecordingAttemptRecord,
   VideoFormat,
   VideoViewport,
 } from '@content-studio/core-types'
+import { CHANNEL_BLUEPRINTS } from '../../../src/constants'
 
 export interface ProjectProjection {
   canonicalUrl: string
@@ -488,6 +491,12 @@ export interface ChannelProjection {
   titleLimit: number
 }
 
+export function isPublishingAssistantChannel(
+  channel: Pick<ChannelProjection, 'delivery'>,
+): boolean {
+  return channel.delivery !== '仅生成内容'
+}
+
 export type ChannelHealthProjection = ChannelProjection['health']
 
 export interface ChannelAccountProjection {
@@ -611,6 +620,52 @@ function channelAccount(input: Omit<ChannelAccountProjection, 'assignedProjects'
     assignedProjects: input.assignedProjects ?? (input.isDefault ? ['algorithm-visualizer'] : []),
     ...input,
   }
+}
+
+function deliveryLabel(delivery: DeliveryMode): ChannelProjection['delivery'] {
+  return delivery === 'automatic-candidate'
+    ? '全自动候选'
+    : delivery === 'content-only'
+      ? '仅生成内容'
+      : '人工辅助'
+}
+
+function formatLabel(format: ContentFormat): ChannelProjection['format'] {
+  return format === 'article'
+    ? '文章'
+    : format === 'short-post'
+      ? '短帖'
+      : '视频信息'
+}
+
+function completeChannelDirectory(
+  channels: readonly ChannelProjection[],
+): ChannelProjection[] {
+  const configuredChannels = new Map(
+    channels.map(channel => [channel.channel, channel]),
+  )
+  return (Object.keys(CHANNEL_BLUEPRINTS) as ChannelId[]).map((channelId) => {
+    const configured = configuredChannels.get(channelId)
+    if (configured !== undefined)
+      return configured
+    const blueprint = CHANNEL_BLUEPRINTS[channelId]
+    return {
+      accounts: [],
+      adapterReady: false,
+      alias: null,
+      bodyLimit: blueprint.maxBodyLength,
+      channel: channelId,
+      delivery: deliveryLabel(blueprint.delivery),
+      enabled: false,
+      format: formatLabel(blueprint.format),
+      health: '未配置',
+      metrics: [],
+      nextAction: '尚未配置全局账号',
+      projectAccountId: null,
+      statusSource: '项目配置',
+      titleLimit: blueprint.maxTitleLength,
+    }
+  })
 }
 
 export const snapshot: WorkbenchSnapshot = {
@@ -868,7 +923,7 @@ export const snapshot: WorkbenchSnapshot = {
       status: '最终产物',
     },
   ],
-  channelBlueprintCount: 19,
+  channelBlueprintCount: Object.keys(CHANNEL_BLUEPRINTS).length,
   channels: [
     {
       accounts: [
@@ -1297,6 +1352,8 @@ export const snapshot: WorkbenchSnapshot = {
     }),
   ],
 }
+
+snapshot.channels = completeChannelDirectory(snapshot.channels)
 
 export const lifecycleStages: CampaignJobStatus[] = [
   'queued',

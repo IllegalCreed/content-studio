@@ -266,6 +266,9 @@ Profile 或支付信息。一个渠道可以在 `marketing-ops` 中配置多个�
 
 现有 19 渠道清单及 `automatic-candidate`、`owner-assisted`、
 `content-only` 分类仍是 Content Studio 的静态能力元数据，不代表实际授权。
+其中 `content-only` 只进入内容生成目录，不属于发布助手，也不应创建发布计划；发布助手
+只处理 `automatic-candidate` 和 `owner-assisted` 两类，并继续受 `marketing-ops` 当前
+账号、授权和策略约束。
 
 ## 项目适配方式
 

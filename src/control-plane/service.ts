@@ -1002,6 +1002,7 @@ export class ContentStudioApplicationService {
         locale: content.locale,
       },
     ])
+    this.assertPublishableChannel(input.projectId, input.channel)
     const plan = this.repository.savePublicationPlan(input)
     this.createPublicationTask(plan)
     return plan
@@ -1206,6 +1207,20 @@ export class ContentStudioApplicationService {
     if (missing !== undefined) {
       throw new Error(
         `Activity can only target enabled channel: ${missing.id}`,
+      )
+    }
+  }
+
+  private assertPublishableChannel(
+    projectId: string,
+    channel: ProjectChannelBinding['channel'],
+  ): void {
+    const binding = this.repository
+      .listProjectChannelBindings(projectId)
+      .find(candidate => candidate.channel === channel)
+    if (binding?.delivery === 'content-only') {
+      throw new Error(
+        `Content-only channel does not support publication plans: ${channel}`,
       )
     }
   }

@@ -2979,6 +2979,29 @@ footer {
   font-weight: 500;
 }
 
+.channel-directory-note {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px dashed var(--stroke);
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.channel-directory-note strong {
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.channel-directory-note span:last-child {
+  color: var(--acid);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6rem;
+}
+
 .channel-row {
   width: 100%;
   grid-template-columns: 0.9fr 1fr 1.6fr 1fr 1.2fr 1fr 1.5fr;

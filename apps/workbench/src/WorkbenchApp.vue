@@ -48,6 +48,7 @@ import {
   humanizeActivityStatus,
   humanizeTaskEventKind,
   humanizeStatus,
+  isPublishingAssistantChannel,
   videoViewportForFormat,
 } from './model'
 import { createWorkbenchRuntime } from './runtime'
@@ -65,6 +66,8 @@ import {
 import { useWorkbenchStore } from './stores/workbench'
 
 type ModuleId = WorkbenchModuleId
+
+const CONTENT_ONLY_PROJECT_BINDING = '__content-only-project-binding__'
 
 interface ModuleDefinition {
   description: string
@@ -90,7 +93,7 @@ const moduleDefinitions: ModuleDefinition[] = [
     scope: '全局控制台',
   },
   {
-    description: '管理全局渠道和账号目录，并查看当前项目是否启用。',
+    description: '管理跨项目渠道规格和全局账号，查看发布助手状态。',
     group: 'global',
     id: 'channels',
     label: '渠道管理',
@@ -433,10 +436,12 @@ const projectAccounts = computed(() =>
 
 const projectAccountOptions = computed(() => [
   { label: '不使用该渠道', value: '' },
-  ...selectedChannel.value.accounts.map(account => ({
-    label: `${account.alias} · 已被 ${account.assignedProjects.length} 个项目引用`,
-    value: account.accountId,
-  })),
+  ...(selectedChannel.value.delivery === '仅生成内容'
+    ? [{ label: '启用内容生成 · 无需发布账号', value: CONTENT_ONLY_PROJECT_BINDING }]
+    : selectedChannel.value.accounts.map(account => ({
+        label: `${account.alias} · 已被 ${account.assignedProjects.length} 个项目引用`,
+        value: account.accountId,
+      }))),
 ])
 
 const selectedCampaignChannelOptions = computed(() =>
@@ -480,7 +485,10 @@ const enabledChannels = computed(() =>
 )
 
 const channelSnapshotCount = computed(() =>
-  snapshot.channels.filter(channel => channel.statusSource === 'marketing-ops').length,
+  snapshot.channels.filter(channel =>
+    isPublishingAssistantChannel(channel)
+    && channel.statusSource === 'marketing-ops',
+  ).length,
 )
 
 const taskCounts = computed(() => ({
@@ -832,7 +840,9 @@ function selectChannelAccount(accountId: string): void {
 
 function syncChannelBindingForm(): void {
   const channel = selectedChannel.value
-  channelBindingForm.accountRef = channel.projectAccountId ?? ''
+  channelBindingForm.accountRef = channel.delivery === '仅生成内容' && channel.enabled
+    ? CONTENT_ONLY_PROJECT_BINDING
+    : channel.projectAccountId ?? ''
 }
 
 function deliveryModeForChannel(channel: ChannelProjection): ProjectChannelBinding['delivery'] {
@@ -848,7 +858,7 @@ async function saveChannelBinding(): Promise<void> {
     return
   channelBindingSaving.value = true
   channelBindingSaveError.value = null
-  const selectedAccount = channelBindingForm.accountRef === ''
+  const selectedAccount = channelBindingForm.accountRef === '' || channelBindingForm.accountRef === CONTENT_ONLY_PROJECT_BINDING
     ? null
     : selectedChannel.value.accounts.find(account => account.accountId === channelBindingForm.accountRef) ?? null
   const input: ProjectChannelBinding = {
@@ -956,8 +966,13 @@ function hasPublicationTask(contentId: string): boolean {
   )
 }
 
+function canPublishContent(channelId: ChannelId): boolean {
+  const channel = snapshot.channels.find(candidate => candidate.channel === channelId)
+  return channel !== undefined && isPublishingAssistantChannel(channel)
+}
+
 async function createPublicationPlanForContent(content: ChannelContentProjection): Promise<void> {
-  if (!runtimeConnected.value || !selectedCampaignIsRuntime.value || hasPublicationTask(content.contentId))
+  if (!runtimeConnected.value || !selectedCampaignIsRuntime.value || !canPublishContent(content.channel) || hasPublicationTask(content.contentId))
     return
   publicationPlanActionPending.value = content.contentId
   publicationPlanActionError.value = null
@@ -1304,6 +1319,7 @@ async function refreshProjectView(): Promise<void> {
         :content-locale-options="contentLocaleOptions"
         :content-save-error="contentSaveError"
         :content-saving="contentSaving"
+        :can-publish-content="canPublishContent"
         :enabled-channels="enabledChannels"
         :has-publication-task="hasPublicationTask"
         :project-account-alias="projectAccountAlias"
@@ -1360,9 +1376,6 @@ async function refreshProjectView(): Promise<void> {
         <ChannelManagementPage
           :account-reference-count="accountReferenceCount"
           :channel-snapshot-count="channelSnapshotCount"
-          :enabled-channels="enabledChannels"
-          :project-account-for="projectAccountFor"
-          :runtime-connected="runtimeConnected"
           :selected-channel="selectedChannel"
           :selected-channel-account="selectedChannelAccount"
           :snapshot="snapshot"

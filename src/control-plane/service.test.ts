@@ -230,6 +230,58 @@ describe('content studio application service', () => {
     ])
   })
 
+  it('does not create a publication task for a content-only channel', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'content-only-project')
+    service.bindProjectChannel({
+      channel: 'reddit',
+      delivery: 'content-only',
+      enabled: true,
+      projectId: 'content-only-project',
+    })
+    const activity = service.createActivity({
+      activityId: 'content-only-activity',
+      campaignId: 'content-only-campaign',
+      channels: [{ id: 'reddit', locale: 'en' }],
+      goal: 'education',
+      projectId: 'content-only-project',
+      projectSnapshotId: 'content-only-project-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://content-only-project.example.com/',
+      topic: { 'en': 'A topic', 'zh-CN': '主题' },
+    })
+    const group = service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'content-only-group',
+      coreMessage: 'Explain the idea',
+      projectId: activity.projectId,
+      title: '内容组',
+    })
+    const content = service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: [],
+      body: 'Content body',
+      channel: 'reddit',
+      contentGroupId: group.contentGroupId,
+      contentId: 'content-only-content',
+      format: 'article',
+      locale: 'en',
+      projectId: activity.projectId,
+      title: 'Content',
+    })
+
+    expect(service.getProjectView(activity.projectId).tasks).toHaveLength(1)
+    expect(() => service.createPublicationPlan({
+      activityId: activity.activityId,
+      channel: 'reddit',
+      contentId: content.contentId,
+      projectId: activity.projectId,
+      publicationId: 'content-only-publication',
+    })).toThrow(/content-only channel does not support publication plans/i)
+    expect(service.getProjectView(activity.projectId).tasks).toHaveLength(1)
+  })
+
   it('returns one project-scoped view for the local control surface', () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)

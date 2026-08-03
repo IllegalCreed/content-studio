@@ -43,6 +43,7 @@ const props = defineProps<{
   contentLocaleOptions: readonly { label: string, value: string }[]
   contentSaveError: string | null
   contentSaving: boolean
+  canPublishContent: (channel: ChannelId) => boolean
   enabledChannels: ChannelProjection[]
   hasPublicationTask: (contentId: string) => boolean
   projectAccountAlias: (channel: ChannelProjection) => string | undefined
@@ -111,7 +112,7 @@ const emit = defineEmits<{
           <legend>目标渠道（可多选）</legend>
           <label v-for="channel in props.enabledChannels" :key="channel.channel" class="channel-choice">
             <input v-model="props.activityForm.channels" :name="'activity-channel-' + channel.channel" type="checkbox" :value="channel.channel" />
-            <span><strong>{{ channel.channel }}</strong><small>{{ props.projectAccountAlias(channel) ?? '项目账号待绑定' }}</small></span>
+            <span><strong>{{ channel.channel }}</strong><small>{{ channel.delivery === '仅生成内容' ? '仅生成内容 · 无需发布账号' : props.projectAccountAlias(channel) ?? '项目账号待绑定' }}</small></span>
           </label>
           <small v-if="props.enabledChannels.length === 0" class="form-hint">请先在渠道管理中启用项目渠道。</small>
         </fieldset>
@@ -345,10 +346,10 @@ const emit = defineEmits<{
                     <button
                       type="button"
                       class="content-action-button"
-                      :disabled="!props.selectedCampaignIsRuntime || !props.snapshot.runtimeConnected || props.hasPublicationTask(content.contentId) || props.publicationPlanActionPending !== null"
+                      :disabled="!props.canPublishContent(content.channel) || !props.selectedCampaignIsRuntime || !props.snapshot.runtimeConnected || props.hasPublicationTask(content.contentId) || props.publicationPlanActionPending !== null"
                       @click="emit('create-publication-plan', content)"
                     >
-                      {{ props.publicationPlanActionPending === content.contentId ? '创建中…' : props.hasPublicationTask(content.contentId) ? '已建立发布安排' : '建立发布安排' }}
+                      {{ !props.canPublishContent(content.channel) ? '仅生成内容 · 不进入发布' : props.publicationPlanActionPending === content.contentId ? '创建中…' : props.hasPublicationTask(content.contentId) ? '已建立发布安排' : '建立发布安排' }}
                     </button>
                   </li>
                 </ul>

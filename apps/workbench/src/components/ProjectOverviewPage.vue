@@ -97,17 +97,17 @@ const emit = defineEmits<{
           <button v-for="channel in props.snapshot.channels" :key="channel.channel" type="button" :data-project-channel-id="channel.channel" :class="{ selected: channel.channel === props.selectedChannel.channel }" @click="emit('select-channel', channel.channel)">
             <span :class="channel.enabled ? 'ready' : 'muted-value'">{{ channel.enabled ? '已启用' : '未启用' }}</span>
             <strong>{{ channel.channel }}</strong>
-            <small>{{ props.projectAccountAlias(channel) ?? '未选择账号' }} · {{ channel.accounts.length }} 个可选账号</small>
+            <small>{{ channel.delivery === '仅生成内容' ? '仅生成内容 · 无需发布账号' : `${props.projectAccountAlias(channel) ?? '未选择账号'} · ${channel.accounts.length} 个可选账号` }}</small>
           </button>
         </div>
         <div class="channel-binding-form">
           <div class="channel-account-panel-heading">
             <div><p class="eyebrow">当前项目 · {{ props.selectedChannel.channel }}</p><strong>配置项目如何使用该渠道</strong></div>
-            <small>只保存不透明账号引用</small>
+            <small>{{ props.selectedChannel.delivery === '仅生成内容' ? '无需发布账号' : '只保存不透明账号引用' }}</small>
           </div>
           <div class="channel-binding-fields">
             <label>
-              <span>项目账号</span>
+              <span>{{ props.selectedChannel.delivery === '仅生成内容' ? '项目使用方式' : '项目账号' }}</span>
               <SelectMenu v-model="props.channelBindingForm.accountRef" data-testid="project-channel-account" aria-label="项目账号" :disabled="!props.runtimeConnected || props.channelBindingSaving" :options="props.projectAccountOptions" />
             </label>
             <div class="channel-binding-readonly" data-testid="project-channel-delivery">
@@ -118,7 +118,7 @@ const emit = defineEmits<{
           </div>
           <p v-if="props.channelBindingSaveError" class="form-error" aria-live="polite">{{ props.channelBindingSaveError }}</p>
           <div class="form-actions">
-            <small class="form-hint">保存项目配置不会登录渠道、读取凭据或触发发布。</small>
+            <small class="form-hint">保存项目配置不会登录渠道、读取凭据或触发发布；仅生成内容渠道不需要绑定账号。</small>
             <button data-testid="save-channel-binding" type="button" class="primary-button" :disabled="!props.runtimeConnected || props.channelBindingSaving" @click="emit('save-channel-binding')">
               {{ props.channelBindingSaving ? '保存中…' : '保存项目渠道配置' }}
             </button>

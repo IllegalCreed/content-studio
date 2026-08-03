@@ -5,6 +5,7 @@ import type {
 } from '@content-studio/core-types'
 import { describe, expect, it } from 'vitest'
 import {
+  isPublishingAssistantChannel,
   recordingReceiptToVideoJob,
   snapshot,
   taskLifecycleProjection,
@@ -105,6 +106,18 @@ describe('video plan projection', () => {
       height: 1920,
       width: 1080,
     })
+  })
+})
+
+describe('channel delivery projection', () => {
+  it('keeps content-only channels out of the publishing assistant', () => {
+    const contentOnly = snapshot.channels.find(channel => channel.channel === 'wechat')
+    const ownerAssisted = snapshot.channels.find(channel => channel.channel === 'youtube')
+
+    expect(contentOnly?.delivery).toBe('仅生成内容')
+    expect(isPublishingAssistantChannel(contentOnly!)).toBe(false)
+    expect(isPublishingAssistantChannel(ownerAssisted!)).toBe(true)
+    expect(snapshot.channels).toHaveLength(19)
   })
 })
 
