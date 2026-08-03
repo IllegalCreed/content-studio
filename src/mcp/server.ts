@@ -322,6 +322,14 @@ function toolDefinitions(): Array<Record<string, unknown>> {
                 type: 'array',
               },
               planVersion: { minimum: 1, type: 'integer' },
+              viewport: {
+                properties: {
+                  height: { minimum: 320, type: 'integer' },
+                  width: { minimum: 320, type: 'integer' },
+                },
+                required: ['width', 'height'],
+                type: 'object',
+              },
             },
             required: ['flowIds', 'format'],
             type: 'object',

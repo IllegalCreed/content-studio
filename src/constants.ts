@@ -4,6 +4,7 @@ import type {
   ChannelBlueprint,
   ChannelId,
   VideoFormat,
+  VideoViewport,
 } from './types'
 
 export const CHANNEL_BLUEPRINTS = {
@@ -50,7 +51,14 @@ export const VIDEO_VIEWPORTS = {
     height: 1080,
     width: 1080,
   },
-} satisfies Record<VideoFormat, { height: number, width: number }>
+} satisfies Record<VideoFormat, VideoViewport>
+
+export const VIDEO_VIEWPORT_LIMITS = {
+  maxAspectRatio: 4,
+  maxDimension: 3840,
+  maxPixels: 8_294_400,
+  minDimension: 320,
+} as const
 
 export const CAMPAIGN_JOB_TRANSITIONS = {
   'awaiting-owner': ['cancelled', 'published'],

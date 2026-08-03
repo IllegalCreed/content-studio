@@ -30,6 +30,11 @@ export type ContentFormat = 'article' | 'short-post' | 'video-metadata'
 
 export type VideoFormat = 'landscape' | 'portrait' | 'square'
 
+export interface VideoViewport {
+  height: number
+  width: number
+}
+
 export type LocalizedText = Record<Locale, string>
 
 export interface ProjectFact {
@@ -123,6 +128,7 @@ export interface CampaignVideo {
   format: VideoFormat
   outline?: VideoOutlineScene[]
   planVersion?: number
+  viewport?: VideoViewport
 }
 
 export interface CampaignSpec {
@@ -463,10 +469,7 @@ export interface VideoPlan {
   planVersion?: number
   reviewStatus?: VideoPlanReviewStatus
   scenes: CompiledScene[]
-  viewport: {
-    height: number
-    width: number
-  }
+  viewport: VideoViewport
 }
 
 export interface StudioBundle {
@@ -646,6 +649,7 @@ export interface RecorderAttemptReceipt {
   receiptVersion: 1
   totalActions: number
   totalScenes: number
+  viewport?: VideoViewport
 }
 
 /**

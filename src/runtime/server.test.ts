@@ -96,6 +96,10 @@ describe('content studio local application server', () => {
         flowIds: ['quick-sort'],
         format: 'landscape',
         planVersion: 2,
+        viewport: {
+          height: 768,
+          width: 1366,
+        },
         outline: [{
           flowId: 'quick-sort',
           objective: {
@@ -114,6 +118,10 @@ describe('content studio local application server', () => {
         format: 'landscape',
         planVersion: 2,
         outline: [{ flowId: 'quick-sort' }],
+        viewport: {
+          height: 768,
+          width: 1366,
+        },
       },
     })
 
@@ -135,6 +143,29 @@ describe('content studio local application server', () => {
         format: 'wide',
       },
     }, 'project-a')).toThrow(/video format/i)
+
+    expect(() => parseCreateActivityInput({
+      activityId: 'activity-a',
+      campaignId: 'campaign-a',
+      channels: [{ id: 'github', locale: 'en' }],
+      goal: 'education',
+      projectId: 'project-a',
+      projectSnapshotId: 'project-a-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://project-a.example.com/guide',
+      topic: {
+        'en': 'A guide',
+        'zh-CN': '一篇指南',
+      },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        viewport: {
+          height: 100,
+          width: 10_000,
+        },
+      },
+    }, 'project-a')).toThrow(/viewport/i)
   })
 
   it('parses channel content artifact ids, defaulting to empty and rejecting duplicates', () => {

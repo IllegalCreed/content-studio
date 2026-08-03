@@ -71,3 +71,4 @@ export {
 export type * from './types'
 export { validateCampaign, validateProjectManifest } from './validation'
 export { compileVideoPlan } from './video/compile'
+export { validateVideoViewport } from './video/viewport'

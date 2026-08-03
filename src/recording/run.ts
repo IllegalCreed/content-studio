@@ -246,6 +246,7 @@ export async function runRecordingJob(
       receiptVersion: 1,
       totalActions,
       totalScenes: validatedInput.plan.scenes.length,
+      viewport: validatedInput.plan.viewport,
     }
     attempts.push(receipt)
     if (attemptPrepared)

@@ -51,7 +51,7 @@ export function compileVideoPlan(
       ? {}
       : { planVersion: campaign.video.planVersion }),
     scenes,
-    viewport: VIDEO_VIEWPORTS[campaign.video.format],
+    viewport: campaign.video.viewport ?? VIDEO_VIEWPORTS[campaign.video.format],
   }
 }
 

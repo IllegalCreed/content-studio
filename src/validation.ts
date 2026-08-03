@@ -16,6 +16,7 @@ import type {
   VideoOutlineScene,
 } from './types'
 import { CHANNEL_BLUEPRINTS } from './constants'
+import { validateVideoViewport } from './video/viewport'
 
 const IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const SENSITIVE_KEY_PATTERN
@@ -446,11 +447,15 @@ function parseCampaignVideo(
   const outline = value.outline === undefined
     ? undefined
     : parseVideoOutline(value.outline, flowIds, captureFlows)
+  const viewport = value.viewport === undefined
+    ? undefined
+    : validateVideoViewport(value.viewport, format as NonNullable<CampaignSpec['video']>['format'])
   return {
     flowIds,
     format: format as NonNullable<CampaignSpec['video']>['format'],
     ...(outline === undefined ? {} : { outline }),
     ...(planVersion === undefined ? {} : { planVersion }),
+    ...(viewport === undefined ? {} : { viewport }),
   }
 }
 

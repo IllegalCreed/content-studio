@@ -127,6 +127,25 @@ describe('video plan compiler', () => {
     expect(plan.scenes[0]!.title).toBe('快速排序演示')
   })
 
+  it('uses a bounded custom viewport from the activity video plan', () => {
+    const plan = compileVideoPlan(project, {
+      ...campaign,
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        viewport: {
+          height: 768,
+          width: 1366,
+        },
+      },
+    })
+
+    expect(plan.viewport).toEqual({
+      height: 768,
+      width: 1366,
+    })
+  })
+
   it('carries a versioned shooting outline into the compiled recording plan', () => {
     const plan = compileVideoPlan(project, {
       ...campaign,

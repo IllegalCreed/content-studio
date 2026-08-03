@@ -407,6 +407,7 @@ describe('recording job runner', () => {
       sourceAccess: 'source-owned',
     })
     expect(result.attempts[0]?.recordingContext).toEqual(result.receipt.recordingContext)
+    expect(result.receipt.viewport).toEqual(plan.viewport)
   })
 })
 
