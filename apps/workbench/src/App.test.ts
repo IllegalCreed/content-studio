@@ -90,9 +90,11 @@ describe('content studio workbench', () => {
     await nextTick()
     await flushPromises()
     expect(wrapper.get('h1').text()).toContain('任务面板')
+    expect(wrapper.get('#tasks h2').text()).toBe('任务清单')
     expect(uiStore.activeModule).toBe('tasks')
     expect(uiStore.activeTaskScope).toBe('全部项目')
     expect(wrapper.get('[data-testid="task-scope-note"]').text()).toContain('1 个已接入项目')
+    expect(wrapper.find('.task-scope-switch').exists()).toBe(false)
     expect(router.currentRoute.value.query.task).toBe('quick-sort-guide-recording')
     expect(wrapper.get('[data-testid="runtime-status"]').text()).toContain(
       '运行时未连接',
@@ -175,6 +177,7 @@ describe('content studio workbench', () => {
 
     await wrapper.get('a[data-module="project-tasks"]').trigger('click')
     expect(wrapper.get('h1').text()).toContain('项目任务面板')
+    expect(wrapper.find('.task-scope-switch').exists()).toBe(false)
 
     await wrapper.get('a[data-module="reports"]').trigger('click')
     expect(wrapper.get('h1').text()).toContain('项目报告')
@@ -213,6 +216,21 @@ describe('content studio workbench', () => {
     expect(wrapper.find('.task-detail').exists()).toBe(false)
     await wrapper.get('[data-testid="tasks-empty-state"] button').trigger('click')
     expect(router.currentRoute.value.path).toBe('/project/activities')
+  })
+
+  it('根据任务路由固定全局或项目范围', async () => {
+    const router = createWorkbenchRouter(true)
+    await router.push('/project/tasks')
+    await router.isReady()
+    const wrapper = mount(WorkbenchApp, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+
+    expect(wrapper.get('h1').text()).toContain('项目任务面板')
+    expect(wrapper.get('[data-testid="task-scope-note"]').text()).toContain('当前项目 · Algorithm Visualizer')
+    expect(wrapper.find('.task-scope-switch').exists()).toBe(false)
   })
 
   it('从深链接 query 恢复素材筛选和选中素材', async () => {

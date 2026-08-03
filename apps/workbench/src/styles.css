@@ -2921,14 +2921,12 @@ footer {
   font-size: 0.62rem;
 }
 
-.task-scope-switch,
 .asset-filter-bar {
   display: flex;
   gap: 0.45rem;
   margin-top: 1.25rem;
 }
 
-.task-scope-switch button,
 .asset-filter-bar button {
   padding: 0.55rem 0.7rem;
   color: var(--muted);
@@ -2938,7 +2936,6 @@ footer {
   cursor: pointer;
 }
 
-.task-scope-switch button.active,
 .asset-filter-bar button.active {
   color: var(--ink);
   border-color: #657042;
@@ -4083,7 +4080,6 @@ footer {
     grid-template-columns: 1fr;
   }
 
-  .task-scope-switch,
   .asset-filter-bar {
     overflow-x: auto;
   }

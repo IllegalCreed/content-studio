@@ -163,7 +163,9 @@ const {
   runtimeConnected,
   runtimeError,
 } = storeToRefs(runtimeStore)
-uiStore.setActiveModule(moduleForPath(route.path))
+const initialModule = moduleForPath(route.path)
+uiStore.setActiveModule(initialModule)
+syncTaskScopeForModule(initialModule)
 applyRouteUiState(route.query)
 // 子页面暂时仍从快照读取这个兼容字段；连接状态的唯一来源已经是 runtimeStore。
 watch(runtimeConnected, value => {
@@ -515,16 +517,18 @@ function activityTaskSummary(activityId: string): string {
 
 function selectModule(moduleId: ModuleId): void {
   uiStore.setActiveModule(moduleId)
-  if (moduleId === 'tasks') {
-    uiStore.setTaskScope('全部项目')
-  }
-  if (moduleId === 'project-tasks') {
-    uiStore.setTaskScope('当前项目')
-  }
+  syncTaskScopeForModule(moduleId)
   void router.push({
     path: pathForModule(moduleId),
     query: routeQueryForModule(moduleId),
   })
+}
+
+function syncTaskScopeForModule(moduleId: ModuleId): void {
+  if (moduleId === 'tasks')
+    uiStore.setTaskScope('全部项目')
+  else if (moduleId === 'project-tasks')
+    uiStore.setTaskScope('当前项目')
 }
 
 function moduleForPath(path: string): ModuleId {
@@ -565,10 +569,7 @@ function pathForModule(moduleId: ModuleId): string {
 watch(() => route.path, (path) => {
   const module = moduleForPath(path)
   uiStore.setActiveModule(module)
-  if (module === 'tasks')
-    uiStore.setTaskScope('全部项目')
-  if (module === 'project-tasks')
-    uiStore.setTaskScope('当前项目')
+  syncTaskScopeForModule(module)
   const query = routeQueryForModule(module)
   if (!sameRouteQuery(route.query, query))
     void router.replace({ query })
@@ -1374,7 +1375,6 @@ async function refreshProjectView(): Promise<void> {
           @change-task="changeSelectedTask"
           @go-activities="selectModule('activities')"
           @select-task="selectTask"
-          @set-scope="setTaskScope"
         />
       </template>
       <template v-else-if="activeModule === 'channels'">
