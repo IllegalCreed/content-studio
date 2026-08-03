@@ -2275,6 +2275,66 @@ footer {
   line-height: 1.45;
 }
 
+.activity-progress-list {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activity-progress-list li {
+  position: relative;
+  min-width: 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--stroke);
+}
+
+.activity-progress-list li::before {
+  position: absolute;
+  top: -0.27rem;
+  left: 0;
+  width: 0.45rem;
+  height: 0.45rem;
+  border: 1px solid var(--muted);
+  border-radius: 50%;
+  background: var(--panel);
+  content: '';
+}
+
+.activity-progress-list li[data-stage-status='done'] {
+  border-color: var(--acid);
+}
+
+.activity-progress-list li[data-stage-status='done']::before,
+.activity-progress-list li[data-stage-status='active']::before {
+  border-color: var(--acid);
+  background: var(--acid);
+}
+
+.activity-progress-list li[data-stage-status='active']::before {
+  box-shadow: 0 0 0 0.2rem rgb(217 255 67 / 12%);
+}
+
+.activity-progress-list strong,
+.activity-progress-list small {
+  display: block;
+}
+
+.activity-progress-list strong {
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.activity-progress-list small {
+  margin-top: 0.35rem;
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.45;
+}
+
 .detail-section {
   margin-top: 1.5rem;
   padding: 1.25rem;
@@ -2461,6 +2521,69 @@ footer {
 
 .detail-content-group li span {
   color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6rem;
+}
+
+.activity-publication-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-top: 1rem;
+}
+
+.activity-publication-card {
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid var(--stroke);
+  background: #151713;
+}
+
+.activity-publication-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.activity-publication-heading h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.activity-publication-card > p {
+  margin: 0.8rem 0 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.activity-observation {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.8rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--stroke);
+}
+
+.activity-observation span,
+.activity-observation strong {
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.58rem;
+  font-weight: 400;
+}
+
+.activity-observation strong {
+  color: var(--acid);
+}
+
+.activity-publication-link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  color: var(--acid);
   font-family: 'DM Mono', monospace;
   font-size: 0.6rem;
 }
@@ -3538,6 +3661,11 @@ footer {
 
   .detail-summary-grid,
   .detail-two-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-progress-list,
+  .activity-publication-list {
     grid-template-columns: 1fr;
   }
 
