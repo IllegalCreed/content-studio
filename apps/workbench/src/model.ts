@@ -536,6 +536,7 @@ export interface WorkbenchSnapshot {
   channels: ChannelProjection[]
   projectAssets: AssetProjection[]
   project: ProjectProjection
+  registeredProjectCount: number
   reports: ReportProjection[]
   runtimeConnected: boolean
   storage: StorageProjection
@@ -1248,6 +1249,7 @@ export const snapshot: WorkbenchSnapshot = {
     recordingMode: '项目适配器',
     version: 'manifest v1',
   },
+  registeredProjectCount: 1,
   reports: [
     {
       activityId: 'quick-sort-guide',

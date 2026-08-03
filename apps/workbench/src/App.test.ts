@@ -29,6 +29,10 @@ describe('content studio workbench', () => {
     expect(wrapper.findAll('select')).toHaveLength(0)
     expect(wrapper.text()).toContain('Algorithm Visualizer')
     expect(wrapper.text()).toContain('待处理任务')
+    expect(wrapper.get('[data-testid="overview-scope-note"]').text()).toContain('跨项目汇总')
+    expect(wrapper.get('.overview-stats').text()).toContain('发布活动')
+    expect(wrapper.get('.overview-stats').text()).not.toContain('项目渠道')
+    expect(wrapper.find('.project-context-card').exists()).toBe(false)
 
     const projectSwitcher = wrapper.get('button[aria-label="切换项目"]')
     expect(wrapper.get('.project-switcher-chevron').element.tagName).toBe('svg')
@@ -83,6 +87,7 @@ describe('content studio workbench', () => {
     expect(wrapper.get('h1').text()).toContain('任务面板')
     expect(uiStore.activeModule).toBe('tasks')
     expect(uiStore.activeTaskScope).toBe('全部项目')
+    expect(wrapper.get('[data-testid="task-scope-note"]').text()).toContain('1 个已接入项目')
     expect(router.currentRoute.value.query.task).toBe('quick-sort-guide-recording')
     expect(wrapper.get('[data-testid="runtime-status"]').text()).toContain(
       '运行时未连接',

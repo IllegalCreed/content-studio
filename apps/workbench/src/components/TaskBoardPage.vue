@@ -14,6 +14,7 @@ const props = defineProps<{
   canRecordSelectedTask: boolean
   canRetrySelectedTask: boolean
   canStartSelectedTask: boolean
+  projectCount: number
   projectName: string
   runtimeConnected: boolean
   selectedTask: TaskProjection
@@ -39,7 +40,9 @@ const emit = defineEmits<{
         <p class="eyebrow">执行层投影</p>
         <h2>{{ props.activeTaskScope === '全部项目' ? '全局任务面板' : '项目任务面板' }}</h2>
       </div>
-      <span>全局与项目共用同一份执行记录</span>
+      <span data-testid="task-scope-note">
+        {{ props.activeTaskScope === '全部项目' ? `${props.projectCount} 个已接入项目 · 统一执行记录` : `当前项目 · ${props.projectName}` }}
+      </span>
     </div>
     <p class="section-intro">制作、发布、监测是执行任务，不是发布活动里的业务对象。取消和重试最终由本地运行时执行。</p>
     <div class="task-scope-switch" role="tablist" aria-label="任务范围">

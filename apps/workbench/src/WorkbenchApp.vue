@@ -79,11 +79,11 @@ interface ModuleDefinition {
 
 const moduleDefinitions: ModuleDefinition[] = [
   {
-    description: '从一个页面查看项目状态、活动进度和需要处理的事项。',
+    description: '跨项目查看活动、执行任务和待人工事项。',
     group: 'global',
     id: 'overview',
     label: '总览',
-    scope: '全局控制台 / 项目空间',
+    scope: '全局控制台 / 跨项目汇总',
   },
   {
     description: '跨项目查看制作、发布和监测执行记录。',
@@ -1275,11 +1275,12 @@ async function refreshProjectView(): Promise<void> {
       <template v-if="activeModule === 'overview'">
         <OverviewPage
           :activity-task-summary="activityTaskSummary"
-          :enabled-channel-count="enabledChannels.length"
           :owner-handoff-count="ownerHandoffs.length"
           :pending-task-count="pendingTaskCount"
+          :project-count="snapshot.registeredProjectCount"
           :snapshot="snapshot"
           @go-activities="selectModule('activities')"
+          @go-project="selectModule('project')"
           @go-tasks="selectModule('tasks')"
           @open-activity="openActivityDetail"
           @select-task="selectTask"
@@ -1358,6 +1359,7 @@ async function refreshProjectView(): Promise<void> {
           :can-record-selected-task="canRecordSelectedTask"
           :can-retry-selected-task="canRetrySelectedTask"
           :can-start-selected-task="canStartSelectedTask"
+          :project-count="snapshot.registeredProjectCount"
           :project-name="snapshot.project.name"
           :runtime-connected="runtimeConnected"
           :selected-task="selectedTask"
