@@ -808,10 +808,12 @@ main {
 }
 
 button.primary-button {
+  appearance: none;
   padding: 0.65rem 0.9rem;
   color: #111310;
-  border-color: var(--acid);
+  border: 1px solid var(--acid);
   background: var(--acid);
+  box-shadow: none;
   font-size: 0.72rem;
 }
 
