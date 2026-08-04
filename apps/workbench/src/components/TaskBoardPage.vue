@@ -110,7 +110,7 @@ const selectedTaskHandoff = computed(() =>
         <p class="task-detail-context">{{ props.selectedTask.activityTitle }} → {{ props.selectedTask.contentTitle }} → {{ props.selectedTask.channel }} → {{ props.selectedTask.accountAlias }}</p>
         <p class="task-detail-copy">{{ props.selectedTask.detail }}</p>
         <ol class="task-step-list" aria-label="任务阶段">
-          <li v-for="step in props.selectedTask.steps" :key="step.label" :data-step-status="step.status">
+          <li v-for="step in props.selectedTask.steps" :key="step.label" :data-step-status="step.status" :aria-current="step.status === 'active' ? 'step' : undefined">
             <span class="step-marker" />
             <div><strong>{{ step.label }}</strong><small>{{ step.detail }}</small></div>
           </li>

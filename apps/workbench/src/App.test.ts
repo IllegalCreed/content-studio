@@ -110,6 +110,8 @@ describe('content studio workbench', () => {
     expect(wrapper.find('.task-detail .task-progress').exists()).toBe(false)
     expect(wrapper.find('.task-detail .status-rail').exists()).toBe(false)
     expect(wrapper.find('.task-detail .task-step-list').exists()).toBe(true)
+    expect(wrapper.findAll('.task-detail .task-step-list > li')).toHaveLength(4)
+    expect(wrapper.get('.task-detail .task-step-list [aria-current="step"]').text()).toContain('录制中')
     expect(wrapper.text()).toContain('录制中')
     expect(wrapper.text()).toContain('快速排序可视化指南')
     expect(wrapper.get('.video-job-context').text()).toContain('快速排序演示视频')

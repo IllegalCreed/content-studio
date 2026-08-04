@@ -3139,7 +3139,8 @@ footer {
 
 .task-step-list {
   display: grid;
-  gap: 0.1rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0;
   margin: 1.5rem 0 0;
   padding: 0;
   list-style: none;
@@ -3148,17 +3149,18 @@ footer {
 .task-step-list li {
   position: relative;
   display: grid;
-  grid-template-columns: 1rem 1fr;
-  gap: 0.7rem;
-  padding: 0.55rem 0;
+  grid-template-columns: 1fr;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.45rem 0.75rem 0.65rem 0;
 }
 
 .task-step-list li:not(:last-child)::after {
   position: absolute;
-  top: 1.3rem;
-  bottom: -0.1rem;
-  left: 0.42rem;
-  width: 1px;
+  top: 0.86rem;
+  right: 0;
+  left: 0.85rem;
+  height: 1px;
   background: var(--stroke);
   content: '';
 }
@@ -3206,6 +3208,28 @@ footer {
   margin-top: 0.2rem;
   color: var(--muted);
   font-size: 0.64rem;
+}
+
+@media (max-width: 640px) {
+  .task-step-list {
+    grid-template-columns: 1fr;
+    gap: 0.1rem;
+  }
+
+  .task-step-list li {
+    grid-template-columns: 1rem 1fr;
+    gap: 0.7rem;
+    padding: 0.55rem 0;
+  }
+
+  .task-step-list li:not(:last-child)::after {
+    top: 1.3rem;
+    right: auto;
+    bottom: -0.1rem;
+    left: 0.42rem;
+    width: 1px;
+    height: auto;
+  }
 }
 
 .task-handoff-inline {
