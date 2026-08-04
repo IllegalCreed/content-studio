@@ -224,6 +224,20 @@ node dist/cli.mjs mcp --stdio \
 项目范围和渠道是否启用。`stdio` 不占用端口，协议输出只写到标准输出，诊断信息不混入
 协议流。
 
+需要 HTTP 传输的本地宿主可以使用同一个项目范围启动无状态 MCP 端点：
+
+```bash
+node dist/cli.mjs mcp --http \
+  --project examples/algorithm-visualizer/project.json \
+  --campaign examples/algorithm-visualizer/campaign.json \
+  --port 11002 \
+  --db .content-studio/content-studio.sqlite
+```
+
+HTTP 端点固定绑定 `127.0.0.1`，路径为 `/mcp`；它只处理符合 MCP `2026-07-28`
+的 JSON-RPC 请求，不提供公网鉴权，也不会触发真实渠道发布。公网部署前仍需单独完成
+TLS、鉴权、Origin 白名单、限流和审计。
+
 本地开发端口从 `11000` 开始分配：`11000` 是 Vue 工作台，后续应用服务使用
 `11001`、MCP HTTP 使用 `11002`，MCP `stdio` 不占用端口。工作台使用严格端口模式，
 如果端口已被占用会直接报错，不会悄悄换到另一个端口；新增服务继续按这个表顺延。

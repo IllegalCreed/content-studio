@@ -49,6 +49,11 @@ export {
   type MarketingOpsReceiptMatch,
 } from './marketing-ops/client'
 export {
+  type ContentStudioMcpHttpServerHandle,
+  type ContentStudioMcpHttpServerOptions,
+  createContentStudioMcpHttpServer,
+} from './mcp/http'
+export {
   type ContentStudioMcpServer,
   type ContentStudioMcpServerOptions,
   createContentStudioMcpServer,

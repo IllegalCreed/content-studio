@@ -68,7 +68,8 @@ OpenAI 当前文档已经提供 Plugin 公共提交、审核、批准和发布�
 ## 本地安装与公共目录双路径
 
 本地开发或自托管时，Content Studio Plugin 可以通过本地 MCP 配置启动
-`content-studio mcp --stdio`。目标用户流程为“一条命令安装本地 runtime、一次
+`content-studio mcp --stdio`，也可以在需要 HTTP 传输的宿主中启动仅绑定回环地址的
+`content-studio mcp --http`。目标用户流程为“一条命令安装本地 runtime、一次
 安装 Content Studio Plugin、第一次使用时确认项目范围”。
 
 公共 Plugins Directory 中的 MCP Server 必须使用公网生产 URL，因此公开版本
@@ -244,7 +245,8 @@ get_content_studio_task(taskId)
 
 - [ ] 发布可验证、版本化、默认不要求 root 的安装器。
 - [ ] 提供下载后检查再执行的替代安装路径。
-- [x] 本地 MCP 只使用 `stdio` 或绑定 `127.0.0.1`；当前实现为 `stdio`。
+- [x] 本地 MCP 只使用 `stdio` 或绑定 `127.0.0.1`；当前实现为 `stdio` 和无状态
+      Streamable HTTP，HTTP 默认使用 `11002`。
 - [ ] `content-studio doctor` 检查 core、工作台、Worker 和
       `marketing-ops` 的版本与健康。
 - [ ] `marketing-ops` 随安装器交付但保持独立存储和授权边界。

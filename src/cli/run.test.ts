@@ -349,6 +349,42 @@ describe('content-studio CLI', () => {
     }
   })
 
+  it('starts the local MCP Streamable HTTP runtime on the dedicated MCP port', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
+    const projectPath = join(temporaryDirectory, 'project.json')
+    const messages: string[] = []
+    const controller = new AbortController()
+    controller.abort()
+
+    try {
+      await writeFile(projectPath, JSON.stringify(project), 'utf8')
+      await expect(runCli(
+        [
+          'mcp',
+          '--http',
+          '--project',
+          projectPath,
+          '--port',
+          '0',
+          '--db',
+          join(temporaryDirectory, 'state.sqlite'),
+        ],
+        {
+          cwd: temporaryDirectory,
+          signal: controller.signal,
+          write: message => messages.push(message),
+        },
+      )).resolves.toBe(130)
+      expect(messages[0]).toMatch(/Content Studio MCP listening at http:\/\/127\.0\.0\.1:\d+\/mcp/)
+    }
+    finally {
+      await rm(temporaryDirectory, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
+
   it('runs a queued video task through the MCP stdio worker', async () => {
     const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
     const projectPath = join(temporaryDirectory, 'project.json')

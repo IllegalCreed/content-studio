@@ -16,6 +16,7 @@ import process from 'node:process'
 import { generateStudioBundle } from '../bundle/generate'
 import { CHANNEL_BLUEPRINTS } from '../constants'
 import { ProductionWorker } from '../jobs/worker'
+import { createContentStudioMcpHttpServer } from '../mcp/http'
 import { createContentStudioMcpServer, serveMcpStdio } from '../mcp/server'
 import { writeStudioBundle } from '../output/write'
 import { createProjectRecord } from '../project/record'
@@ -82,16 +83,16 @@ export async function runCli(
     command === 'serve'
       ? new Set(['campaign', 'db', 'port', 'project'])
       : isMcp
-        ? new Set(['campaign', 'db', 'project', 'stdio'])
+        ? new Set(['campaign', 'db', 'http', 'port', 'project', 'stdio'])
         : command === 'doctor'
           ? new Set(['db', 'project'])
           : command === 'record'
             ? new Set(['attempts', 'base-url', 'campaign', 'out', 'project'])
             : new Set(['campaign', 'out', 'project']),
-    isMcp ? new Set(['stdio']) : new Set(),
+    isMcp ? new Set(['http', 'stdio']) : new Set(),
   )
-  if (isMcp && !options.has('stdio'))
-    throw new Error('content-studio mcp requires --stdio')
+  if (isMcp && options.has('stdio') === options.has('http'))
+    throw new Error('content-studio mcp requires exactly one of --stdio or --http')
   const projectPath = requireOption(options, 'project')
   const serveCampaignPath = command === 'serve' || isMcp || command === 'doctor'
     ? options.get('campaign')
@@ -269,6 +270,7 @@ function renderHelp(): string {
     'content-studio record --project <project.json> --campaign <campaign.json> --base-url <url> --out <directory> [--attempts <1-3>]',
     'content-studio serve --project <project.json> [--campaign <campaign.json>] [--db <path>] [--port <11001>]',
     'content-studio mcp --stdio --project <project.json> [--campaign <campaign.json>] [--db <path>]',
+    'content-studio mcp --http --project <project.json> [--campaign <campaign.json>] [--db <path>] [--port <11002>]',
     'content-studio doctor --project <project.json> [--db <path>]',
     'content-studio validate --project <project.json> --campaign <campaign.json>',
   ].join('\n')
@@ -311,6 +313,51 @@ async function runMcp(
   runtime: CliRuntime,
   services: CliServices,
 ): Promise<number> {
+  const execution = createMcpExecutionRuntime(project, campaign, options, runtime, services)
+  execution.worker.start()
+  try {
+    if (options.has('http'))
+      return await runMcpHttp(execution, project.projectId, options, runtime)
+    await serveMcpStdio(
+      createContentStudioMcpServer({
+        projectId: project.projectId,
+        productionWorker: execution.worker,
+        productionWorkerJob: task => createProductionWorkerJob(
+          execution.handle.service,
+          execution.outputRoot,
+          task,
+        ),
+        service: execution.handle.service,
+      }),
+      {
+        input: runtime.input ?? process.stdin,
+        output: runtime.output ?? process.stdout,
+        ...(runtime.signal === undefined ? {} : { signal: runtime.signal }),
+      },
+    )
+    if (runtime.signal?.aborted !== true)
+      await execution.worker.waitForIdle()
+    return runtime.signal?.aborted === true ? 130 : 0
+  }
+  finally {
+    await execution.worker.stop()
+    execution.handle.close()
+  }
+}
+
+interface McpExecutionRuntime {
+  handle: ReturnType<typeof createContentStudioApplication>
+  outputRoot: string
+  worker: ProductionWorker
+}
+
+function createMcpExecutionRuntime(
+  project: ProjectManifest,
+  campaign: CampaignSpec | undefined,
+  options: Map<string, string>,
+  runtime: CliRuntime,
+  services: CliServices,
+): McpExecutionRuntime {
   const applicationOptions = createApplicationOptions(project, campaign, options, runtime)
   const handle = createContentStudioApplication(applicationOptions)
   const outputRoot = join(
@@ -342,32 +389,47 @@ async function runMcp(
       { record: services.record },
     ),
   })
-  worker.start()
+  return { handle, outputRoot, worker }
+}
+
+async function runMcpHttp(
+  execution: McpExecutionRuntime,
+  projectId: string,
+  options: Map<string, string>,
+  runtime: CliRuntime,
+): Promise<number> {
+  const http = createContentStudioMcpHttpServer({
+    server: createContentStudioMcpServer({
+      projectId,
+      productionWorker: execution.worker,
+      productionWorkerJob: task => createProductionWorkerJob(
+        execution.handle.service,
+        execution.outputRoot,
+        task,
+      ),
+      service: execution.handle.service,
+    }),
+  })
+  const port = parsePort(options.get('port'), 11002)
   try {
-    await serveMcpStdio(
-      createContentStudioMcpServer({
-        projectId: project.projectId,
-        productionWorker: worker,
-        productionWorkerJob: task => createProductionWorkerJob(
-          handle.service,
-          outputRoot,
-          task,
-        ),
-        service: handle.service,
-      }),
-      {
-        input: runtime.input ?? process.stdin,
-        output: runtime.output ?? process.stdout,
-        ...(runtime.signal === undefined ? {} : { signal: runtime.signal }),
-      },
+    await listenMcpHttpServer(http.server, port)
+    const address = http.server.address()
+    if (address === null || typeof address === 'string')
+      throw new Error('Content Studio MCP did not expose a TCP address')
+    runtime.write(
+      `Content Studio MCP listening at http://127.0.0.1:${address.port}/mcp`,
     )
-    if (runtime.signal?.aborted !== true)
-      await worker.waitForIdle()
-    return runtime.signal?.aborted === true ? 130 : 0
+    if (runtime.signal === undefined)
+      return 0
+    if (!runtime.signal.aborted) {
+      await new Promise<void>(resolveSignal =>
+        runtime.signal?.addEventListener('abort', () => resolveSignal(), { once: true }),
+      )
+    }
+    return 130
   }
   finally {
-    await worker.stop()
-    handle.close()
+    await http.close()
   }
 }
 
@@ -413,8 +475,18 @@ function listenServer(
   })
 }
 
-function parsePort(input: string | undefined): number {
-  const port = input === undefined ? 11001 : Number(input)
+function listenMcpHttpServer(
+  server: ReturnType<typeof createContentStudioMcpHttpServer>['server'],
+  port: number,
+): Promise<void> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    server.once('error', rejectPromise)
+    server.listen(port, '127.0.0.1', () => resolvePromise())
+  })
+}
+
+function parsePort(input: string | undefined, defaultPort = 11001): number {
+  const port = input === undefined ? defaultPort : Number(input)
   if (!Number.isInteger(port) || port < 0 || port > 65535)
     throw new Error('--port must be an integer between 0 and 65535')
   return port
