@@ -120,6 +120,7 @@ export interface CaptureFlow {
 }
 
 export interface ProjectManifest {
+  adapterId?: string
   schemaVersion: 1
   projectId: string
   name: string

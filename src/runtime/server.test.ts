@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   InMemoryContentStudioRepository,
 } from '../control-plane/service'
+import { createAttachedPreviewAdapter } from '../recording/preview'
 import {
   createContentStudioServer,
   parseCreateActivityArtifactInput,
@@ -81,6 +82,22 @@ async function listen(server: ReturnType<typeof createContentStudioServer>['serv
 }
 
 describe('content studio local application server', () => {
+  it('requires a locally registered adapter for an adapter-enabled project', () => {
+    const { project, snapshot: baseSnapshot } = createProject()
+    const snapshot: ProjectSnapshot = {
+      ...baseSnapshot,
+      manifest: {
+        ...baseSnapshot.manifest,
+        adapterId: 'attached-preview',
+      },
+    }
+    expect(() => createContentStudioServer({
+      project,
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })).toThrow(/requires registered preview adapter/i)
+  })
+
   it('parses an optional activity video plan without accepting arbitrary fields', () => {
     expect(parseCreateActivityInput({
       activityId: 'activity-a',
@@ -1008,6 +1025,7 @@ describe('content studio local application server', () => {
       ...baseSnapshot,
       manifest: {
         ...baseSnapshot.manifest,
+        adapterId: 'attached-preview',
         captureFlows: [{
           id: 'quick-sort',
           startPath: '/quick-sort',
@@ -1019,7 +1037,7 @@ describe('content studio local application server', () => {
         }],
       },
     }
-    let recordingInput: { outputDirectory: string, plan: unknown } | undefined
+    let recordingInput: { baseUrl: string, outputDirectory: string, plan: unknown } | undefined
     const productionOutputRoot = resolve('/tmp/content-studio-runtime-recording')
     const receipt: RecorderAttemptReceipt = {
       artifactDirectory: join(
@@ -1070,6 +1088,7 @@ describe('content studio local application server', () => {
       production: {
         record: async (input) => {
           recordingInput = {
+            baseUrl: input.baseUrl,
             outputDirectory: input.outputDirectory,
             plan: input.plan,
           }
@@ -1077,6 +1096,13 @@ describe('content studio local application server', () => {
         },
       },
       productionOutputRoot,
+      projectPreviewAdapters: [{
+        adapter: createAttachedPreviewAdapter('http://127.0.0.1:11000'),
+        adapterId: 'attached-preview',
+        adapterVersion: '1.0.0',
+        ownerApproved: true,
+        projectId: project.projectId,
+      }],
       project,
       projectChannelBindings: [{
         channel: 'youtube',
@@ -1163,6 +1189,7 @@ describe('content studio local application server', () => {
       expect(recordingInput?.outputDirectory).toBe(
         join(productionOutputRoot, project.projectId, taskId),
       )
+      expect(recordingInput?.baseUrl).toBe('http://127.0.0.1:11000')
       expect(recordingInput?.plan).toMatchObject({
         campaignId: 'video-campaign',
         scenes: [{ id: 'quick-sort' }],

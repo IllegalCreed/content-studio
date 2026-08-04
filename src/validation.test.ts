@@ -112,6 +112,17 @@ describe('manifest validation', () => {
     })).toThrow(/web-assisted.*deterministic/i)
   })
 
+  it('accepts only a lowercase registered adapter id on a project manifest', () => {
+    expect(validateProjectManifest({
+      ...project,
+      adapterId: 'algorithm-preview',
+    })).toMatchObject({ adapterId: 'algorithm-preview' })
+    expect(() => validateProjectManifest({
+      ...project,
+      adapterId: 'AlgorithmPreview',
+    })).toThrow(/adapterId.*lowercase kebab-case/i)
+  })
+
   it('accepts a small semantic capture target registry and enforces test-id naming', () => {
     const validated = validateProjectManifest({
       ...project,

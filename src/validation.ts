@@ -44,6 +44,9 @@ export function validateProjectManifest(input: unknown): ProjectManifest {
   assertSchemaVersion(value.schemaVersion)
   const locales = parseLocales(value.locales)
   const manifest: ProjectManifest = {
+    ...(value.adapterId === undefined
+      ? {}
+      : { adapterId: parseIdentifier(value.adapterId, 'adapterId') }),
     schemaVersion: 1,
     projectId: parseIdentifier(value.projectId, 'projectId'),
     name: parseNonEmptyString(value.name, 'name'),

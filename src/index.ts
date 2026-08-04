@@ -65,6 +65,10 @@ export {
 export { writeStudioBundle } from './output/write'
 export { createProjectRecord } from './project/record'
 export {
+  type ProjectPreviewAdapterRegistration,
+  ProjectPreviewAdapterRegistry,
+} from './recording/adapter-registry'
+export {
   createRecorderArtifact,
   prepareAttemptDirectory,
   writeRecorderReceipt,

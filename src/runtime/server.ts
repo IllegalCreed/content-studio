@@ -2,8 +2,12 @@
 
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { ContentStudioRepository } from '../control-plane/service'
-import type { ProductionTaskDependencies } from '../jobs/production'
+import type {
+  ProductionTaskDependencies,
+  ProductionTaskInput,
+} from '../jobs/production'
 import type { ProductionWorkerJob } from '../jobs/worker'
+import type { ProjectPreviewAdapterRegistration } from '../recording/adapter-registry'
 import type {
   ActivityArtifact,
   ActivityRevisionInput,
@@ -64,7 +68,11 @@ import {
   TaskStateError,
 } from '../jobs/task'
 import { ProductionWorker } from '../jobs/worker'
+import {
+  ProjectPreviewAdapterRegistry,
+} from '../recording/adapter-registry'
 import { recordWithPlaywright } from '../recording/playwright'
+import { withProjectPreview } from '../recording/preview'
 import {
   listStorageRecycleEntries,
   moveToRecycleBin,
@@ -136,6 +144,7 @@ export interface ContentStudioServerOptions {
   databasePath?: string
   production?: ProductionTaskDependencies
   productionOutputRoot?: string
+  projectPreviewAdapters?: ProjectPreviewAdapterRegistration[]
   project: ProjectRecord
   projectChannelBindings?: ProjectChannelBinding[]
   repository?: ContentStudioRepository
@@ -162,6 +171,10 @@ export interface ContentStudioApplicationHandle {
 export function createContentStudioServer(
   options: ContentStudioServerOptions,
 ): ContentStudioServerHandle {
+  const previewAdapters = new ProjectPreviewAdapterRegistry(
+    options.projectPreviewAdapters,
+  )
+  assertRegisteredProjectAdapters(options, previewAdapters)
   const application = createContentStudioApplication(options)
   const production = options.production ?? {
     record: recordWithPlaywright,
@@ -185,7 +198,9 @@ export function createContentStudioServer(
       projectOrigin,
       signal,
       taskId,
-    }) => application.service.runActivityProductionTask(
+    }) => runActivityProductionTaskWithPreviewAdapter(
+      application.service,
+      previewAdapters,
       projectId,
       taskId,
       {
@@ -206,6 +221,7 @@ export function createContentStudioServer(
       {
         dependencies: production,
         outputRoot: productionOutputRoot,
+        previewAdapters,
         worker,
       },
     )
@@ -565,7 +581,9 @@ async function handleRequest(
         )
       }
       const input = parseRecordProductionInput(await readJsonBody(request))
-      const result = await service.runActivityProductionTask(
+      const result = await runActivityProductionTaskWithPreviewAdapter(
+        service,
+        production.previewAdapters,
         requestProjectId,
         taskId,
         {
@@ -962,6 +980,76 @@ export function createProductionWorkerJob(
     projectId: task.projectId,
     projectOrigin: origin,
     taskId: task.taskId,
+  }
+}
+
+type ActivityProductionInput = Pick<
+  ProductionTaskInput,
+  'baseUrl' | 'maxAttempts' | 'outputDirectory' | 'projectOrigin' | 'signal'
+>
+
+async function runActivityProductionTaskWithPreviewAdapter(
+  service: ContentStudioApplicationService,
+  previewAdapters: ProjectPreviewAdapterRegistry,
+  projectId: string,
+  taskId: string,
+  input: ActivityProductionInput,
+  dependencies: ProductionTaskDependencies,
+): Promise<Awaited<ReturnType<ContentStudioApplicationService['runActivityProductionTask']>>> {
+  const view = service.getProjectView(projectId)
+  const adapterId = view.snapshot.manifest.adapterId
+  const adapter = previewAdapters.resolve(projectId, adapterId)
+  if (adapterId !== undefined && adapter === undefined) {
+    throw new Error(
+      `Project ${projectId} requires registered preview adapter: ${adapterId}`,
+    )
+  }
+  if (adapter === undefined)
+    return service.runActivityProductionTask(projectId, taskId, input, dependencies)
+
+  return withProjectPreview(
+    adapter,
+    {
+      projectId,
+      ...(input.signal === undefined ? {} : { signal: input.signal }),
+    },
+    baseUrl => service.runActivityProductionTask(
+      projectId,
+      taskId,
+      {
+        ...input,
+        baseUrl,
+        projectOrigin: baseUrl,
+      },
+      dependencies,
+    ),
+  )
+}
+
+function assertRegisteredProjectAdapters(
+  options: ContentStudioServerOptions,
+  previewAdapters: ProjectPreviewAdapterRegistry,
+): void {
+  const projects = [
+    {
+      projectId: options.project.projectId,
+      snapshot: options.snapshot,
+    },
+    ...(options.additionalProjects ?? []).map(registration => ({
+      projectId: registration.project.projectId,
+      snapshot: registration.snapshot,
+    })),
+  ]
+  for (const { projectId, snapshot } of projects) {
+    const adapterId = snapshot.manifest.adapterId
+    if (
+      adapterId !== undefined
+      && previewAdapters.resolve(projectId, adapterId) === undefined
+    ) {
+      throw new Error(
+        `Project ${projectId} requires registered preview adapter: ${adapterId}`,
+      )
+    }
   }
 }
 
@@ -2189,5 +2277,6 @@ class RequestError extends Error {
 interface RuntimeProductionOptions {
   dependencies: ProductionTaskDependencies
   outputRoot: string
+  previewAdapters: ProjectPreviewAdapterRegistry
   worker: ProductionWorker
 }
