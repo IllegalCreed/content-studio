@@ -820,6 +820,139 @@ main {
   box-shadow: 0 0 0.75rem rgb(217 255 67 / 40%);
 }
 
+.video-action-progress {
+  height: 0.42rem;
+  margin: 1rem 0;
+  padding: 0.08rem;
+  border: 1px solid var(--stroke);
+  background: #151713;
+}
+
+.video-action-progress span {
+  height: 100%;
+}
+
+.recording-actions {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid #596233;
+  background: rgb(217 255 67 / 3%);
+}
+
+.recording-actions-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--stroke);
+}
+
+.recording-actions-heading h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.recording-actions-heading small,
+.recording-scene-heading small,
+.recording-action-list small {
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.58rem;
+}
+
+.recording-actions-heading small {
+  padding-top: 0.25rem;
+  text-align: right;
+}
+
+.recording-scene-list,
+.recording-action-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recording-scene + .recording-scene {
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--stroke);
+}
+
+.recording-scene-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.2rem 0.6rem;
+  align-items: baseline;
+}
+
+.recording-scene-heading > span {
+  color: var(--acid);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.58rem;
+}
+
+.recording-scene-heading strong {
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.recording-scene-heading small {
+  grid-column: 2;
+  line-height: 1.45;
+}
+
+.recording-action-list {
+  display: grid;
+  gap: 0.2rem;
+  margin-top: 0.6rem;
+  padding-left: 0.2rem;
+}
+
+.recording-action-list li {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid transparent;
+}
+
+.recording-action-list li[data-action-status='active'] {
+  border-color: #596233;
+  background: rgb(217 255 67 / 7%);
+}
+
+.recording-action-list li[data-action-status='pending'] {
+  opacity: 0.58;
+}
+
+.recording-action-index {
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.58rem;
+  text-align: right;
+}
+
+.recording-action-list li[data-action-status='done'] .recording-action-index {
+  color: var(--acid);
+}
+
+.recording-action-list strong {
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.recording-actions-note {
+  margin: 1rem 0;
+  padding: 0.8rem;
+  border: 1px dashed var(--stroke);
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+}
+
 .video-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(16rem, 0.65fr);
@@ -1375,38 +1508,6 @@ button:disabled {
   color: var(--muted);
   font-size: 0.85rem;
   line-height: 1.6;
-}
-
-.task-progress {
-  margin: 1.25rem 0 0;
-}
-
-.task-progress-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: baseline;
-  color: var(--muted);
-  font-family: 'DM Mono', monospace;
-  font-size: 0.62rem;
-}
-
-.task-progress-heading strong {
-  color: var(--acid);
-  font-size: 0.68rem;
-  font-weight: 500;
-}
-
-.task-progress .progress-track {
-  height: 0.45rem;
-  margin: 0.55rem 0 0;
-  padding: 0.1rem;
-  border: 1px solid var(--stroke);
-  background: #151713;
-}
-
-.task-progress .progress-track span {
-  height: 100%;
 }
 
 .task-events {

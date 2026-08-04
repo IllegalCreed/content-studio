@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { VideoJobProjection } from '../model'
+import type { VideoJobProjection, VideoPlanProjection } from '../model'
 import { humanizeEventKind } from '../model'
 
 const props = defineProps<{
@@ -11,6 +11,7 @@ const props = defineProps<{
   job: VideoJobProjection
   runtimeConnected: boolean
   taskTitle?: string
+  videoPlan?: VideoPlanProjection | null
 }>()
 
 const progress = computed(() =>
@@ -18,6 +19,30 @@ const progress = computed(() =>
     ? 0
     : Math.round((props.job.completedActions / props.job.totalActions) * 100),
 )
+
+const recordingScenes = computed(() => {
+  let actionIndex = 0
+  return (props.videoPlan?.scenes ?? []).map(scene => ({
+    ...scene,
+    actions: scene.actions.map(action => {
+      const index = actionIndex++
+      const status: 'done' | 'active' | 'pending' = index < props.job.completedActions
+        ? 'done'
+        : index === props.job.completedActions
+          ? 'active'
+          : 'pending'
+      return {
+        ...action,
+        index,
+        status,
+      }
+    }),
+  }))
+})
+
+function actionStatusLabel(status: 'active' | 'done' | 'pending'): string {
+  return status === 'done' ? '已完成' : status === 'active' ? '当前动作' : '待执行'
+}
 </script>
 
 <template>
@@ -40,9 +65,44 @@ const progress = computed(() =>
       </div>
     </div>
 
-    <div class="progress-track">
+    <div
+      class="progress-track video-action-progress"
+      data-testid="recording-action-progress"
+      role="progressbar"
+      aria-label="录制动作进度"
+      :aria-valuemax="100"
+      :aria-valuemin="0"
+      :aria-valuenow="progress"
+    >
       <span :style="{ width: `${progress}%` }" />
     </div>
+
+    <div v-if="recordingScenes.length > 0" class="recording-actions" data-testid="recording-action-list">
+      <div class="recording-actions-heading">
+        <div>
+          <p class="eyebrow">当前阶段 · 录制中</p>
+          <h3>动作清单</h3>
+        </div>
+        <small>动作是场景步骤的执行明细</small>
+      </div>
+      <ol class="recording-scene-list">
+        <li v-for="(scene, sceneIndex) in recordingScenes" :key="scene.flowId" class="recording-scene">
+          <div class="recording-scene-heading">
+            <span>场景 {{ String(sceneIndex + 1).padStart(2, '0') }}</span>
+            <strong>{{ scene.title }}</strong>
+            <small>{{ scene.objective }}</small>
+          </div>
+          <ol class="recording-action-list">
+            <li v-for="action in scene.actions" :key="action.index" :data-action-status="action.status">
+              <span class="recording-action-index">{{ action.index + 1 }}</span>
+              <strong>{{ action.label }}</strong>
+              <small>{{ actionStatusLabel(action.status) }}</small>
+            </li>
+          </ol>
+        </li>
+      </ol>
+    </div>
+    <p v-else class="recording-actions-note">当前没有可展开的动作计划，仅显示录制回执。</p>
 
     <div class="video-grid">
       <div

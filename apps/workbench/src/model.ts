@@ -150,7 +150,13 @@ function formatBytes(sizeBytes: number): string {
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+export interface VideoPlanActionProjection {
+  kind: string
+  label: string
+}
+
 export interface VideoPlanSceneProjection {
+  actions: VideoPlanActionProjection[]
   flowId: string
   objective: string
   startPath: string
@@ -744,10 +750,32 @@ export const snapshot: WorkbenchSnapshot = {
         viewport: { height: 1920, width: 1080 },
         scenes: [
           {
-            flowId: 'quick-sort',
+            actions: [
+              { kind: 'wait-for', label: '等待拒绝按钮出现' },
+              { kind: 'click', label: '点击拒绝按钮' },
+              { kind: 'wait-for', label: '等待播放按钮出现' },
+              { kind: 'click', label: '点击播放按钮' },
+              { kind: 'wait', label: '等待 2400 毫秒' },
+              { kind: 'capture', label: '截取分区动画' },
+            ],
+            flowId: 'quick-sort-zh',
             objective: '展示分区步骤，让用户看懂比较和交换。',
-            startPath: '/quick-sort',
-            title: '快速排序 · 分区过程',
+            startPath: '/docs/quick-sort',
+            title: '快速排序中文演示',
+          },
+          {
+            actions: [
+              { kind: 'wait-for', label: '等待 Decline 按钮出现' },
+              { kind: 'click', label: '点击 Decline 按钮' },
+              { kind: 'wait-for', label: '等待 Play 按钮出现' },
+              { kind: 'click', label: '点击 Play 按钮' },
+              { kind: 'wait', label: '等待 2400 毫秒' },
+              { kind: 'capture', label: '截取 partition-animation-en' },
+            ],
+            flowId: 'quick-sort-en',
+            objective: '展示英文页面中的分区步骤。',
+            startPath: '/en/docs/quick-sort',
+            title: '快速排序英文演示',
           },
         ],
       },

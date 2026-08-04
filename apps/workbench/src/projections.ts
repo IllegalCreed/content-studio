@@ -1,6 +1,7 @@
 import type {
   ActivityArtifact,
   CaptureFlow,
+  CaptureStep,
   ChannelContent,
   ChannelId,
   ContentGroup,
@@ -16,6 +17,7 @@ import type {
   PublicationReceipt,
   PublishingActivity,
   RecordingAttemptRecord,
+  SemanticLocator,
 } from '@content-studio/core-types'
 import type {
   ActivityArtifactProjection,
@@ -702,6 +704,7 @@ function createVideoPlanProjection(
       const flow = flowById.get(flowId)
       const outline = outlineByFlowId.get(flowId)
       return {
+        actions: (flow?.steps ?? []).map(captureStepProjection),
         flowId,
         objective: outline?.objective['zh-CN'] ?? outline?.objective.en ?? '按项目流程执行该场景。',
         startPath: flow?.startPath ?? '未登记路径',
@@ -709,4 +712,35 @@ function createVideoPlanProjection(
       }
     }),
   }
+}
+
+function captureStepProjection(step: CaptureStep) {
+  switch (step.kind) {
+    case 'capture':
+      return { kind: step.kind, label: `截取 ${step.label}` }
+    case 'click':
+      return { kind: step.kind, label: `点击${semanticLocatorLabel(step.locator)}` }
+    case 'fill':
+      return { kind: step.kind, label: `填写${semanticLocatorLabel(step.locator)}` }
+    case 'press':
+      return { kind: step.kind, label: `按键 ${step.key}` }
+    case 'wait':
+      return { kind: step.kind, label: `等待 ${step.durationMs} 毫秒` }
+    case 'wait-for':
+      return { kind: step.kind, label: `等待${semanticLocatorLabel(step.locator)}出现` }
+  }
+}
+
+function semanticLocatorLabel(locator: SemanticLocator): string {
+  const value = 'name' in locator && typeof locator.name === 'string'
+    ? locator.name
+    : locator.value
+  const aliases: Record<string, string> = {
+    Decline: '拒绝',
+    Play: '播放',
+  }
+  const localizedValue = aliases[value] ?? value
+  return locator.by === 'role' && locator.value === 'button'
+    ? `${localizedValue}按钮`
+    : localizedValue
 }
