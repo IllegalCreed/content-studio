@@ -567,10 +567,19 @@ main {
   font-size: 1.6rem;
 }
 
+.detail-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 .asset-count {
   color: var(--acid);
   font-family: 'DM Mono', monospace;
   font-size: 0.72rem;
+  white-space: nowrap;
 }
 
 .detail-footer {
@@ -4267,6 +4276,10 @@ footer {
     align-items: flex-start;
     flex-direction: column;
     margin-top: 2rem;
+  }
+
+  .detail-heading-actions {
+    justify-content: flex-start;
   }
 
   .detail-summary-grid,
