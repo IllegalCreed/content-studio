@@ -73,7 +73,7 @@ const activeModule = computed<ModuleId>(() => {
     return 'owner'
   if (path.startsWith('/project/reports'))
     return 'reports'
-  if (path.startsWith('/project/activities'))
+  if (path.startsWith('/project/activities') || /^\/project\/[^/]+\/activities(?:\/|$)/u.test(path))
     return 'activities'
   return 'project'
 })

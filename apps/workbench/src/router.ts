@@ -9,6 +9,10 @@ const routes = [
   },
   {
     component: ActivityDetailPage,
+    path: '/project/:projectId/activities/:activityId',
+  },
+  {
+    component: ActivityDetailPage,
     path: '/project/activities/:activityId',
   },
   {

@@ -163,6 +163,7 @@ const {
   selectedChannelId,
   selectedTaskId,
 } = storeToRefs(uiStore)
+const selectedTaskProjectId = ref<string | null>(null)
 const {
   loading: runtimeLoading,
   runtimeConnected,
@@ -238,7 +239,6 @@ const channelBindingSaving = ref(false)
 const channelBindingSaveError = ref<string | null>(null)
 const runtimeTaskKeys = ref<Set<string>>(new Set())
 const runtimeActivityIds = ref<Set<string>>(new Set())
-const selectedTaskProjectId = ref<string | null>(null)
 const projectCaptureFlowIds = ref<string[]>([])
 const taskActionError = ref<string | null>(null)
 const taskActionPending = ref<'cancel' | 'record' | 'retry' | 'start' | null>(null)
@@ -707,8 +707,10 @@ function selectModule(moduleId: ModuleId): void {
 function syncTaskScopeForModule(moduleId: ModuleId): void {
   if (moduleId === 'tasks')
     uiStore.setTaskScope('全部项目')
-  else if (moduleId === 'project-tasks')
+  else if (moduleId === 'project-tasks') {
     uiStore.setTaskScope('当前项目')
+    selectedTaskProjectId.value = snapshot.project.projectId
+  }
 }
 
 function moduleForPath(path: string): ModuleId {
@@ -757,7 +759,7 @@ watch(() => route.path, (path) => {
 
 watch(() => route.query, query => applyRouteUiState(query), { deep: true })
 watch(
-  [selectedCampaignId, selectedTaskId, selectedAssetId, assetFilter, selectedChannelId, selectedChannelAccountId],
+  [selectedCampaignId, selectedTaskId, selectedTaskProjectId, selectedAssetId, assetFilter, selectedChannelId, selectedChannelAccountId],
   () => {
     const query = routeQueryForModule(activeModule.value)
     if (sameRouteQuery(route.query, query))
@@ -771,8 +773,10 @@ function applyRouteUiState(query: Parameters<typeof parseWorkbenchUiQuery>[0]): 
   const state = parseWorkbenchUiQuery(query)
   if (state.selectedCampaignId !== undefined)
     uiStore.selectCampaign(state.selectedCampaignId)
-  if (state.selectedTaskId !== undefined)
+  if (state.selectedTaskId !== undefined) {
     uiStore.selectTask(state.selectedTaskId)
+    selectedTaskProjectId.value = state.selectedTaskProjectId ?? null
+  }
   if (state.selectedAssetId !== undefined)
     uiStore.selectAsset(state.selectedAssetId)
   if (state.assetFilter !== undefined)
@@ -790,6 +794,7 @@ function currentRouteUiState(): WorkbenchUiRouteState {
     selectedCampaignId: selectedCampaignId.value,
     selectedChannelAccountId: selectedChannelAccountId.value ?? undefined,
     selectedChannelId: selectedChannelId.value,
+    selectedTaskProjectId: selectedTaskProjectId.value ?? undefined,
     selectedTaskId: selectedTaskId.value,
   }
 }
@@ -817,17 +822,17 @@ function queryValues(value: unknown): string[] {
   return typeof value === 'string' ? [value] : []
 }
 
-function openActivityDetail(campaignId: string): void {
+async function openActivityDetail(campaignId: string, projectId = snapshot.project.projectId): Promise<void> {
+  await router.push(`/project/${encodeURIComponent(projectId)}/activities/${encodeURIComponent(campaignId)}`)
   uiStore.selectCampaign(campaignId)
-  void router.push(`/project/activities/${encodeURIComponent(campaignId)}`)
 }
 
 function openGlobalActivity(projectId: string, activityId: string): void {
   if (projectId === snapshot.project.projectId) {
-    openActivityDetail(activityId)
+    openActivityDetail(activityId, projectId)
     return
   }
-  void switchProject(projectId).then(() => openActivityDetail(activityId))
+  void switchProject(projectId).then(() => openActivityDetail(activityId, projectId))
 }
 
 function selectTask(projectIdOrTaskId: string, taskIdFromEvent?: string): void {
@@ -846,6 +851,7 @@ function selectGlobalTask(projectId: string, taskId: string): void {
 }
 
 function openOwnerTask(taskId: string): void {
+  selectedTaskProjectId.value = snapshot.project.projectId
   uiStore.selectTask(taskId)
   uiStore.setTaskScope('当前项目')
   void router.push({

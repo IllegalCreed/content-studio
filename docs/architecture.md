@@ -119,6 +119,12 @@ Content Studio Plugin 是 AI 宿主入口，只包含 Skills、MCP 连接和 MCP
 录制命令仍回到项目范围接口。需要报告、完整素材或其他项目业务数据时，仍必须进入
 对应项目读取 `GET /api/v1/projects/:projectId`。
 
+工作台的活动详情和全局任务深链接也必须保留项目作用域：活动详情使用
+`/project/:projectId/activities/:activityId`，全局任务查询在 `task` 之外写入
+`taskProject`。这样即使不同项目存在同名活动或重复任务 ID，刷新页面、复制链接和
+从全局列表打开详情也不会把数据投影到错误项目；旧的无项目活动详情路径仅作为默认
+项目兼容入口，不作为跨项目链接生成格式。
+
 ### `marketing-ops` 受管依赖
 
 `marketing-ops` 随 Content Studio 安装和做兼容性检查，但保持独立仓库、包、

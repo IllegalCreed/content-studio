@@ -371,6 +371,10 @@ interface JobProgressEvent {
 显示“哪个项目的哪个活动/任务”，但所有取消、重试、录制等命令仍携带明确的
 `projectId`，不会因为全局列表而失去项目边界。
 
+因此工作台生成的活动详情链接使用 `/project/:projectId/activities/:activityId`，全局任务
+深链接同时保存 `taskProject` 和 `task`。项目 ID 是数据边界，不是可选的展示标签；没有
+项目作用域就不能可靠地还原活动、任务事件、素材和回执。
+
 初始应用命令保持高层且有范围限制：
 
 - 注册或验证项目快照；

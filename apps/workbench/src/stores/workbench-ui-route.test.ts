@@ -14,11 +14,13 @@ describe('workbench UI route state', () => {
       assetKind: 'image',
       channel: 'github',
       task: 'release-notes-publish-x',
+      taskProject: 'algorithm-visualizer',
     }
 
     expect(parseWorkbenchUiQuery(query)).toEqual({
       selectedCampaignId: 'quick-sort-guide',
       selectedTaskId: 'release-notes-publish-x',
+      selectedTaskProjectId: 'algorithm-visualizer',
       selectedAssetId: 'algorithm-logo',
       assetFilter: 'image',
       selectedChannelId: 'github',
@@ -34,6 +36,10 @@ describe('workbench UI route state', () => {
     expect(buildWorkbenchUiQuery('channels', parseWorkbenchUiQuery(query))).toEqual({
       account: 'github-algorithm-docs',
       channel: 'github',
+    })
+    expect(buildWorkbenchUiQuery('tasks', parseWorkbenchUiQuery(query))).toEqual({
+      task: 'release-notes-publish-x',
+      taskProject: 'algorithm-visualizer',
     })
   })
 

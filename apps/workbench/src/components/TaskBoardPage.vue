@@ -90,7 +90,7 @@ const selectedTaskHandoff = computed(() =>
       <div class="task-list" role="list" aria-label="执行任务">
         <button
           v-for="task in props.visibleTasks"
-          :key="task.taskId"
+          :key="`${task.projectId ?? props.projectName}:${task.taskId}`"
           type="button"
           :data-task-id="task.taskId"
           :class="{ selected: task.taskId === props.selectedTask.taskId && task.projectId === props.selectedTask.projectId }"

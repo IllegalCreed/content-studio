@@ -8,6 +8,7 @@ export interface WorkbenchUiRouteState {
   selectedCampaignId?: string
   selectedChannelAccountId?: string
   selectedChannelId?: ChannelId
+  selectedTaskProjectId?: string
   selectedTaskId?: string
 }
 
@@ -51,11 +52,14 @@ export function parseWorkbenchUiQuery(query: LocationQuery): WorkbenchUiRouteSta
   const assetKind = queryValue(query.assetKind)
   const channelId = queryValue(query.channel)
   const accountId = queryValue(query.account)
+  const taskProjectId = queryValue(query.taskProject)
 
   if (activityId !== undefined)
     state.selectedCampaignId = activityId
   if (taskId !== undefined)
     state.selectedTaskId = taskId
+  if (taskProjectId !== undefined)
+    state.selectedTaskProjectId = taskProjectId
   if (assetId !== undefined)
     state.selectedAssetId = assetId
   if (assetKind !== undefined && assetFilters.has(assetKind as AssetFilter))
@@ -80,7 +84,12 @@ export function buildWorkbenchUiQuery(
   if (moduleId === 'tasks' || moduleId === 'project-tasks') {
     return state.selectedTaskId === undefined
       ? {}
-      : { task: state.selectedTaskId }
+      : {
+          task: state.selectedTaskId,
+          ...(state.selectedTaskProjectId === undefined
+            ? {}
+            : { taskProject: state.selectedTaskProjectId }),
+        }
   }
   if (moduleId === 'assets') {
     return {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type {
   CampaignVideo,
@@ -27,12 +27,18 @@ const viewportDraft = reactive<VideoViewport>({
 })
 
 const activityId = computed(() => String(route.params.activityId ?? ''))
+const routeProjectId = computed(() => {
+  const value = route.params.projectId
+  return typeof value === 'string' && value.trim() !== '' ? value : store.snapshot.project.projectId
+})
+const projectName = computed(() => store.projectView?.project.name
+  ?? (routeProjectId.value === store.snapshot.project.projectId ? store.snapshot.project.name : routeProjectId.value))
 const runtimeActivity = computed(() => store.activities.find(activity =>
   activity.activityId === activityId.value,
 ))
-const staticActivity = computed(() => store.snapshot.campaigns.find(campaign =>
-  campaign.campaignId === activityId.value,
-))
+const staticActivity = computed(() => routeProjectId.value !== store.snapshot.project.projectId
+  ? undefined
+  : store.snapshot.campaigns.find(campaign => campaign.campaignId === activityId.value))
 const title = computed(() => runtimeActivity.value?.topic['zh-CN']
   ?? runtimeActivity.value?.topic.en
   ?? staticActivity.value?.title
@@ -72,11 +78,15 @@ const videoPlan = computed(() => {
 const tasks = computed(() => {
   if (store.projectView !== null)
     return store.projectView.tasks.filter(task => task.activityId === activityId.value)
+  if (routeProjectId.value !== store.snapshot.project.projectId)
+    return []
   return store.snapshot.tasks.filter(task => task.activityId === activityId.value)
 })
 const contentGroups = computed<ContentGroupProjection[]>(() => {
   if (store.projectView === null)
-    return staticActivity.value?.contentGroups ?? []
+    return routeProjectId.value !== store.snapshot.project.projectId
+      ? []
+      : staticActivity.value?.contentGroups ?? []
   return store.projectView.contentGroups
     .filter(group => group.activityId === activityId.value)
     .map(group => ({
@@ -100,7 +110,9 @@ const contentGroups = computed<ContentGroupProjection[]>(() => {
 })
 const artifacts = computed<ActivityArtifactProjection[]>(() => {
   if (store.projectView === null)
-    return staticActivity.value?.activityArtifacts ?? []
+    return routeProjectId.value !== store.snapshot.project.projectId
+      ? []
+      : staticActivity.value?.activityArtifacts ?? []
   return activityArtifactProjections(
     store.projectView.activityArtifacts.filter(artifact => artifact.activityId === activityId.value),
   )
@@ -186,17 +198,17 @@ function activityStatusLabel(status: PublishingActivity['status']): string {
   return labels[status]
 }
 
-onMounted(() => {
-  if (store.projectView === null)
-    void store.refresh()
-})
+watch(routeProjectId, (projectId) => {
+  if (store.projectView?.project.projectId !== projectId)
+    void store.refresh(projectId)
+}, { immediate: true })
 watch(videoPlan, syncViewportDraft, { immediate: true })
 </script>
 
 <template>
   <WorkbenchShell
-    :project-id="store.snapshot.project.projectId"
-    :project-name="store.snapshot.project.name"
+    :project-id="routeProjectId"
+    :project-name="projectName"
     :runtime-connected="store.runtimeConnected"
     :runtime-loading="store.loading"
   >

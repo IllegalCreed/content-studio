@@ -9,13 +9,14 @@ import { snapshot as snapshotSeed } from '../model'
 import { createWorkbenchRuntime } from '../runtime'
 
 export const useWorkbenchStore = defineStore('workbench', () => {
-  const projectId = snapshotSeed.project.projectId
+  const projectId = ref(snapshotSeed.project.projectId)
   const snapshot = ref(structuredClone(snapshotSeed))
   const projectView = ref<ContentStudioProjectView | null>(null)
   const runtimeConnected = ref(false)
   const runtimeError = ref<string | null>(null)
   const loading = ref(false)
   const runtime = createWorkbenchRuntime()
+  let refreshRequestId = 0
 
   const activities = computed(() => projectView.value?.activities ?? [])
 
@@ -36,17 +37,23 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     runtimeError.value = error instanceof Error ? error.message : '本地运行时暂时不可用'
   }
 
-  async function refresh(): Promise<void> {
+  async function refresh(requestedProjectId = projectId.value): Promise<void> {
+    const requestId = ++refreshRequestId
+    projectId.value = requestedProjectId
     beginRuntimeLoad()
+    projectView.value = null
     try {
       const health = await runtime.health()
-      const view = await runtime.project(projectId)
+      const view = await runtime.project(requestedProjectId)
+      if (requestId !== refreshRequestId || projectId.value !== requestedProjectId)
+        return
       if (health.status === 'ready')
         markRuntimeReady()
       projectView.value = view
     }
     catch (error: unknown) {
-      markRuntimeUnavailable(error)
+      if (requestId === refreshRequestId && projectId.value === requestedProjectId)
+        markRuntimeUnavailable(error)
     }
   }
 
@@ -54,7 +61,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     activityId: string,
     baseVersion: number,
   ): Promise<void> {
-    await runtime.confirmActivityVideoPlan(projectId, activityId, baseVersion)
+    await runtime.confirmActivityVideoPlan(projectId.value, activityId, baseVersion)
     await refresh()
   }
 
@@ -67,7 +74,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     await runtime.reviseActivity({
       activityId: activity.activityId,
       baseVersion: activity.version,
-      projectId,
+      projectId: projectId.value,
       topic: activity.topic,
       video: {
         ...activity.video,

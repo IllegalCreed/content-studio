@@ -29,4 +29,24 @@ describe('activity detail page', () => {
     expect(wrapper.find('[data-testid="activity-publication-results"]').exists()).toBe(true)
     expect(wrapper.get('a[data-module="activities"]').attributes('aria-current')).toBe('page')
   })
+
+  it('从项目作用域深链接加载对应项目，而不是默认项目', async () => {
+    const pinia = createPinia()
+    const store = useWorkbenchStore(pinia)
+    const refresh = vi.spyOn(store, 'refresh').mockResolvedValue()
+    const router = createWorkbenchRouter(true)
+    await router.push('/project/project-b/activities/quick-sort-guide')
+    await router.isReady()
+
+    const wrapper = mount(ActivityDetailPage, {
+      global: {
+        plugins: [pinia, router],
+      },
+    })
+
+    expect(refresh).toHaveBeenCalledWith('project-b')
+    expect(wrapper.get('.project-switcher').text()).toContain('project-b')
+    expect(wrapper.get('a[data-module="activities"]').attributes('aria-current')).toBe('page')
+    expect(wrapper.get('h1').text()).toBe('活动不存在')
+  })
 })

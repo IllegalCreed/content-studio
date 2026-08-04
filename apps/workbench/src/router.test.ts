@@ -20,4 +20,15 @@ describe('workbench routes', () => {
     expect(router.currentRoute.value.params.activityId).toBe('quick-sort-guide')
     expect(router.currentRoute.value.matched[0]?.components?.default).toBeDefined()
   })
+
+  it('为跨项目活动详情保留项目作用域', async () => {
+    const router = createWorkbenchRouter(true)
+
+    await router.push('/project/project-b/activities/quick-sort-guide')
+    await router.isReady()
+
+    expect(router.currentRoute.value.params.projectId).toBe('project-b')
+    expect(router.currentRoute.value.params.activityId).toBe('quick-sort-guide')
+    expect(router.currentRoute.value.matched[0]?.components?.default).toBeDefined()
+  })
 })

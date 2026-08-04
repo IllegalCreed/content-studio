@@ -1,7 +1,7 @@
 import type { WorkbenchSnapshot } from './model'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { createWorkbenchRouter } from './router'
 import { useWorkbenchStore } from './stores/workbench'
@@ -12,6 +12,7 @@ import './styles.css'
 describe('content studio workbench', () => {
   it('把规划中的模块作为可切换的功能页面展示', async () => {
     const router = createWorkbenchRouter(true)
+    const routerPush = vi.spyOn(router, 'push')
     await router.push('/overview')
     await router.isReady()
     const pinia = createPinia()
@@ -82,9 +83,12 @@ describe('content studio workbench', () => {
     expect(wrapper.get('[data-testid="shooting-plan"]').text()).toContain('待确认')
     expect(wrapper.get('[data-testid="confirm-video-plan"]').attributes()).toHaveProperty('disabled')
     await wrapper.get('button[data-campaign-id="release-notes"]').trigger('click')
+    await flushPromises()
 
     expect(wrapper.text()).toContain('版本更新发布')
     expect(wrapper.text()).toContain('等待人工')
+    expect(routerPush).toHaveBeenCalledWith('/project/algorithm-visualizer/activities/release-notes')
+    expect(router.currentRoute.value.path).toBe('/project/algorithm-visualizer/activities/release-notes')
 
     await wrapper.get('a[data-module="tasks"]').trigger('click')
     await nextTick()
