@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import PublicationTaskPanel from './PublicationTaskPanel.vue'
 import VideoJobPanel from './VideoJobPanel.vue'
 import StatusRail from './StatusRail.vue'
 import type { CampaignProjection, OwnerHandoffProjection, WorkbenchSnapshot } from '../model'
@@ -54,6 +55,12 @@ const showVideoJobPanel = computed(() =>
   props.selectedTask.kind === '制作'
   && selectedTaskContent.value?.format === '视频'
   && props.selectedTaskCampaign.videoJob !== null,
+)
+
+const selectedTaskHandoff = computed(() =>
+  props.selectedTask.kind === '发布'
+    ? props.selectedTaskCampaign.handoffs.find(handoff => handoff.channel === props.selectedTask.channel)
+    : undefined,
 )
 </script>
 
@@ -196,5 +203,12 @@ const showVideoJobPanel = computed(() =>
     :job="props.selectedTaskCampaign.videoJob"
     :runtime-connected="props.runtimeConnected"
     :task-title="props.selectedTask.title"
+  />
+  <PublicationTaskPanel
+    v-if="props.visibleTasks.length > 0 && props.selectedTask.kind === '发布'"
+    :handoff="selectedTaskHandoff"
+    :runtime-connected="props.runtimeConnected"
+    :task="props.selectedTask"
+    @go-owner="emit('go-owner')"
   />
 </template>

@@ -127,6 +127,9 @@ describe('content studio workbench', () => {
     expect(wrapper.text()).toContain('需要人工介入')
     expect(wrapper.text()).toContain('等待渠道授权人登录、审核和最终点击')
     expect(wrapper.find('button[aria-label="Cancel recording job"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="publication-task-panel"]').text()).toContain('发布交付')
+    expect(wrapper.get('[data-testid="publication-task-panel"]').text()).toContain('打开官方页面')
+    expect(wrapper.get('[data-testid="publication-task-handoff"]').text()).toContain('请在官方页面完成审核和最终发布点击。')
 
     await wrapper.get('a[data-module="channels"]').trigger('click')
     await flushPromises()

@@ -703,6 +703,152 @@ main {
   font-size: 0.58rem;
 }
 
+.publication-panel {
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.publication-task-context {
+  max-width: 58rem;
+  margin: 0.45rem 0 0;
+  color: var(--acid);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  line-height: 1.5;
+}
+
+.publication-task-id {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.58rem;
+}
+
+.publication-task-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-top: 1.25rem;
+}
+
+.publication-task-meta > div {
+  display: grid;
+  gap: 0.3rem;
+  min-height: 5.25rem;
+  padding: 0.8rem;
+  border: 1px solid var(--stroke);
+  background: #151713;
+}
+
+.publication-task-meta span,
+.publication-task-meta small {
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.58rem;
+}
+
+.publication-task-meta strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.publication-handoff {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #596233;
+  background: rgb(217 255 67 / 5%);
+}
+
+.publication-handoff-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.publication-handoff-heading h3 {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.publication-handoff-heading > span {
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.58rem;
+  white-space: nowrap;
+}
+
+.publication-handoff-reason {
+  margin: 0.7rem 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.publication-handoff-checklist {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.7rem 0 0;
+  padding-left: 1rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.publication-handoff-actions {
+  display: flex;
+  gap: 0.55rem;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 0.9rem;
+}
+
+.publication-handoff-actions a,
+.publication-handoff-actions button {
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--stroke);
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.publication-handoff-actions a:hover {
+  border-color: var(--acid);
+  color: var(--acid);
+}
+
+.publication-receipt-note {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  padding: 0.9rem;
+  border: 1px dashed var(--stroke);
+  background: rgb(0 0 0 / 12%);
+}
+
+.publication-receipt-note strong {
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.publication-receipt-note p:last-child {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.publication-runtime-note {
+  margin: 0.9rem 0 0;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.58rem;
+  line-height: 1.45;
+}
+
 .progress-track {
   height: 2px;
   margin: 1.5rem 0;
@@ -4069,6 +4215,7 @@ footer {
   .asset-library-layout,
   .project-overview-grid,
   .recording-evidence,
+  .publication-task-meta,
   .report-list,
   .video-grid {
     grid-template-columns: 1fr;
@@ -4204,5 +4351,17 @@ footer {
   .task-handoff-inline {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .publication-handoff-heading,
+  .publication-handoff-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .publication-handoff-actions a,
+  .publication-handoff-actions button {
+    width: 100%;
+    text-align: center;
   }
 }
