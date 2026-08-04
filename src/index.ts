@@ -73,6 +73,7 @@ export {
   prepareAttemptDirectory,
   writeRecorderReceipt,
 } from './recording/artifacts'
+export { validateAssistedRecordingPlan } from './recording/assisted-boundary'
 export {
   createPlaywrightRecordingSession,
   recordProjectWithPlaywright,

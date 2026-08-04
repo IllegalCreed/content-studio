@@ -105,6 +105,13 @@ AI 负责“拍什么、怎么讲、镜头如何组织”；项目接入层负�
 5. 浏览器插件或宿主的 Computer Use 能力辅助完成页面操作和录制。
 6. 结果标记为辅助录制，并记录页面版本、人工介入和失败原因。
 
+Content Studio 目前只接收一个窄的辅助录制计划边界：`entryUrl` 和页面观察必须是
+不带凭据的 HTTPS URL，观察页面必须保持入口同源；动作只能是 `click`、`wait-for`、
+`wait` 或 `capture`，定位只能使用 role、label、text、test-id。计划必须显式声明
+`requiresOwner: true`，不允许 `fill`、`press`、CSS/XPath、坐标、脚本或任何敏感字段。
+`validateAssistedRecordingPlan` 只负责校验这份 AI/浏览器宿主之间的计划，不会启动浏览器
+或把辅助计划交给内置 Playwright Worker。
+
 无源模式不能承诺和有源模式相同的自动化程度：
 
 - 页面改版可能导致计划失效；

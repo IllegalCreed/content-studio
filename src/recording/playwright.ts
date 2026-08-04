@@ -19,6 +19,7 @@ import type {
   RecordingActionContext,
   RecordingActionResult,
   RecordingAttemptContext,
+  RecordingContext,
   RecordingJobInput,
   RecordingJobResult,
   RecordingSceneContext,
@@ -66,6 +67,7 @@ export async function recordWithPlaywright(
   input: RecordingJobInput,
   options: PlaywrightRecordingOptions = {},
 ): Promise<RecordingJobResult> {
+  assertBuiltInRecorderContext(input.recordingContext)
   return runRecordingJob(input, {
     createSession: context =>
       createPlaywrightRecordingSession(context, options),
@@ -118,6 +120,7 @@ export async function createPlaywrightRecordingSession(
   context: RecordingAttemptContext,
   options: PlaywrightRecordingOptions = {},
 ): Promise<RecordingSession> {
+  assertBuiltInRecorderContext(context.recordingContext)
   const actionTimeoutMs = options.actionTimeoutMs
     ?? DEFAULT_ACTION_TIMEOUT_MS
   if (
@@ -138,6 +141,21 @@ export async function createPlaywrightRecordingSession(
     context,
     actionTimeoutMs,
   )
+}
+
+function assertBuiltInRecorderContext(
+  context: RecordingContext | undefined,
+): void {
+  if (
+    context?.sourceAccess === 'web-assisted'
+    || context?.captureMode === 'assisted'
+  ) {
+    throw new RecorderError(
+      'assisted-mode-unsupported',
+      'The built-in Playwright recorder does not execute web-assisted projects.',
+      false,
+    )
+  }
 }
 
 export function resolveSemanticLocator<TLocator>(

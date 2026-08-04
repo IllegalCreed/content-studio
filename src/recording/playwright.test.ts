@@ -2,6 +2,7 @@ import type { SemanticLocator, VideoPlan } from '../types'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createPlaywrightRecordingSession,
+  recordWithPlaywright,
   resolvePlaywrightRecordingContextOptions,
   resolveSemanticLocator,
   validateProjectNavigation,
@@ -105,6 +106,35 @@ describe('playwright recording policy', () => {
         ),
       ).rejects.toThrow(/actionTimeoutMs/)
     }
+  })
+
+  it('does not let the built-in recorder execute a web-assisted context', async () => {
+    await expect(recordWithPlaywright({
+      baseUrl: 'https://example.com',
+      jobId: 'assisted-recording',
+      outputDirectory: '/tmp/content-studio-assisted-recording',
+      plan: {
+        campaignId: 'assisted-campaign',
+        durationMs: 0,
+        format: 'landscape',
+        recordingConfig: {
+          colorScheme: 'dark',
+          deviceScaleFactor: 1,
+          locale: 'en',
+          outputSize: { height: 720, width: 1280 },
+          viewport: { height: 720, width: 1280 },
+        },
+        scenes: [],
+      },
+      projectId: 'assisted-project',
+      recordingContext: {
+        captureMode: 'assisted',
+        humanIntervention: true,
+        planVersion: 1,
+        repeatability: 'low',
+        sourceAccess: 'web-assisted',
+      },
+    })).rejects.toThrow(/web-assisted.*built-in|built-in.*web-assisted/i)
   })
 
   it('passes the resolved recording profile to the browser context', () => {

@@ -112,6 +112,36 @@ export type CaptureStep
     durationMs?: number
   }
 
+/**
+ * The intentionally smaller action vocabulary available to a web-assisted
+ * browser host. It excludes text entry and key presses so owner input cannot
+ * become a replayable recording step.
+ */
+export type AssistedCaptureStep = Extract<
+  CaptureStep,
+  { kind: 'capture' | 'click' | 'wait' | 'wait-for' }
+>
+
+export interface AssistedPageObservation {
+  observationId: string
+  observedAt: string
+  pageUrl: string
+  title: string
+}
+
+/**
+ * An AI/browser-host planning boundary for projects without source code.
+ * Content Studio validates and records this shape, but does not execute it.
+ */
+export interface AssistedRecordingPlan {
+  entryUrl: string
+  observations: AssistedPageObservation[]
+  planVersion: number
+  projectId: string
+  requiresOwner: true
+  steps: AssistedCaptureStep[]
+}
+
 export interface CaptureFlow {
   id: string
   title: LocalizedText
@@ -742,7 +772,8 @@ export interface ExecutionTaskStore {
 }
 
 export type RecorderFailureCode
-  = | 'authentication-page'
+  = | 'assisted-mode-unsupported'
+    | 'authentication-page'
     | 'cancelled'
     | 'cross-origin-navigation'
     | 'dialog-opened'
