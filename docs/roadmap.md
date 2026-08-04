@@ -490,9 +490,18 @@ V0.5 的完成标准是：一个活动可以分别为多个渠道准备发布包
 - [ ] 确定开源许可证、贡献方式、商标和发布治理。
 - [ ] 定义统一的本地 Runtime 布局和版本化发布物。
 - [ ] 实现可校验、幂等、默认不要求 root 的 macOS/Linux 安装器。
+- [ ] 扩展安装器到 Windows：提供原生 PowerShell 安装路径（不依赖 WSL），并明确
+      Playwright 浏览器二进制和 FFmpeg 在 Windows 上的获取与签名方式；若首版不
+      支持某些能力，必须在安装和 `doctor` 阶段诚实说明，不能静默降级。
 - [ ] 提供下载后检查再执行的安装方式，不只提供 `curl | sh`。
 - [ ] 安装器随 Content Studio 交付固定兼容版本的 `marketing-ops`。
 - [ ] 提供升级、诊断、回滚和不会删除未知文件的安全卸载。
+- [ ] 让本地 Runtime 在用户登录后自启动（macOS launchd agent / Linux systemd user
+      service / Windows 用户级计划任务或服务），并只绑定 `127.0.0.1`；自启动不得
+      开放公网端口、扫描项目目录或自动配置渠道，用户可以随时停用。
+- [ ] 让 `content-studio serve` 在同一本地端口同时提供 HTTP API 和 Vue 工作台静态
+      资源，用户打开 `http://127.0.0.1:<port>` 即看到控制面，不需要单独跑前端 dev
+      server；静态资源必须与 API 同源以避免额外 CORS 和凭据暴露。
 - [ ] 首次使用确认项目目录、能力和项目内适配器许可。
 - [ ] 通过本地 Marketplace 安装一个 Content Studio Plugin。
 - [ ] 为本地自托管和私有服务器提供完整故障诊断文档。
