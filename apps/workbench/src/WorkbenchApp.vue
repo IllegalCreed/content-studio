@@ -40,7 +40,9 @@ import type {
   ProjectAsset,
   ProjectChannelBinding,
   PublicationPlan,
+  StorageCleanupResult,
   StorageCleanupPreview,
+  StorageRecycleEntry,
   VideoFormat,
 } from '@content-studio/core-types'
 import {
@@ -186,6 +188,13 @@ const storagePreviewOpen = ref(false)
 const storagePreviewLoading = ref(false)
 const storagePreviewError = ref<string | null>(null)
 const storagePreview = ref<StorageCleanupPreview | null>(null)
+const storageCleanupArmed = ref(false)
+const storageCleanupPending = ref(false)
+const storageCleanupError = ref<string | null>(null)
+const storageCleanupResult = ref<StorageCleanupResult | null>(null)
+const storageRecycleEntries = ref<StorageRecycleEntry[]>([])
+const storageRestorePending = ref<string | null>(null)
+const storageRestoreError = ref<string | null>(null)
 const channelBindingSaving = ref(false)
 const channelBindingSaveError = ref<string | null>(null)
 const runtimeTaskIds = ref<Set<string>>(new Set())
@@ -1086,14 +1095,20 @@ async function toggleStorageCleanupPreview(): Promise<void> {
   if (!runtimeConnected.value)
     return
   storagePreviewOpen.value = !storagePreviewOpen.value
+  storageCleanupArmed.value = false
+  storageCleanupError.value = null
+  storageRestoreError.value = null
   if (!storagePreviewOpen.value || storagePreviewLoading.value)
     return
   storagePreviewLoading.value = true
   storagePreviewError.value = null
   try {
-    storagePreview.value = await workbenchRuntime.storageCleanupPreview(
-      snapshot.project.projectId,
-    )
+    const [preview, recycle] = await Promise.all([
+      workbenchRuntime.storageCleanupPreview(snapshot.project.projectId),
+      workbenchRuntime.storageRecycle(snapshot.project.projectId),
+    ])
+    storagePreview.value = preview
+    storageRecycleEntries.value = recycle.entries
   }
   catch (error: unknown) {
     storagePreviewError.value = error instanceof Error
@@ -1102,6 +1117,76 @@ async function toggleStorageCleanupPreview(): Promise<void> {
   }
   finally {
     storagePreviewLoading.value = false
+  }
+}
+
+async function confirmStorageCleanup(): Promise<void> {
+  const preview = storagePreview.value
+  if (
+    !runtimeConnected.value
+    || preview === null
+    || preview.totals.reviewFiles === 0
+    || storageCleanupPending.value
+  ) {
+    return
+  }
+  if (!storageCleanupArmed.value) {
+    storageCleanupArmed.value = true
+    return
+  }
+  storageCleanupPending.value = true
+  storageCleanupError.value = null
+  try {
+    storageCleanupResult.value = await workbenchRuntime.confirmStorageCleanup({
+      itemIds: preview.items
+        .filter(item => item.status === 'review')
+        .map(item => item.id),
+      previewId: preview.previewId,
+      projectId: snapshot.project.projectId,
+    })
+    storageCleanupArmed.value = false
+    const [nextPreview, recycle] = await Promise.all([
+      workbenchRuntime.storageCleanupPreview(snapshot.project.projectId),
+      workbenchRuntime.storageRecycle(snapshot.project.projectId),
+    ])
+    storagePreview.value = nextPreview
+    storageRecycleEntries.value = recycle.entries
+  }
+  catch (error: unknown) {
+    storageCleanupError.value = error instanceof Error
+      ? error.message
+      : '移入回收区失败，请重新读取预览'
+    storageCleanupArmed.value = false
+  }
+  finally {
+    storageCleanupPending.value = false
+  }
+}
+
+async function restoreStorageRecycleEntry(recycleId: string): Promise<void> {
+  if (!runtimeConnected.value || storageRestorePending.value !== null)
+    return
+  storageRestorePending.value = recycleId
+  storageRestoreError.value = null
+  try {
+    await workbenchRuntime.restoreStorageRecycleEntry(
+      snapshot.project.projectId,
+      recycleId,
+    )
+    const [preview, recycle] = await Promise.all([
+      workbenchRuntime.storageCleanupPreview(snapshot.project.projectId),
+      workbenchRuntime.storageRecycle(snapshot.project.projectId),
+    ])
+    storagePreview.value = preview
+    storageRecycleEntries.value = recycle.entries
+  }
+  catch (error: unknown) {
+    storageRestoreError.value = error instanceof Error
+      ? error.message
+      : '恢复回收文件失败，请重新读取回收区'
+  }
+  finally {
+    storageRestorePending.value = null
   }
 }
 
@@ -1439,14 +1524,23 @@ async function refreshProjectView(): Promise<void> {
           :runtime-connected="runtimeConnected"
           :selected-asset="selectedAsset"
           :snapshot="snapshot"
+          :storage-cleanup-armed="storageCleanupArmed"
+          :storage-cleanup-error="storageCleanupError"
+          :storage-cleanup-pending="storageCleanupPending"
+          :storage-cleanup-result="storageCleanupResult"
           :storage-preview="storagePreview"
           :storage-preview-error="storagePreviewError"
           :storage-preview-loading="storagePreviewLoading"
           :storage-preview-open="storagePreviewOpen"
+          :storage-recycle-entries="storageRecycleEntries"
+          :storage-restore-error="storageRestoreError"
+          :storage-restore-pending="storageRestorePending"
           @promote-artifact="promoteActivityArtifact"
           @select-asset="selectAsset"
           @select-artifact="selectArtifact"
-            @set-filter="uiStore.setAssetFilter($event)"
+          @set-filter="uiStore.setAssetFilter($event)"
+          @confirm-cleanup="confirmStorageCleanup"
+          @restore-recycle="restoreStorageRecycleEntry"
           @toggle-cleanup-preview="toggleStorageCleanupPreview"
         />
       </template>

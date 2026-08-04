@@ -29,15 +29,20 @@ import type {
   PromoteActivityArtifactInput,
   PublicationPlan,
   PublicationReceipt,
+  StorageCleanupConfirmation,
   StorageCleanupPreview,
   StorageCleanupPreviewItem,
   StorageCleanupPreviewItemStatus,
   StorageCleanupPreviewTotals,
+  StorageCleanupResult,
+  StorageRecycleEntry,
+  StorageRestoreResult,
   VideoFormat,
   VideoOutlineScene,
   VideoViewport,
 } from '../types'
 import { Buffer } from 'node:buffer'
+import { createHash } from 'node:crypto'
 import { readFile, realpath, stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
@@ -58,6 +63,11 @@ import {
 } from '../jobs/task'
 import { ProductionWorker } from '../jobs/worker'
 import { recordWithPlaywright } from '../recording/playwright'
+import {
+  listStorageRecycleEntries,
+  moveToRecycleBin,
+  restoreFromRecycleBin,
+} from '../storage/recycle'
 import { assertNoSensitiveKeys } from '../validation'
 import { validateVideoViewport } from '../video/viewport'
 
@@ -337,6 +347,79 @@ async function handleRequest(
         await createStorageCleanupPreview(
           production.outputRoot,
           service.getProjectView(projectId),
+        ),
+      )
+      return
+    }
+
+    if (
+      request.method === 'GET'
+      && segments.length === 6
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'storage'
+      && segments[5] === 'recycle'
+    ) {
+      const projectId = identifierField(decodeSegment(segments[3]!), 'projectId')
+      service.getProjectView(projectId)
+      sendJson(response, 200, {
+        entries: await listStorageRecycleEntries(
+          recycleRootForOutput(production.outputRoot),
+          projectId,
+        ),
+        projectId,
+      })
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'storage'
+      && segments[5] === 'cleanup'
+      && segments[6] === 'confirm'
+    ) {
+      const projectId = identifierField(decodeSegment(segments[3]!), 'projectId')
+      const input = parseStorageCleanupConfirmation(
+        await readJsonBody(request),
+        projectId,
+      )
+      sendJson(
+        response,
+        200,
+        await confirmStorageCleanup(
+          production.outputRoot,
+          service.getProjectView(projectId),
+          input,
+        ),
+      )
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 8
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'storage'
+      && segments[5] === 'recycle'
+      && segments[7] === 'restore'
+    ) {
+      const projectId = identifierField(decodeSegment(segments[3]!), 'projectId')
+      const recycleId = identifierField(decodeSegment(segments[6]!), 'recycleId')
+      service.getProjectView(projectId)
+      sendJson(
+        response,
+        200,
+        await restoreStorageItem(
+          production.outputRoot,
+          projectId,
+          recycleId,
         ),
       )
       return
@@ -1082,6 +1165,27 @@ export function parsePromoteActivityArtifactInput(
   }
 }
 
+export function parseStorageCleanupConfirmation(
+  input: unknown,
+  projectId: string,
+): StorageCleanupConfirmation {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'storage cleanup confirmation')
+  const supportedKeys = new Set(['itemIds', 'previewId', 'projectId'])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key))
+      throw new RequestError(400, `storage cleanup confirmation contains unsupported field: ${key}`)
+  }
+  const inputProjectId = stringField(value.projectId, 'projectId')
+  if (inputProjectId !== projectId)
+    throw new RequestError(400, 'projectId must match the URL')
+  return {
+    itemIds: identifierListField(value.itemIds, 'itemIds'),
+    previewId: stringField(value.previewId, 'previewId'),
+    projectId,
+  }
+}
+
 export function parseCreatePublicationPlanInput(
   input: unknown,
   projectId: string,
@@ -1458,6 +1562,15 @@ function artifactIdsField(input: unknown): string[] {
   return [...ids]
 }
 
+function identifierListField(input: unknown, name: string): string[] {
+  if (!Array.isArray(input) || input.length === 0)
+    throw new RequestError(400, `${name} must be a non-empty array`)
+  const values = input.map((item, index) => identifierField(item, `${name}[${index}]`))
+  if (new Set(values).size !== values.length)
+    throw new RequestError(400, `${name} must not contain duplicates`)
+  return values
+}
+
 function stringListField(input: unknown, name: string): string[] {
   if (!Array.isArray(input) || input.length === 0)
     throw new RequestError(400, `${name} must be a non-empty array`)
@@ -1616,6 +1729,14 @@ async function createStorageCleanupPreview(
   outputRoot: string,
   projectView: ContentStudioProjectView,
 ): Promise<StorageCleanupPreview> {
+  const recycleRoot = recycleRootForOutput(outputRoot)
+  const recycledEntries = await listStorageRecycleEntries(
+    recycleRoot,
+    projectView.project.projectId,
+  )
+  const recycledByItemId = new Map(
+    recycledEntries.map(entry => [entry.itemId, entry]),
+  )
   const promotedArtifactIds = new Set(
     projectView.projectAssets
       .map(asset => asset.sourceArtifactId)
@@ -1627,6 +1748,7 @@ async function createStorageCleanupPreview(
     name: string
     reason: string
     relativePath: string
+    sha256: string
     scope: StorageCleanupPreviewItem['scope']
     status: Extract<StorageCleanupPreviewItemStatus, 'protected' | 'review'>
     version: number
@@ -1639,6 +1761,7 @@ async function createStorageCleanupPreview(
         name: fileNameFromRelativePath(artifact.relativePath),
         reason: '活动产物尚未晋升为项目素材，清理前需要用户确认。',
         relativePath: artifact.relativePath,
+        sha256: artifact.sha256,
         scope: 'activity-artifact' as const,
         status: 'review' as const,
         version: artifact.version,
@@ -1649,6 +1772,7 @@ async function createStorageCleanupPreview(
       name: fileNameFromRelativePath(asset.relativePath),
       reason: '项目素材默认长期保留，不会进入自动清理。',
       relativePath: asset.relativePath,
+      sha256: asset.sha256,
       scope: 'project-asset' as const,
       status: 'protected' as const,
       version: asset.version,
@@ -1661,6 +1785,15 @@ async function createStorageCleanupPreview(
         projectView.project.projectId,
         candidate.relativePath,
       )
+      const recycledEntry = recycledByItemId.get(candidate.id)
+      if (recycledEntry !== undefined) {
+        return {
+          ...candidate,
+          reason: '文件已移入回收区，仍在恢复窗口内。',
+          sizeBytes: recycledEntry.sizeBytes,
+          status: 'recycled' as const,
+        }
+      }
       if (inspection.status === 'available') {
         return {
           ...candidate,
@@ -1688,6 +1821,10 @@ async function createStorageCleanupPreview(
       summary.reviewBytes += sizeBytes
       summary.reviewFiles += 1
     }
+    if (item.status === 'recycled') {
+      summary.recycledBytes += sizeBytes
+      summary.recycledFiles += 1
+    }
     if (item.status === 'missing' || item.status === 'unsafe')
       summary.missingFiles += 1
     return summary
@@ -1698,14 +1835,123 @@ async function createStorageCleanupPreview(
     protectedFiles: 0,
     reviewBytes: 0,
     reviewFiles: 0,
+    recycledBytes: 0,
+    recycledFiles: 0,
     totalBytes: 0,
   })
+  const previewId = createStorageCleanupPreviewId(
+    projectView.project.projectId,
+    items,
+  )
   return {
     generatedAt: new Date().toISOString(),
     items,
+    previewId,
     projectId: projectView.project.projectId,
     totals,
   }
+}
+
+async function confirmStorageCleanup(
+  outputRoot: string,
+  projectView: ContentStudioProjectView,
+  input: StorageCleanupConfirmation,
+): Promise<StorageCleanupResult> {
+  const preview = await createStorageCleanupPreview(outputRoot, projectView)
+  if (input.previewId !== preview.previewId) {
+    throw new RequestError(
+      409,
+      '清理预览已经变化，请重新读取预览后再确认。',
+    )
+  }
+  const selectedIds = new Set(input.itemIds)
+  const selectedItems = preview.items.filter(item => selectedIds.has(item.id))
+  if (selectedItems.length !== selectedIds.size)
+    throw new RequestError(400, '清理确认包含当前预览中不存在的文件')
+
+  const recycled: StorageRecycleEntry[] = []
+  const skipped: StorageCleanupPreviewItem[] = []
+  for (const item of selectedItems) {
+    if (item.status !== 'review') {
+      skipped.push(item)
+      continue
+    }
+    try {
+      recycled.push(await moveToRecycleBin({
+        item,
+        outputRoot,
+        projectId: projectView.project.projectId,
+        recycleRoot: recycleRootForOutput(outputRoot),
+      }))
+    }
+    catch (error: unknown) {
+      throw new RequestError(
+        409,
+        error instanceof Error ? error.message : '文件在确认前发生变化，请重新读取预览。',
+      )
+    }
+  }
+  return {
+    previewId: preview.previewId,
+    projectId: projectView.project.projectId,
+    recycled,
+    skipped,
+  }
+}
+
+async function restoreStorageItem(
+  outputRoot: string,
+  projectId: string,
+  recycleId: string,
+): Promise<StorageRestoreResult> {
+  const recycleRoot = recycleRootForOutput(outputRoot)
+  const entries = await listStorageRecycleEntries(recycleRoot, projectId)
+  if (!entries.some(entry => entry.recycleId === recycleId))
+    throw new RecordNotFoundError('Recycle entry', recycleId)
+  try {
+    return {
+      projectId,
+      restored: await restoreFromRecycleBin({
+        outputRoot,
+        projectId,
+        recycleId,
+        recycleRoot,
+      }),
+    }
+  }
+  catch (error: unknown) {
+    if (error instanceof RecordNotFoundError)
+      throw error
+    throw new RequestError(
+      409,
+      error instanceof Error ? error.message : '回收文件恢复失败，请重新读取回收区。',
+    )
+  }
+}
+
+function recycleRootForOutput(outputRoot: string): string {
+  return resolve(outputRoot, '..', 'recycle')
+}
+
+function createStorageCleanupPreviewId(
+  projectId: string,
+  items: StorageCleanupPreviewItem[],
+): string {
+  const fingerprint = items
+    .map(item => ({
+      id: item.id,
+      relativePath: item.relativePath,
+      scope: item.scope,
+      sha256: item.sha256,
+      sizeBytes: item.sizeBytes ?? null,
+      status: item.status,
+      version: item.version,
+    }))
+    .sort((left, right) => `${left.scope}:${left.id}`.localeCompare(`${right.scope}:${right.id}`))
+  return createHash('sha256')
+    .update(JSON.stringify({ items: fingerprint, projectId }))
+    .digest('hex')
+    .slice(0, 24)
 }
 
 async function inspectRegisteredPreview(

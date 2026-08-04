@@ -6,7 +6,9 @@ import type {
   ProjectSnapshot,
   RecorderAttemptReceipt,
 } from '../types'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { Buffer } from 'node:buffer'
+import { createHash } from 'node:crypto'
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
@@ -1219,8 +1221,10 @@ describe('content studio local application server', () => {
   })
 
   it('returns a cleanup preview for registered files without scanning unknown files', async () => {
-    const { project, snapshot } = createProject()
-    const productionOutputRoot = '/tmp/content-studio-cleanup-preview'
+    const { project, snapshot } = createProject('cleanup-preview-project')
+    const cleanupRoot = '/tmp/content-studio-cleanup-preview'
+    const productionOutputRoot = join(cleanupRoot, 'production')
+    await rm(cleanupRoot, { force: true, recursive: true })
     const activityRoot = join(productionOutputRoot, project.projectId, 'activity-a')
     const assetRoot = join(productionOutputRoot, project.projectId, 'assets')
     await mkdir(activityRoot, { recursive: true })
@@ -1289,6 +1293,8 @@ describe('content studio local application server', () => {
           missingFiles: 1,
           protectedBytes: 9,
           protectedFiles: 1,
+          recycledBytes: 0,
+          recycledFiles: 0,
           reviewBytes: 5,
           reviewFiles: 1,
           totalBytes: 14,
@@ -1313,7 +1319,114 @@ describe('content studio local application server', () => {
     }
     finally {
       await running.close()
-      await rm(productionOutputRoot, { force: true, recursive: true })
+      await rm(cleanupRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('requires a fresh preview before moving an activity artifact to the recycle area', async () => {
+    const { project, snapshot } = createProject('cleanup-confirm-project')
+    const cleanupRoot = `/tmp/content-studio-cleanup-confirm-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const productionOutputRoot = join(cleanupRoot, 'production')
+    const relativePath = 'activity-a/draft.md'
+    const content = '# recyclable draft'
+    await mkdir(join(productionOutputRoot, project.projectId, 'activity-a'), { recursive: true })
+    await writeFile(join(productionOutputRoot, project.projectId, relativePath), content)
+    const handle = createContentStudioServer({
+      productionOutputRoot,
+      project,
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    handle.service.createActivity({
+      activityId: 'activity-a',
+      campaignId: 'campaign-a',
+      channels: [],
+      goal: 'education',
+      projectId: project.projectId,
+      projectSnapshotId: snapshot.snapshotId,
+      status: 'draft',
+      targetUrl: 'https://project-a.example.com',
+      topic: { 'en': 'Cleanup', 'zh-CN': '清理' },
+    })
+    handle.service.createActivityArtifact({
+      activityId: 'activity-a',
+      artifactId: 'draft-artifact',
+      kind: 'article-version',
+      projectId: project.projectId,
+      relativePath,
+      sha256: createHash('sha256').update(content).digest('hex'),
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const previewResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/storage/cleanup-preview`,
+      )
+      const preview = await previewResponse.json() as {
+        items: Array<{ id: string, status: string }>
+        previewId: string
+      }
+      expect(preview.items).toEqual([
+        expect.objectContaining({ id: 'draft-artifact', status: 'review' }),
+      ])
+
+      const confirmResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/storage/cleanup/confirm`,
+        {
+          body: JSON.stringify({
+            itemIds: ['draft-artifact'],
+            previewId: preview.previewId,
+            projectId: project.projectId,
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(confirmResponse.status).toBe(200)
+      const result = await confirmResponse.json() as { recycled: Array<{ recycleId: string }> }
+      expect(result.recycled).toHaveLength(1)
+      await expect(stat(join(productionOutputRoot, project.projectId, relativePath))).rejects.toMatchObject({ code: 'ENOENT' })
+
+      const recycledResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/storage/recycle`,
+      )
+      expect(recycledResponse.status).toBe(200)
+      const recycledPayload = await recycledResponse.json() as {
+        entries: Array<{ itemId: string, recycleId: string }>
+      }
+      expect(recycledPayload).toMatchObject({
+        entries: [expect.objectContaining({ itemId: 'draft-artifact' })],
+      })
+
+      const staleResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/storage/cleanup/confirm`,
+        {
+          body: JSON.stringify({
+            itemIds: ['draft-artifact'],
+            previewId: preview.previewId,
+            projectId: project.projectId,
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(staleResponse.status).toBe(409)
+
+      const restoreResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/storage/recycle/${recycledPayload.entries[0]!.recycleId}/restore`,
+        { method: 'POST' },
+      )
+      expect(restoreResponse.status).toBe(200)
+      await expect(readFile(join(productionOutputRoot, project.projectId, relativePath))).resolves.toEqual(Buffer.from(content))
+      const emptyRecycleResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/storage/recycle`,
+      )
+      expect(emptyRecycleResponse.status).toBe(200)
+      expect(await emptyRecycleResponse.json()).toMatchObject({ entries: [] })
+    }
+    finally {
+      await running.close()
+      await rm(cleanupRoot, { force: true, recursive: true })
     }
   })
 

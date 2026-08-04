@@ -322,6 +322,7 @@ export interface ProjectAsset {
 export type StorageCleanupPreviewItemStatus
   = | 'missing'
     | 'protected'
+    | 'recycled'
     | 'review'
     | 'unsafe'
 
@@ -331,6 +332,7 @@ export interface StorageCleanupPreviewItem {
   name: string
   reason: string
   relativePath: string
+  sha256: string
   scope: 'activity-artifact' | 'project-asset'
   sizeBytes?: number
   status: StorageCleanupPreviewItemStatus
@@ -344,14 +346,50 @@ export interface StorageCleanupPreviewTotals {
   protectedFiles: number
   reviewBytes: number
   reviewFiles: number
+  recycledBytes: number
+  recycledFiles: number
   totalBytes: number
 }
 
 export interface StorageCleanupPreview {
   generatedAt: string
   items: StorageCleanupPreviewItem[]
+  previewId: string
   projectId: string
   totals: StorageCleanupPreviewTotals
+}
+
+export interface StorageCleanupConfirmation {
+  itemIds: string[]
+  previewId: string
+  projectId: string
+}
+
+export interface StorageRecycleEntry {
+  expiresAt: string
+  itemId: string
+  kind: ActivityArtifactKind | ProjectAssetKind
+  originalRelativePath: string
+  projectId: string
+  recycleId: string
+  recycledAt: string
+  recycledRelativePath: string
+  scope: 'activity-artifact' | 'project-asset'
+  sha256: string
+  sizeBytes: number
+  version: number
+}
+
+export interface StorageCleanupResult {
+  previewId: string
+  projectId: string
+  recycled: StorageRecycleEntry[]
+  skipped: StorageCleanupPreviewItem[]
+}
+
+export interface StorageRestoreResult {
+  projectId: string
+  restored: StorageRecycleEntry
 }
 
 export interface PromoteActivityArtifactInput {

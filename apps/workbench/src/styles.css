@@ -1666,6 +1666,25 @@ button:disabled {
   font-weight: 500;
 }
 
+.cleanup-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border: 1px solid #596233;
+  background: rgb(217 255 67 / 4%);
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.cleanup-result {
+  margin: 0.75rem 0 0;
+  color: var(--acid);
+  font-size: 0.68rem;
+}
+
 .cleanup-summary-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -1749,9 +1768,64 @@ button:disabled {
   color: #f0bd65;
 }
 
+.cleanup-status[data-status='recycled'] {
+  color: #9bc5ff;
+}
+
 .cleanup-status[data-status='missing'],
 .cleanup-status[data-status='unsafe'] {
   color: #e78c81;
+}
+
+.recycle-list {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--stroke);
+}
+
+.recycle-list .section-heading {
+  align-items: flex-end;
+}
+
+.recycle-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--stroke);
+}
+
+.recycle-item strong,
+.recycle-item small {
+  display: block;
+}
+
+.recycle-item strong {
+  color: var(--text);
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.recycle-item small {
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.53rem;
+}
+
+.secondary-button {
+  flex: 0 0 auto;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--stroke);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.68rem;
+}
+
+.secondary-button:not(:disabled):hover {
+  border-color: var(--acid);
+  color: var(--acid);
 }
 
 footer {

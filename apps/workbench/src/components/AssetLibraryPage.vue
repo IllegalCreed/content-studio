@@ -5,7 +5,12 @@ import type {
   AssetProjection,
   WorkbenchSnapshot,
 } from '../model'
-import type { ProjectAsset, StorageCleanupPreview } from '@content-studio/core-types'
+import type {
+  ProjectAsset,
+  StorageCleanupPreview,
+  StorageCleanupResult,
+  StorageRecycleEntry,
+} from '@content-studio/core-types'
 
 type AssetFilter = '全部' | AssetProjection['kind']
 
@@ -20,14 +25,23 @@ const props = defineProps<{
   runtimeConnected: boolean
   selectedAsset: AssetProjection
   snapshot: WorkbenchSnapshot
+  storageCleanupArmed: boolean
+  storageCleanupError: string | null
+  storageCleanupPending: boolean
+  storageCleanupResult: StorageCleanupResult | null
   storagePreview: StorageCleanupPreview | null
   storagePreviewError: string | null
   storagePreviewLoading: boolean
   storagePreviewOpen: boolean
+  storageRecycleEntries: StorageRecycleEntry[]
+  storageRestoreError: string | null
+  storageRestorePending: string | null
 }>()
 
 const emit = defineEmits<{
   'promote-artifact': [artifact: ActivityArtifactProjection]
+  'confirm-cleanup': []
+  'restore-recycle': [recycleId: string]
   'select-asset': [assetId: string]
   'select-artifact': [activityId: string]
   'set-filter': [filter: AssetFilter]
@@ -123,6 +137,16 @@ const emit = defineEmits<{
         <span v-if="props.storagePreview">生成于 {{ props.storagePreview.generatedAt }}</span>
       </div>
       <p class="section-intro">这里只检查 Content Studio 已登记的项目素材和活动产物，不扫描未知文件，也不会自动删除。</p>
+      <div v-if="props.storagePreview && props.storagePreview.totals.reviewFiles > 0" class="cleanup-actions">
+        <span>待确认 {{ props.storagePreview.totals.reviewFiles }} 个活动产物</span>
+        <button type="button" class="primary-button" :disabled="props.storageCleanupPending" @click="emit('confirm-cleanup')">
+          {{ props.storageCleanupPending ? '移入中…' : props.storageCleanupArmed ? '再次点击确认移入回收区' : '确认移入回收区' }}
+        </button>
+      </div>
+      <p v-if="props.storageCleanupError" class="form-error" aria-live="polite">{{ props.storageCleanupError }}</p>
+      <p v-if="props.storageCleanupResult && props.storageCleanupResult.recycled.length > 0" class="cleanup-result" aria-live="polite">
+        已移入回收区 {{ props.storageCleanupResult.recycled.length }} 个文件，恢复窗口内可以撤回。
+      </p>
       <p v-if="props.storagePreviewError" class="form-error" aria-live="polite">{{ props.storagePreviewError }}</p>
       <template v-else-if="props.storagePreview">
         <div class="cleanup-summary-grid">
@@ -137,10 +161,20 @@ const emit = defineEmits<{
           <div v-for="item in props.storagePreview.items" :key="item.scope + '-' + item.id" class="cleanup-item">
             <div><strong>{{ item.name }}</strong><small>{{ item.relativePath }} · v{{ item.version }}</small></div>
             <span>{{ item.scope === 'project-asset' ? '项目素材' : '活动产物' }}</span>
-            <span class="cleanup-status" :data-status="item.status">{{ item.status === 'protected' ? '长期保留' : item.status === 'review' ? '待确认' : item.status === 'missing' ? '文件缺失' : '路径不安全' }}</span>
+            <span class="cleanup-status" :data-status="item.status">{{ item.status === 'protected' ? '长期保留' : item.status === 'review' ? '待确认' : item.status === 'recycled' ? '已在回收区' : item.status === 'missing' ? '文件缺失' : '路径不安全' }}</span>
             <span>{{ item.sizeBytes === undefined ? '—' : props.formatStorageBytes(item.sizeBytes) }}</span>
           </div>
         </div>
+        <div v-if="props.storageRecycleEntries.length > 0" class="recycle-list">
+          <div class="section-heading"><div><p class="eyebrow">可恢复文件</p><h3>回收区</h3></div><span>恢复窗口到期处理将在后续存储策略中提供</span></div>
+          <div v-for="entry in props.storageRecycleEntries" :key="entry.recycleId" class="recycle-item">
+            <div><strong>{{ entry.originalRelativePath }}</strong><small>移入于 {{ entry.recycledAt }} · 可恢复至 {{ entry.expiresAt }} · {{ props.formatStorageBytes(entry.sizeBytes) }}</small></div>
+            <button type="button" class="secondary-button" :disabled="props.storageRestorePending !== null" @click="emit('restore-recycle', entry.recycleId)">
+              {{ props.storageRestorePending === entry.recycleId ? '恢复中…' : '恢复文件' }}
+            </button>
+          </div>
+        </div>
+        <p v-if="props.storageRestoreError" class="form-error" aria-live="polite">{{ props.storageRestoreError }}</p>
       </template>
       <p v-else class="empty-state">正在读取已登记文件…</p>
     </section>

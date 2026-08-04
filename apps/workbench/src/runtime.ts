@@ -17,7 +17,11 @@ import type {
   PublicationPlan,
   PublishingActivity,
   RecorderAttemptReceipt,
+  StorageCleanupConfirmation,
   StorageCleanupPreview,
+  StorageCleanupResult,
+  StorageRecycleEntry,
+  StorageRestoreResult,
 } from '@content-studio/core-types'
 
 export interface RuntimeHealth {
@@ -39,6 +43,7 @@ export interface RecordTaskResult {
 export interface WorkbenchRuntime {
   cancelOwnerHandoff: (projectId: string, handoffId: string) => Promise<OwnerHandoff>
   cancelTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
+  confirmStorageCleanup: (input: StorageCleanupConfirmation) => Promise<StorageCleanupResult>
   completeOwnerHandoff: (projectId: string, handoffId: string) => Promise<OwnerHandoff>
   confirmActivityVideoPlan: (
     projectId: string,
@@ -60,6 +65,8 @@ export interface WorkbenchRuntime {
     input: RecordTaskInput,
   ) => Promise<RecordTaskResult>
   storageCleanupPreview: (projectId: string) => Promise<StorageCleanupPreview>
+  storageRecycle: (projectId: string) => Promise<{ entries: StorageRecycleEntry[], projectId: string }>
+  restoreStorageRecycleEntry: (projectId: string, recycleId: string) => Promise<StorageRestoreResult>
   retryTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
   startTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
   taskEvents: (projectId: string, taskId: string) => Promise<ExecutionTaskEvent[]>
@@ -90,6 +97,13 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
     cancelTask: (projectId, taskId) => request<ExecutionTask>(
       `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/cancel`,
       { method: 'POST' },
+    ),
+    confirmStorageCleanup: input => request<StorageCleanupResult>(
+      `/projects/${encodeURIComponent(input.projectId)}/storage/cleanup/confirm`,
+      {
+        body: JSON.stringify(input),
+        method: 'POST',
+      },
     ),
     completeOwnerHandoff: (projectId, handoffId) => request<OwnerHandoff>(
       `/projects/${encodeURIComponent(projectId)}/owner-handoffs/${encodeURIComponent(handoffId)}/complete`,
@@ -164,6 +178,13 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
     ),
     storageCleanupPreview: projectId => request<StorageCleanupPreview>(
       `/projects/${encodeURIComponent(projectId)}/storage/cleanup-preview`,
+    ),
+    storageRecycle: projectId => request<{ entries: StorageRecycleEntry[], projectId: string }>(
+      `/projects/${encodeURIComponent(projectId)}/storage/recycle`,
+    ),
+    restoreStorageRecycleEntry: (projectId, recycleId) => request<StorageRestoreResult>(
+      `/projects/${encodeURIComponent(projectId)}/storage/recycle/${encodeURIComponent(recycleId)}/restore`,
+      { method: 'POST' },
     ),
     retryTask: (projectId, taskId) => request<ExecutionTask>(
       `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/retry`,

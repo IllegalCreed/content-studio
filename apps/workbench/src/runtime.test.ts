@@ -52,6 +52,55 @@ describe('workbench runtime client', () => {
     )
   })
 
+  it('confirms cleanup and restores a recycle entry through explicit runtime calls', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        previewId: 'preview-1',
+        projectId: 'project-a',
+        recycled: [{ recycleId: 'recycle-1' }],
+        skipped: [],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        entries: [{ recycleId: 'recycle-1' }],
+        projectId: 'project-a',
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        projectId: 'project-a',
+        restored: { recycleId: 'recycle-1' },
+      }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const runtime = createWorkbenchRuntime('/api/v1')
+    await expect(runtime.confirmStorageCleanup({
+      itemIds: ['artifact-a'],
+      previewId: 'preview-1',
+      projectId: 'project-a',
+    })).resolves.toMatchObject({ previewId: 'preview-1' })
+    await expect(runtime.storageRecycle('project-a')).resolves.toMatchObject({
+      entries: [{ recycleId: 'recycle-1' }],
+    })
+    await expect(runtime.restoreStorageRecycleEntry('project-a', 'recycle-1')).resolves.toMatchObject({
+      restored: { recycleId: 'recycle-1' },
+    })
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/v1/projects/project-a/storage/cleanup/confirm',
+      expect.objectContaining({
+        body: JSON.stringify({
+          itemIds: ['artifact-a'],
+          previewId: 'preview-1',
+          projectId: 'project-a',
+        }),
+        method: 'POST',
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/v1/projects/project-a/storage/recycle/recycle-1/restore',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
   it('saves a project channel binding through the local runtime', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
