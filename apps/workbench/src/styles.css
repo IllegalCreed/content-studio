@@ -207,6 +207,38 @@ main {
   font-size: 0.72rem;
 }
 
+.runtime-data-state {
+  display: grid;
+  justify-items: center;
+  gap: 0.55rem;
+  margin-top: 1.25rem;
+  padding: 3.5rem 1.5rem;
+  border: 1px dashed var(--stroke);
+  background: var(--panel);
+  text-align: center;
+}
+
+.runtime-data-state .eyebrow,
+.runtime-data-state h2,
+.runtime-data-state h3,
+.runtime-data-state p {
+  margin: 0;
+}
+
+.runtime-data-state h2,
+.runtime-data-state h3 {
+  color: var(--ink);
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.runtime-data-state > p:last-child {
+  max-width: 34rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+
 .live-dot,
 .runtime-status > span {
   display: inline-block;

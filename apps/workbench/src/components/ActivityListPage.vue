@@ -70,6 +70,8 @@ const props = defineProps<{
   videoPlanViewportDraft: { height: number, width: number }
   publicationPlanActionError: string | null
   publicationPlanActionPending: string | null
+  runtimeConnected: boolean
+  runtimeLoading: boolean
 }>()
 
 const emit = defineEmits<{
@@ -94,7 +96,8 @@ const emit = defineEmits<{
         <p class="eyebrow">项目业务对象</p>
         <h2>发布活动</h2>
       </div>
-      <span>{{ props.snapshot.campaigns.length }} 个活动</span>
+      <span v-if="props.runtimeLoading">正在读取活动…</span>
+      <span v-else>{{ props.snapshot.campaigns.length }} 个活动</span>
     </div>
     <p class="section-intro">活动围绕一次主题组织内容组、渠道内容、活动产物和发布安排，执行任务会从这里投影出去。</p>
 
@@ -193,7 +196,12 @@ const emit = defineEmits<{
       </div>
     </form>
 
-    <div class="campaign-board">
+    <div v-if="props.runtimeLoading" class="runtime-data-state" data-testid="activity-runtime-state" aria-live="polite">
+      <p class="eyebrow">本地运行时</p>
+      <h3>正在读取本地活动</h3>
+      <p>正在读取当前项目的活动、内容版本和执行记录，读取完成后才显示真实数据。</p>
+    </div>
+    <div v-else class="campaign-board">
       <div class="campaign-list" role="list" aria-label="发布活动">
         <button
           v-for="campaign in props.snapshot.campaigns"
@@ -210,7 +218,7 @@ const emit = defineEmits<{
         </button>
       </div>
       <p v-if="props.snapshot.campaigns.length === 0" class="empty-state campaign-empty-state">
-        当前运行时还没有发布活动。可以点击右上角“新建发布活动”，先保存主题和项目渠道。
+        {{ props.runtimeConnected ? '当前项目还没有发布活动。可以点击右上角“新建发布活动”，先保存主题和项目渠道。' : '本地运行时未连接，当前没有可展示的真实活动；连接后会读取项目活动。' }}
       </p>
       <article v-else class="campaign-detail">
         <div class="detail-heading">

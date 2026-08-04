@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 import { createWorkbenchRouter } from '../router'
 import { useWorkbenchStore } from '../stores/workbench'
 import ActivityDetailPage from './ActivityDetailPage.vue'
@@ -48,5 +49,27 @@ describe('activity detail page', () => {
     expect(wrapper.get('.project-switcher').text()).toContain('project-b')
     expect(wrapper.get('a[data-module="activities"]').attributes('aria-current')).toBe('page')
     expect(wrapper.get('h1').text()).toBe('活动不存在')
+  })
+
+  it('读取运行时期间只显示详情加载状态，不显示演示活动内容', async () => {
+    const pinia = createPinia()
+    const store = useWorkbenchStore(pinia)
+    vi.spyOn(store, 'refresh').mockResolvedValue()
+    const router = createWorkbenchRouter(true)
+    await router.push('/project/activities/quick-sort-guide')
+    await router.isReady()
+
+    const wrapper = mount(ActivityDetailPage, {
+      global: {
+        plugins: [pinia, router],
+      },
+    })
+
+    store.beginRuntimeLoad()
+    await nextTick()
+
+    expect(wrapper.get('[data-testid="activity-detail-runtime-state"]').text()).toContain('正在读取活动详情')
+    expect(wrapper.find('[data-testid="activity-business-progress"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="activity-publication-results"]').exists()).toBe(false)
   })
 })

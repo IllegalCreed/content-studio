@@ -230,14 +230,14 @@ describe('content studio workbench', () => {
     const runtimeStore = useWorkbenchStore(pinia)
 
     const viewModel = wrapper.vm as unknown as { snapshot: WorkbenchSnapshot }
-    viewModel.snapshot.runtimeConnected = true
+    runtimeStore.markRuntimeReady()
     viewModel.snapshot.campaigns = []
     viewModel.snapshot.tasks = []
     expect(runtimeStore.snapshot.campaigns).toEqual([])
     await nextTick()
 
     expect(wrapper.text()).toContain('0 个活动')
-    expect(wrapper.text()).toContain('当前运行时还没有发布活动')
+    expect(wrapper.text()).toContain('当前项目还没有发布活动')
     expect(wrapper.text()).not.toContain('Cannot read properties of undefined')
 
     runtimeStore.markRuntimeReady()
@@ -247,6 +247,32 @@ describe('content studio workbench', () => {
     expect(wrapper.find('.task-detail').exists()).toBe(false)
     await wrapper.get('[data-testid="tasks-empty-state"] button').trigger('click')
     expect(router.currentRoute.value.path).toBe('/project/activities')
+  })
+
+  it('读取本地运行时期间不把演示活动和任务当成真实数据', async () => {
+    const router = createWorkbenchRouter(true)
+    await router.push('/project/activities')
+    await router.isReady()
+    const pinia = createPinia()
+    const wrapper = mount(WorkbenchApp, {
+      global: {
+        plugins: [pinia, router],
+      },
+    })
+    const runtimeStore = useWorkbenchStore(pinia)
+
+    runtimeStore.beginRuntimeLoad()
+    await nextTick()
+
+    expect(wrapper.get('[data-testid="activity-runtime-state"]').text()).toContain('正在读取本地活动')
+    expect(wrapper.find('.campaign-board').exists()).toBe(false)
+
+    await router.push('/tasks')
+    await nextTick()
+
+    expect(wrapper.get('[data-testid="task-runtime-state"]').text()).toContain('正在读取本地任务')
+    expect(wrapper.find('.task-board').exists()).toBe(false)
+    expect(wrapper.find('.video-panel').exists()).toBe(false)
   })
 
   it('根据任务路由固定全局或项目范围', async () => {

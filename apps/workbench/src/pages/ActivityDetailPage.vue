@@ -39,18 +39,24 @@ const runtimeActivity = computed(() => store.activities.find(activity =>
 const staticActivity = computed(() => routeProjectId.value !== store.snapshot.project.projectId
   ? undefined
   : store.snapshot.campaigns.find(campaign => campaign.campaignId === activityId.value))
-const title = computed(() => runtimeActivity.value?.topic['zh-CN']
+const title = computed(() => store.loading
+  ? '正在读取活动…'
+  : runtimeActivity.value?.topic['zh-CN']
   ?? runtimeActivity.value?.topic.en
   ?? staticActivity.value?.title
   ?? '活动不存在')
-const topic = computed(() => runtimeActivity.value?.topic['zh-CN']
+const topic = computed(() => store.loading
+  ? '正在从本地运行时读取主题、渠道和执行记录。'
+  : runtimeActivity.value?.topic['zh-CN']
   ?? runtimeActivity.value?.topic.en
   ?? staticActivity.value?.topic
   ?? '请返回活动列表选择一个活动。')
 const channels = computed(() => runtimeActivity.value?.channels.map(channel => channel.id)
   ?? staticActivity.value?.channels
   ?? [])
-const status = computed(() => runtimeActivity.value === undefined
+const status = computed(() => store.loading
+  ? '读取中'
+  : runtimeActivity.value === undefined
   ? staticActivity.value?.activityStatus ?? '未知'
   : activityStatusLabel(runtimeActivity.value.status))
 const video = computed<CampaignVideo | null>(() => runtimeActivity.value?.video
@@ -231,6 +237,12 @@ watch(videoPlan, syncViewportDraft, { immediate: true })
     <p v-if="store.runtimeError" class="runtime-connection-note" aria-live="polite">本地运行时未连接，当前显示演示数据：{{ store.runtimeError }}</p>
     <p v-if="actionError" class="form-error" aria-live="polite">{{ actionError }}</p>
 
+    <section v-if="store.loading" class="runtime-data-state" data-testid="activity-detail-runtime-state" aria-live="polite">
+      <p class="eyebrow">本地运行时</p>
+      <h2>正在读取活动详情</h2>
+      <p>主题、渠道内容、执行任务和视频计划读取完成后才会显示，避免把演示快照误认为真实活动。</p>
+    </section>
+    <template v-else>
     <section class="detail-summary-grid" aria-label="活动概要">
       <article><span>主题目标</span><strong>{{ topic }}</strong></article>
       <article><span>已选渠道</span><strong>{{ channels.length }} 个</strong><small>{{ channels.join(' · ') || '尚未选择渠道' }}</small></article>
@@ -331,6 +343,7 @@ watch(videoPlan, syncViewportDraft, { immediate: true })
         <p v-else class="empty-state">当前活动还没有登记产物。</p>
       </div>
     </section>
+    </template>
     </section>
   </WorkbenchShell>
 </template>

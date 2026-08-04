@@ -23,6 +23,7 @@ const props = defineProps<{
   projectCount: number
   projectName: string
   runtimeConnected: boolean
+  runtimeLoading: boolean
   selectedTask: TaskProjection
   selectedTaskCampaign: CampaignProjection
   taskActionError: string | null
@@ -68,6 +69,12 @@ const selectedTaskHandoff = computed(() =>
     <p class="task-scope-note" data-testid="task-scope-note">
       {{ props.activeTaskScope === '全部项目' ? `${props.projectCount} 个已接入项目 · 统一执行记录` : `当前项目 · ${props.projectName}` }}
     </p>
+    <div v-if="props.runtimeLoading" class="runtime-data-state" data-testid="task-runtime-state" aria-live="polite">
+      <p class="eyebrow">本地运行时</p>
+      <h3>正在读取本地任务</h3>
+      <p>正在读取当前范围的制作、发布、监测任务和事件，读取完成后才显示真实执行记录。</p>
+    </div>
+    <template v-else>
     <div class="task-summary" aria-label="任务统计">
       <div v-for="(count, kind) in props.taskCounts" :key="kind" class="overview-stat task-summary-card" data-testid="task-summary-card">
         <span>{{ kind }}任务</span>
@@ -86,7 +93,7 @@ const selectedTaskHandoff = computed(() =>
       <p>{{ props.runtimeConnected ? '先创建一个发布活动，并为渠道内容建立制作或发布安排，任务会自动出现在这里。' : '连接本地运行时后，这里会显示真实的项目任务。' }}</p>
       <button type="button" class="primary-button" @click="emit('go-activities')">去发布活动</button>
     </div>
-    <div v-else class="task-board">
+    <div v-if="props.visibleTasks.length > 0" class="task-board">
       <div class="task-list" role="list" aria-label="执行任务">
         <button
           v-for="task in props.visibleTasks"
@@ -166,9 +173,10 @@ const selectedTaskHandoff = computed(() =>
         </div>
       </article>
     </div>
+    </template>
   </section>
   <VideoJobPanel
-    v-if="props.visibleTasks.length > 0 && showVideoJobPanel && props.selectedTaskCampaign.videoJob"
+    v-if="!props.runtimeLoading && props.visibleTasks.length > 0 && showVideoJobPanel && props.selectedTaskCampaign.videoJob"
     id="video"
     :account-alias="props.selectedTask.accountAlias"
     :activity-title="props.selectedTask.activityTitle"
@@ -180,7 +188,7 @@ const selectedTaskHandoff = computed(() =>
     :task-title="props.selectedTask.title"
   />
   <PublicationTaskPanel
-    v-if="props.visibleTasks.length > 0 && props.selectedTask.kind === '发布'"
+    v-if="!props.runtimeLoading && props.visibleTasks.length > 0 && props.selectedTask.kind === '发布'"
     :handoff="selectedTaskHandoff"
     :runtime-connected="props.runtimeConnected"
     :task="props.selectedTask"
