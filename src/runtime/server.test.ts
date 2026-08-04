@@ -348,6 +348,8 @@ describe('content studio local application server', () => {
       publicationId: 'publication-a',
       publicUrl: 'https://github.com/example/project/releases/tag/v1',
       receiptId: 'receipt-a',
+      issuedAt: '2026-08-04T00:00:00.000Z',
+      source: 'marketing-ops',
       status: 'published',
     }, 'project-a', 'activity-a', 'publication-a')
     expect(receipt).toMatchObject({ receiptId: 'receipt-a', status: 'published' })
@@ -360,6 +362,8 @@ describe('content studio local application server', () => {
       publicationId: 'publication-a',
       publicUrl: 'http://github.com/example/project/releases/tag/v1',
       receiptId: 'receipt-a',
+      issuedAt: '2026-08-04T00:00:00.000Z',
+      source: 'marketing-ops',
       status: 'published',
     }, 'project-a', 'activity-a', 'publication-a')).toThrow(/HTTPS/i)
     expect(parseRecordPublicationReceiptInput({
@@ -376,10 +380,22 @@ describe('content studio local application server', () => {
     expect(() => parseRecordPublicationReceiptInput({
       activityId: 'activity-a',
       channel: 'github',
+      externalReceiptId: 'release-a-failed-owner',
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+      receiptId: 'receipt-a-failed-owner',
+      source: 'owner-entered',
+      status: 'failed',
+    }, 'project-a', 'activity-a', 'publication-a')).toThrow(/source/i)
+    expect(() => parseRecordPublicationReceiptInput({
+      activityId: 'activity-a',
+      channel: 'github',
       externalReceiptId: 'release-a',
       projectId: 'project-a',
       publicationId: 'publication-a',
       receiptId: 'receipt-a',
+      issuedAt: '2026-08-04T00:00:00.000Z',
+      source: 'marketing-ops',
       status: 'unknown',
     }, 'project-a', 'activity-a', 'publication-a')).toThrow(/status/i)
     expect(() => parseRecordPublicationReceiptInput({
@@ -759,6 +775,8 @@ describe('content studio local application server', () => {
             publicationId: 'publication-a',
             publicUrl: 'https://github.com/example/project/releases/tag/v1',
             receiptId: 'receipt-a',
+            issuedAt: '2026-08-04T00:00:00.000Z',
+            source: 'marketing-ops',
             status: 'published',
           }),
           headers: { 'content-type': 'application/json' },
@@ -1288,6 +1306,11 @@ describe('content studio local application server', () => {
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual(expect.objectContaining({
         projectId: project.projectId,
+        retentionPolicy: {
+          activityArtifactDays: 30,
+          rebuildableCacheDays: 7,
+          recycleRecoveryDays: 30,
+        },
         totals: {
           files: 3,
           missingFiles: 1,
@@ -1302,11 +1325,13 @@ describe('content studio local application server', () => {
         items: expect.arrayContaining([
           expect.objectContaining({
             id: 'draft-artifact',
+            retentionClass: 'activity-artifact',
             sizeBytes: 5,
             status: 'review',
           }),
           expect.objectContaining({
             id: 'missing-artifact',
+            retentionClass: 'rebuildable-cache',
             status: 'missing',
           }),
           expect.objectContaining({

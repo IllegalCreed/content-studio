@@ -3,6 +3,7 @@ import type {
   CaptureStep,
   ChannelBlueprint,
   ChannelId,
+  StorageRetentionPolicy,
   VideoFormat,
   VideoViewport,
 } from './types'
@@ -74,6 +75,12 @@ export const CAMPAIGN_JOB_TRANSITIONS = {
 
 export const DEFAULT_RECORDING_MAX_ATTEMPTS = 1
 export const MAX_RECORDING_ATTEMPTS = 3
+
+export const DEFAULT_STORAGE_RETENTION_POLICY = {
+  activityArtifactDays: 30,
+  rebuildableCacheDays: 7,
+  recycleRecoveryDays: 30,
+} as const satisfies StorageRetentionPolicy
 
 export const CONTENT_STUDIO_RECORD_TYPES = {
   activity: 'activity',

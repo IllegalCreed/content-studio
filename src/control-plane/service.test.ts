@@ -61,8 +61,10 @@ function registerProject(
 function enableYouTube(
   service: ContentStudioApplicationService,
   projectId: string,
+  accountRef?: string,
 ): ProjectChannelBinding {
   return service.bindProjectChannel({
+    ...(accountRef === undefined ? {} : { accountRef }),
     channel: 'youtube',
     delivery: 'owner-assisted',
     enabled: true,
@@ -1000,6 +1002,8 @@ describe('content studio application service', () => {
         projectId: 'project-a',
         publicationId: publication.publicationId,
         receiptId: 'receipt-1',
+        issuedAt: '2026-08-04T00:00:00.000Z',
+        source: 'marketing-ops',
         status: 'published',
       }),
     ).toThrow(/channel/i)
@@ -1012,6 +1016,8 @@ describe('content studio application service', () => {
         projectId: 'project-a',
         publicationId: publication.publicationId,
         receiptId: 'receipt-1',
+        issuedAt: '2026-08-04T00:00:00.000Z',
+        source: 'marketing-ops',
         status: 'published',
       }),
     ).toMatchObject({
@@ -1039,6 +1045,8 @@ describe('content studio application service', () => {
       projectId: 'project-a',
       publicationId: publication.publicationId,
       receiptId: 'receipt-1-repeat',
+      issuedAt: '2026-08-04T00:00:00.000Z',
+      source: 'marketing-ops',
       status: 'published',
     })).toMatchObject({ status: 'published' })
     expect(service.getProjectView('project-a')).toMatchObject({
@@ -1047,6 +1055,35 @@ describe('content studio application service', () => {
         expect.objectContaining({ receiptId: 'receipt-1' }),
       ]),
     })
+  })
+
+  it('requires a matching marketing-ops receipt for a bound account', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'project-a')
+    enableYouTube(service, 'project-a', 'account-youtube-main')
+    const { activity, publication } = createPublication(service)
+    const receipt = {
+      activityId: activity.activityId,
+      channel: 'youtube' as const,
+      externalReceiptId: 'external-account-check',
+      issuedAt: '2026-08-04T00:00:00.000Z',
+      projectId: 'project-a',
+      publicationId: publication.publicationId,
+      receiptId: 'receipt-account-check',
+      source: 'marketing-ops' as const,
+      status: 'published' as const,
+    }
+    expect(() => service.recordPublicationReceipt(receipt)).toThrow(/account/i)
+    expect(() => service.recordPublicationReceipt({
+      ...receipt,
+      accountRef: 'account-youtube-other',
+      receiptId: 'receipt-account-check-other',
+    })).toThrow(/account/i)
+    expect(service.recordPublicationReceipt({
+      ...receipt,
+      accountRef: 'account-youtube-main',
+    })).toMatchObject({ source: 'marketing-ops', status: 'published' })
   })
 
   it('rejects mismatched ownership and duplicate immutable records', () => {
@@ -1300,6 +1337,8 @@ describe('content studio application service', () => {
       projectId: 'project-a',
       publicationId: publication.publicationId,
       receiptId: 'receipt-wrong',
+      issuedAt: '2026-08-04T00:00:00.000Z',
+      source: 'marketing-ops',
       status: 'published',
     })).toThrow(/match activity/i)
     expect(() => service.recordPublicationReceipt({
@@ -1309,6 +1348,8 @@ describe('content studio application service', () => {
       projectId: 'project-a',
       publicationId: 'missing-publication',
       receiptId: 'receipt-missing-plan',
+      issuedAt: '2026-08-04T00:00:00.000Z',
+      source: 'marketing-ops',
       status: 'published',
     })).toThrow(/not found/i)
   })
@@ -1455,6 +1496,8 @@ describe('content studio application service', () => {
       projectId: 'project-a',
       publicationId: publication.publicationId,
       receiptId: 'receipt-observation',
+      issuedAt: '2026-08-04T00:00:00.000Z',
+      source: 'marketing-ops',
       status: 'published',
     })
     expect(service.recordMonitoringObservation(observation)).toEqual(observation)
@@ -1507,6 +1550,8 @@ describe('content studio application service', () => {
       projectId: 'project-a',
       publicationId: publication.publicationId,
       receiptId: 'receipt-report',
+      issuedAt: '2026-08-04T00:00:00.000Z',
+      source: 'marketing-ops',
       status: 'published',
     })
     service.recordMonitoringObservation({
@@ -1556,6 +1601,8 @@ describe('content studio application service', () => {
       projectId: 'project-a',
       publicationId: publication.publicationId,
       receiptId: 'receipt-invalid',
+      issuedAt: '2026-08-04T00:00:00.000Z',
+      source: 'marketing-ops',
       status: 'published',
     })
     const handoff: OwnerHandoff = {

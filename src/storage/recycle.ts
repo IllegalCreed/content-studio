@@ -7,9 +7,11 @@ import type {
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, realpath, rename, stat, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { DEFAULT_STORAGE_RETENTION_POLICY } from '../constants'
 
 const MANIFEST_FILE_NAME = 'manifest.json'
-const DEFAULT_RECOVERY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
+const DEFAULT_RECOVERY_WINDOW_MS
+  = DEFAULT_STORAGE_RETENTION_POLICY.recycleRecoveryDays * 24 * 60 * 60 * 1000
 
 interface RecycleManifest {
   entries: StorageRecycleEntry[]
@@ -75,6 +77,7 @@ export async function moveToRecycleBin(
     recycleId,
     recycledAt: now.toISOString(),
     recycledRelativePath,
+    retentionClass: input.item.retentionClass,
     scope: input.item.scope,
     sha256: input.item.sha256,
     sizeBytes: input.item.sizeBytes ?? contents.byteLength,
@@ -223,6 +226,10 @@ function isManifest(input: unknown, projectId: string): input is RecycleManifest
       && typeof candidate.itemId === 'string'
       && typeof candidate.recycledRelativePath === 'string'
       && typeof candidate.originalRelativePath === 'string'
+      && (candidate.retentionClass === undefined
+        || candidate.retentionClass === 'activity-artifact'
+        || candidate.retentionClass === 'long-lived-asset'
+        || candidate.retentionClass === 'rebuildable-cache')
       && typeof candidate.expiresAt === 'string'
       && !Number.isNaN(Date.parse(candidate.expiresAt))
       && typeof candidate.sha256 === 'string'

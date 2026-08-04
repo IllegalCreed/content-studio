@@ -1,5 +1,8 @@
 export { generateStudioBundle } from './bundle/generate'
-export { CHANNEL_BLUEPRINTS } from './constants'
+export {
+  CHANNEL_BLUEPRINTS,
+  DEFAULT_STORAGE_RETENTION_POLICY,
+} from './constants'
 export { generateContentPackages } from './content/generate'
 export {
   ContentStudioApplicationService,
@@ -39,6 +42,13 @@ export {
   type ProductionWorkerSnapshot,
 } from './jobs/worker'
 export {
+  assertMatchingMarketingOpsReceipt,
+  createFakeMarketingOpsClient,
+  type FakeMarketingOpsClientOptions,
+  type MarketingOpsClient,
+  type MarketingOpsReceiptMatch,
+} from './marketing-ops/client'
+export {
   type ContentStudioMcpServer,
   type ContentStudioMcpServerOptions,
   createContentStudioMcpServer,
@@ -75,6 +85,12 @@ export {
   createContentStudioApplication,
   createContentStudioServer,
 } from './runtime/server'
+export {
+  classifyStorageRetention,
+  evaluateStorageRetention,
+  type StorageRetentionEvaluation,
+  type StorageRetentionEvaluationInput,
+} from './storage/retention'
 export type * from './types'
 export { validateCampaign, validateProjectManifest } from './validation'
 export { compileVideoPlan } from './video/compile'

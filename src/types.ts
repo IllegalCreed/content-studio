@@ -372,6 +372,17 @@ export interface ProjectAsset {
   version: number
 }
 
+export type StorageRetentionClass
+  = | 'activity-artifact'
+    | 'long-lived-asset'
+    | 'rebuildable-cache'
+
+export interface StorageRetentionPolicy {
+  activityArtifactDays: number
+  rebuildableCacheDays: number
+  recycleRecoveryDays: number
+}
+
 export type StorageCleanupPreviewItemStatus
   = | 'missing'
     | 'protected'
@@ -384,6 +395,8 @@ export interface StorageCleanupPreviewItem {
   kind: ActivityArtifactKind | ProjectAssetKind
   name: string
   reason: string
+  retentionClass: StorageRetentionClass
+  retentionEligibleAfter?: string
   relativePath: string
   sha256: string
   scope: 'activity-artifact' | 'project-asset'
@@ -409,6 +422,7 @@ export interface StorageCleanupPreview {
   items: StorageCleanupPreviewItem[]
   previewId: string
   projectId: string
+  retentionPolicy: StorageRetentionPolicy
   totals: StorageCleanupPreviewTotals
 }
 
@@ -427,6 +441,7 @@ export interface StorageRecycleEntry {
   recycleId: string
   recycledAt: string
   recycledRelativePath: string
+  retentionClass?: StorageRetentionClass
   scope: 'activity-artifact' | 'project-asset'
   sha256: string
   sizeBytes: number
@@ -468,7 +483,24 @@ export interface PublicationReceipt {
   publicationId: string
   publicUrl?: string
   receiptId: string
+  source?: 'marketing-ops'
   status: 'failed' | 'published'
+  accountRef?: string
+  issuedAt?: string
+}
+
+export interface MarketingOpsPublicationRequest {
+  accountRef?: string
+  activityId: string
+  channel: ChannelId
+  contentSha256?: string
+  projectId: string
+  publicationId: string
+}
+
+export interface MarketingOpsPublicationReceipt extends PublicationReceipt {
+  issuedAt: string
+  source: 'marketing-ops'
 }
 
 export type OwnerHandoffStatus = 'cancelled' | 'completed' | 'expired' | 'pending'

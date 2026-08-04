@@ -41,6 +41,7 @@ import type {
 } from '../types'
 import { runProductionTask as executeProductionTask } from '../jobs/production'
 import { InMemoryExecutionTaskStore } from '../jobs/task'
+import { assertMatchingMarketingOpsReceipt } from '../marketing-ops/client'
 import { compileVideoPlan } from '../video/compile'
 import { validateVideoViewport } from '../video/viewport'
 
@@ -1097,6 +1098,18 @@ export class ContentStudioApplicationService {
       || plan.projectId !== receipt.projectId
     ) {
       throw new Error('Publication receipt must match activity, channel, and project')
+    }
+    if (receipt.status === 'published') {
+      const binding = this.repository
+        .listProjectChannelBindings(receipt.projectId)
+        .find(candidate => candidate.channel === receipt.channel)
+      assertMatchingMarketingOpsReceipt(receipt, {
+        ...(binding?.accountRef === undefined ? {} : { accountRef: binding.accountRef }),
+        activityId: receipt.activityId,
+        channel: receipt.channel,
+        projectId: receipt.projectId,
+        publicationId: receipt.publicationId,
+      })
     }
     const savedReceipt = this.repository.savePublicationReceipt(receipt)
     const publicationTaskId = `publication-${receipt.publicationId}`

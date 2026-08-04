@@ -137,6 +137,11 @@ const emit = defineEmits<{
         <span v-if="props.storagePreview">生成于 {{ props.storagePreview.generatedAt }}</span>
       </div>
       <p class="section-intro">这里只检查 Content Studio 已登记的项目素材和活动产物，不扫描未知文件，也不会自动删除。</p>
+      <p v-if="props.storagePreview" class="retention-policy-summary">
+        活动产物 {{ props.storagePreview.retentionPolicy.activityArtifactDays }} 天 ·
+        可重建缓存 {{ props.storagePreview.retentionPolicy.rebuildableCacheDays }} 天 ·
+        项目素材长期保留 · 回收区 {{ props.storagePreview.retentionPolicy.recycleRecoveryDays }} 天可恢复
+      </p>
       <div v-if="props.storagePreview && props.storagePreview.totals.reviewFiles > 0" class="cleanup-actions">
         <span>待确认 {{ props.storagePreview.totals.reviewFiles }} 个活动产物</span>
         <button type="button" class="primary-button" :disabled="props.storageCleanupPending" @click="emit('confirm-cleanup')">
@@ -159,14 +164,21 @@ const emit = defineEmits<{
         <div class="cleanup-item-list">
           <div class="cleanup-item cleanup-item-heading"><span>文件</span><span>范围</span><span>状态</span><span>大小</span></div>
           <div v-for="item in props.storagePreview.items" :key="item.scope + '-' + item.id" class="cleanup-item">
-            <div><strong>{{ item.name }}</strong><small>{{ item.relativePath }} · v{{ item.version }}</small></div>
+            <div>
+              <strong>{{ item.name }}</strong>
+              <small>
+                {{ item.relativePath }} · v{{ item.version }} ·
+                {{ item.retentionClass === 'long-lived-asset' ? '长期素材' : item.retentionClass === 'rebuildable-cache' ? '可重建缓存' : '活动产物' }}
+                <template v-if="item.retentionEligibleAfter">· 建议清理 {{ item.retentionEligibleAfter }}</template>
+              </small>
+            </div>
             <span>{{ item.scope === 'project-asset' ? '项目素材' : '活动产物' }}</span>
             <span class="cleanup-status" :data-status="item.status">{{ item.status === 'protected' ? '长期保留' : item.status === 'review' ? '待确认' : item.status === 'recycled' ? '已在回收区' : item.status === 'missing' ? '文件缺失' : '路径不安全' }}</span>
             <span>{{ item.sizeBytes === undefined ? '—' : props.formatStorageBytes(item.sizeBytes) }}</span>
           </div>
         </div>
         <div v-if="props.storageRecycleEntries.length > 0" class="recycle-list">
-          <div class="section-heading"><div><p class="eyebrow">可恢复文件</p><h3>回收区</h3></div><span>恢复窗口到期处理将在后续存储策略中提供</span></div>
+          <div class="section-heading"><div><p class="eyebrow">可恢复文件</p><h3>回收区</h3></div><span>到期后仅清理回收区中的已登记文件</span></div>
           <div v-for="entry in props.storageRecycleEntries" :key="entry.recycleId" class="recycle-item">
             <div><strong>{{ entry.originalRelativePath }}</strong><small>移入于 {{ entry.recycledAt }} · 可恢复至 {{ entry.expiresAt }} · {{ props.formatStorageBytes(entry.sizeBytes) }}</small></div>
             <button type="button" class="secondary-button" :disabled="props.storageRestorePending !== null" @click="emit('restore-recycle', entry.recycleId)">

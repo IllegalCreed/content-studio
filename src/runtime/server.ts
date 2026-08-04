@@ -39,6 +39,7 @@ import type {
   StorageCleanupResult,
   StorageRecycleEntry,
   StorageRestoreResult,
+  StorageRetentionClass,
   VideoFormat,
   VideoOutlineScene,
   VideoViewport,
@@ -48,7 +49,7 @@ import { createHash } from 'node:crypto'
 import { readFile, realpath, stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
-import { CHANNEL_BLUEPRINTS } from '../constants'
+import { CHANNEL_BLUEPRINTS, DEFAULT_STORAGE_RETENTION_POLICY } from '../constants'
 import {
   ContentStudioApplicationService,
   ProjectScopeError,
@@ -70,6 +71,10 @@ import {
   moveToRecycleBin,
   restoreFromRecycleBin,
 } from '../storage/recycle'
+import {
+  classifyStorageRetention,
+  evaluateStorageRetention,
+} from '../storage/retention'
 import { assertNoSensitiveKeys } from '../validation'
 import { validateVideoViewport } from '../video/viewport'
 
@@ -1339,12 +1344,15 @@ export function parseRecordPublicationReceiptInput(
   const value = asRecord(input, 'publicationReceipt')
   const supportedKeys = new Set([
     'activityId',
+    'accountRef',
     'channel',
     'externalReceiptId',
+    'issuedAt',
     'projectId',
     'publicationId',
     'publicUrl',
     'receiptId',
+    'source',
     'status',
   ])
   for (const key of Object.keys(value)) {
@@ -1366,16 +1374,31 @@ export function parseRecordPublicationReceiptInput(
   const status = stringField(value.status, 'status')
   if (status !== 'failed' && status !== 'published')
     throw new RequestError(400, `Unsupported publication receipt status: ${status}`)
+  const source = value.source === undefined
+    ? undefined
+    : stringField(value.source, 'source')
+  if (source !== undefined && source !== 'marketing-ops')
+    throw new RequestError(400, `Unsupported publication receipt source: ${source}`)
+  if (status === 'published' && source !== 'marketing-ops')
+    throw new RequestError(400, 'Published publication receipts must come from marketing-ops')
+  const issuedAt = value.issuedAt === undefined
+    ? undefined
+    : dateTimeField(value.issuedAt, 'issuedAt')
+  if (status === 'published' && issuedAt === undefined)
+    throw new RequestError(400, 'Published publication receipts require issuedAt')
   return {
     activityId,
+    ...(value.accountRef === undefined ? {} : { accountRef: stringField(value.accountRef, 'accountRef') }),
     channel: channel as PublicationReceipt['channel'],
     externalReceiptId: stringField(value.externalReceiptId, 'externalReceiptId'),
+    ...(issuedAt === undefined ? {} : { issuedAt }),
     projectId,
     publicationId,
     ...(value.publicUrl === undefined
       ? {}
       : { publicUrl: httpsUrlField(value.publicUrl, 'publicUrl') }),
     receiptId: identifierField(value.receiptId, 'receiptId'),
+    ...(source === undefined ? {} : { source: source as PublicationReceipt['source'] }),
     status,
   }
 }
@@ -1805,6 +1828,7 @@ async function createStorageCleanupPreview(
     kind: StorageCleanupPreviewItem['kind']
     name: string
     reason: string
+    retentionClass: StorageRetentionClass
     relativePath: string
     sha256: string
     scope: StorageCleanupPreviewItem['scope']
@@ -1818,6 +1842,7 @@ async function createStorageCleanupPreview(
         kind: artifact.kind,
         name: fileNameFromRelativePath(artifact.relativePath),
         reason: '活动产物尚未晋升为项目素材，清理前需要用户确认。',
+        retentionClass: classifyStorageRetention('activity-artifact', artifact.kind),
         relativePath: artifact.relativePath,
         sha256: artifact.sha256,
         scope: 'activity-artifact' as const,
@@ -1829,6 +1854,7 @@ async function createStorageCleanupPreview(
       kind: asset.kind,
       name: fileNameFromRelativePath(asset.relativePath),
       reason: '项目素材默认长期保留，不会进入自动清理。',
+      retentionClass: classifyStorageRetention('project-asset', asset.kind),
       relativePath: asset.relativePath,
       sha256: asset.sha256,
       scope: 'project-asset' as const,
@@ -1853,8 +1879,19 @@ async function createStorageCleanupPreview(
         }
       }
       if (inspection.status === 'available') {
+        const retention = evaluateStorageRetention({
+          createdAt: inspection.modifiedAt!,
+          now: new Date(),
+          retentionClass: candidate.retentionClass,
+        })
         return {
           ...candidate,
+          reason: retention.retentionClass === 'long-lived-asset'
+            ? retention.reason
+            : `${candidate.reason} ${retention.reason}`,
+          ...(retention.eligibleAfter === undefined
+            ? {}
+            : { retentionEligibleAfter: retention.eligibleAfter }),
           sizeBytes: inspection.sizeBytes,
           status: candidate.status,
         }
@@ -1906,6 +1943,7 @@ async function createStorageCleanupPreview(
     items,
     previewId,
     projectId: projectView.project.projectId,
+    retentionPolicy: DEFAULT_STORAGE_RETENTION_POLICY,
     totals,
   }
 }
@@ -2003,6 +2041,8 @@ function createStorageCleanupPreviewId(
       sha256: item.sha256,
       sizeBytes: item.sizeBytes ?? null,
       status: item.status,
+      retentionClass: item.retentionClass,
+      retentionEligibleAfter: item.retentionEligibleAfter ?? null,
       version: item.version,
     }))
     .sort((left, right) => `${left.scope}:${left.id}`.localeCompare(`${right.scope}:${right.id}`))
@@ -2017,6 +2057,7 @@ async function inspectRegisteredPreview(
   projectId: string,
   relativePath: string,
 ): Promise<{
+  modifiedAt?: string
   sizeBytes?: number
   status: 'available' | 'missing' | 'unsafe'
 }> {
@@ -2034,7 +2075,11 @@ async function inspectRegisteredPreview(
   try {
     const fileStatus = await stat(safePath)
     return fileStatus.isFile()
-      ? { sizeBytes: fileStatus.size, status: 'available' }
+      ? {
+          modifiedAt: fileStatus.mtime.toISOString(),
+          sizeBytes: fileStatus.size,
+          status: 'available',
+        }
       : { status: 'missing' }
   }
   catch {
