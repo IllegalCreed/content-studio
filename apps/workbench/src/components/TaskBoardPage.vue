@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import VideoJobPanel from './VideoJobPanel.vue'
 import StatusRail from './StatusRail.vue'
 import type { CampaignProjection, OwnerHandoffProjection, WorkbenchSnapshot } from '../model'
@@ -42,6 +43,18 @@ const taskSummaryCopy: Record<'制作' | '发布' | '监测', string> = {
   发布: '渠道交付与发布回执',
   监测: '播放量、阅读量、回复',
 }
+
+const selectedTaskContent = computed(() =>
+  props.selectedTaskCampaign.contentGroups
+    .flatMap(group => group.contents)
+    .find(content => content.contentId === props.selectedTask.contentId),
+)
+
+const showVideoJobPanel = computed(() =>
+  props.selectedTask.kind === '制作'
+  && selectedTaskContent.value?.format === '视频'
+  && props.selectedTaskCampaign.videoJob !== null,
+)
 </script>
 
 <template>
@@ -174,7 +187,7 @@ const taskSummaryCopy: Record<'制作' | '发布' | '监测', string> = {
     </div>
   </section>
   <VideoJobPanel
-    v-if="props.visibleTasks.length > 0 && props.selectedTaskCampaign.videoJob !== null"
+    v-if="props.visibleTasks.length > 0 && showVideoJobPanel && props.selectedTaskCampaign.videoJob"
     id="video"
     :account-alias="props.selectedTask.accountAlias"
     :activity-title="props.selectedTask.activityTitle"

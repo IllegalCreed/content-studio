@@ -112,6 +112,12 @@ describe('content studio workbench', () => {
     expect(wrapper.text()).toContain('快速排序可视化指南')
     expect(wrapper.get('.video-job-context').text()).toContain('快速排序演示视频')
     expect(wrapper.get('.video-job-context').text()).toContain('bilibili')
+    expect(wrapper.find('.video-panel').exists()).toBe(true)
+    await wrapper.get('button[data-task-id="quick-sort-guide-monitoring"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('.video-panel').exists()).toBe(false)
+    await wrapper.get('button[data-task-id="quick-sort-guide-recording"]').trigger('click')
+    await nextTick()
     const retryButton = wrapper.get('[data-testid="retry-task"]')
     await wrapper.get('button[data-task-id="release-notes-publish-x"]').trigger('click')
     await nextTick()
@@ -120,9 +126,7 @@ describe('content studio workbench', () => {
     expect(router.currentRoute.value.query.task).toBe('release-notes-publish-x')
     expect(wrapper.text()).toContain('需要人工介入')
     expect(wrapper.text()).toContain('等待渠道授权人登录、审核和最终点击')
-    expect(
-      wrapper.get('button[aria-label="Cancel recording job"]').attributes(),
-    ).toHaveProperty('disabled')
+    expect(wrapper.find('button[aria-label="Cancel recording job"]').exists()).toBe(false)
 
     await wrapper.get('a[data-module="channels"]').trigger('click')
     await flushPromises()
