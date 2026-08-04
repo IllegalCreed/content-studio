@@ -110,10 +110,6 @@ describe('video plan compiler', () => {
             "title": "Quick sort walkthrough",
           },
         ],
-        "viewport": {
-          "height": 1080,
-          "width": 1920,
-        },
       }
     `)
   })
@@ -133,7 +129,7 @@ describe('video plan compiler', () => {
       },
     })
 
-    expect(plan.viewport).toEqual({
+    expect(plan.recordingConfig.viewport).toEqual({
       height: 1920,
       width: 1080,
     })
@@ -146,14 +142,18 @@ describe('video plan compiler', () => {
       video: {
         flowIds: ['quick-sort'],
         format: 'landscape',
-        viewport: {
-          height: 768,
-          width: 1366,
+        recordingProfile: {
+          defaults: {
+            viewport: {
+              height: 768,
+              width: 1366,
+            },
+          },
         },
       },
     })
 
-    expect(plan.viewport).toEqual({
+    expect(plan.recordingConfig.viewport).toEqual({
       height: 768,
       width: 1366,
     })

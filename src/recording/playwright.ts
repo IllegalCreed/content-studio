@@ -25,7 +25,6 @@ import type {
   RecordingSession,
   SemanticLocator,
   VideoPlan,
-  VideoRecordingConfig,
 } from '../types'
 import { mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -201,25 +200,17 @@ export function resolvePlaywrightRecordingContextOptions(
   plan: VideoPlan,
   rawVideoDirectory: string,
 ): BrowserContextOptions {
-  const recordingConfig: VideoRecordingConfig = plan.recordingConfig
-    ?? {
-      colorScheme: 'dark',
-      deviceScaleFactor: 1,
-      locale: 'en',
-      outputSize: plan.viewport,
-      viewport: plan.viewport,
-    }
   return {
     acceptDownloads: false,
-    colorScheme: recordingConfig.colorScheme,
-    deviceScaleFactor: recordingConfig.deviceScaleFactor,
-    locale: recordingConfig.locale,
+    colorScheme: plan.recordingConfig.colorScheme,
+    deviceScaleFactor: plan.recordingConfig.deviceScaleFactor,
+    locale: plan.recordingConfig.locale,
     recordVideo: {
       dir: rawVideoDirectory,
-      size: recordingConfig.outputSize,
+      size: plan.recordingConfig.outputSize,
     },
     reducedMotion: 'reduce',
-    viewport: recordingConfig.viewport,
+    viewport: plan.recordingConfig.viewport,
   }
 }
 
@@ -280,14 +271,6 @@ class PlaywrightRecordingSession implements RecordingSession {
       },
     )
 
-    const recordingConfig = this.context.plan.recordingConfig
-      ?? {
-        colorScheme: 'dark' as const,
-        deviceScaleFactor: 1,
-        locale: 'en' as const,
-        outputSize: this.context.plan.viewport,
-        viewport: this.context.plan.viewport,
-      }
     const browserContext = await this.browser.newContext(
       resolvePlaywrightRecordingContextOptions(
         this.context.plan,
@@ -316,7 +299,7 @@ class PlaywrightRecordingSession implements RecordingSession {
     this.video = page.video()
     this.observePage(page)
     await page.emulateMedia({
-      colorScheme: recordingConfig.colorScheme,
+      colorScheme: this.context.plan.recordingConfig.colorScheme,
       reducedMotion: 'reduce',
     })
 

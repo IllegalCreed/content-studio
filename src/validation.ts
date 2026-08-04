@@ -20,7 +20,6 @@ import {
   validateVideoRecordingConfigOverrides,
   validateVideoRecordingProfile,
 } from './video/recording-config'
-import { validateVideoViewport } from './video/viewport'
 
 const IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const SENSITIVE_KEY_PATTERN
@@ -453,7 +452,6 @@ function parseCampaignVideo(
     'outline',
     'planVersion',
     'recordingProfile',
-    'viewport',
   ])
   for (const key of Object.keys(value)) {
     if (!supportedKeys.has(key))
@@ -484,16 +482,12 @@ function parseCampaignVideo(
         format as NonNullable<CampaignSpec['video']>['format'],
         projectLocales,
       )
-  const viewport = value.viewport === undefined
-    ? undefined
-    : validateVideoViewport(value.viewport, format as NonNullable<CampaignSpec['video']>['format'])
   return {
     flowIds,
     format: format as NonNullable<CampaignSpec['video']>['format'],
     ...(outline === undefined ? {} : { outline }),
     ...(planVersion === undefined ? {} : { planVersion }),
     ...(recordingProfile === undefined ? {} : { recordingProfile }),
-    ...(viewport === undefined ? {} : { viewport }),
   }
 }
 

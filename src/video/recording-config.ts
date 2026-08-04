@@ -133,8 +133,6 @@ export function resolveVideoRecordingConfig(
       campaign.video.recordingProfile?.channelVariants?.[channelId],
     )
   }
-  if (campaign.video.viewport !== undefined)
-    merged.viewport = campaign.video.viewport
 
   if (merged.locale === undefined || !project.locales.includes(merged.locale)) {
     throw new Error(

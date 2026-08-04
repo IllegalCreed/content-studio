@@ -355,14 +355,7 @@ function toolDefinitions(): Array<Record<string, unknown>> {
                 type: 'array',
               },
               planVersion: { minimum: 1, type: 'integer' },
-              viewport: {
-                properties: {
-                  height: { minimum: 320, type: 'integer' },
-                  width: { minimum: 320, type: 'integer' },
-                },
-                required: ['width', 'height'],
-                type: 'object',
-              },
+              recordingProfile: videoRecordingProfileSchema(),
             },
             required: ['flowIds', 'format'],
             type: 'object',
@@ -565,6 +558,46 @@ function localizedTextSchema(): Record<string, unknown> {
       'zh-CN': { type: 'string' },
     },
     required: ['en', 'zh-CN'],
+    type: 'object',
+  }
+}
+
+function videoRecordingConfigOverridesSchema(): Record<string, unknown> {
+  return {
+    properties: {
+      colorScheme: { enum: ['dark', 'light', 'no-preference'], type: 'string' },
+      deviceScaleFactor: { enum: [1, 2], type: 'number' },
+      locale: { enum: ['en', 'zh-CN'], type: 'string' },
+      outputSize: {
+        properties: {
+          height: { minimum: 320, type: 'integer' },
+          width: { minimum: 320, type: 'integer' },
+        },
+        required: ['width', 'height'],
+        type: 'object',
+      },
+      viewport: {
+        properties: {
+          height: { minimum: 320, type: 'integer' },
+          width: { minimum: 320, type: 'integer' },
+        },
+        required: ['width', 'height'],
+        type: 'object',
+      },
+    },
+    type: 'object',
+  }
+}
+
+function videoRecordingProfileSchema(): Record<string, unknown> {
+  return {
+    properties: {
+      channelVariants: {
+        additionalProperties: videoRecordingConfigOverridesSchema(),
+        type: 'object',
+      },
+      defaults: videoRecordingConfigOverridesSchema(),
+    },
     type: 'object',
   }
 }

@@ -76,6 +76,13 @@ describe('recorder artifact persistence', () => {
         outcome: 'succeeded',
         planSha256: 'plan-sha',
         projectId: 'algorithm-visualizer',
+        recordingConfig: {
+          colorScheme: 'dark',
+          deviceScaleFactor: 1,
+          locale: 'en',
+          outputSize: { height: 1080, width: 1920 },
+          viewport: { height: 1080, width: 1920 },
+        },
         receiptVersion: 1,
         totalActions: 1,
         totalScenes: 1,

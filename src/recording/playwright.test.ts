@@ -120,7 +120,6 @@ describe('playwright recording policy', () => {
         viewport: { height: 900, width: 1600 },
       },
       scenes: [],
-      viewport: { height: 900, width: 1600 },
     } satisfies VideoPlan
 
     expect(resolvePlaywrightRecordingContextOptions(

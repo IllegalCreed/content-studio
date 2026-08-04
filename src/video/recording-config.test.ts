@@ -52,15 +52,15 @@ const campaign: CampaignSpec = {
         youtube: {
           colorScheme: 'dark',
           outputSize: { height: 1080, width: 1920 },
+          viewport: { height: 768, width: 1366 },
         },
       },
     },
-    viewport: { height: 768, width: 1366 },
   },
 }
 
 describe('video recording configuration', () => {
-  it('resolves project defaults, activity defaults, channel variants, and legacy viewport', () => {
+  it('resolves project defaults, activity defaults, and channel variants', () => {
     expect(resolveVideoRecordingConfig(project, campaign)).toEqual({
       colorScheme: 'dark',
       deviceScaleFactor: 2,

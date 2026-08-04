@@ -208,6 +208,12 @@ describe('content Studio local MCP server', () => {
           properties: {
             outline: { type: 'array' },
             planVersion: { type: 'integer' },
+            recordingProfile: {
+              properties: {
+                channelVariants: { type: 'object' },
+                defaults: { type: 'object' },
+              },
+            },
           },
         },
       },

@@ -100,7 +100,11 @@ describe('video plan projection', () => {
   it('keeps custom viewport settings visible to the workbench', () => {
     expect(videoViewportForFormat({
       format: 'landscape',
-      viewport: { height: 768, width: 1366 },
+      recordingProfile: {
+        defaults: {
+          viewport: { height: 768, width: 1366 },
+        },
+      },
     })).toEqual({ height: 768, width: 1366 })
     expect(videoViewportForFormat({ format: 'portrait' })).toEqual({
       height: 1920,
@@ -145,6 +149,13 @@ describe('runtime report projection', () => {
       outcome: 'succeeded',
       planSha256: 'b'.repeat(64),
       projectId: 'project-a',
+      recordingConfig: {
+        colorScheme: 'dark',
+        deviceScaleFactor: 1,
+        locale: 'en',
+        outputSize: { height: 1080, width: 1920 },
+        viewport: { height: 1080, width: 1920 },
+      },
       receiptVersion: 1,
       totalActions: 3,
       totalScenes: 1,

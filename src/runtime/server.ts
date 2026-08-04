@@ -42,7 +42,6 @@ import type {
   StorageRetentionClass,
   VideoFormat,
   VideoOutlineScene,
-  VideoViewport,
 } from '../types'
 import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
@@ -77,7 +76,6 @@ import {
 } from '../storage/retention'
 import { assertNoSensitiveKeys } from '../validation'
 import { validateVideoRecordingProfile } from '../video/recording-config'
-import { validateVideoViewport } from '../video/viewport'
 
 const MAX_BODY_BYTES = 256 * 1024
 const IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -1520,7 +1518,6 @@ function videoField(input: unknown): NonNullable<CreatePublishingActivityInput['
     'outline',
     'planVersion',
     'recordingProfile',
-    'viewport',
   ])
   for (const key of Object.keys(value)) {
     if (!supportedKeys.has(key))
@@ -1557,25 +1554,12 @@ function videoField(input: unknown): NonNullable<CreatePublishingActivityInput['
       )
     }
   }
-  let viewport: VideoViewport | undefined
-  if (value.viewport !== undefined) {
-    try {
-      viewport = validateVideoViewport(value.viewport, format as VideoFormat)
-    }
-    catch (error: unknown) {
-      throw new RequestError(
-        400,
-        error instanceof Error ? error.message : 'Invalid video viewport',
-      )
-    }
-  }
   return {
     flowIds,
     format: format as VideoFormat,
     ...(outline === undefined ? {} : { outline }),
     ...(planVersion === undefined ? {} : { planVersion }),
     ...(recordingProfile === undefined ? {} : { recordingProfile }),
-    ...(viewport === undefined ? {} : { viewport }),
   }
 }
 

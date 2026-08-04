@@ -44,7 +44,6 @@ import { InMemoryExecutionTaskStore } from '../jobs/task'
 import { assertMatchingMarketingOpsReceipt } from '../marketing-ops/client'
 import { compileVideoPlan } from '../video/compile'
 import { validateVideoRecordingProfile } from '../video/recording-config'
-import { validateVideoViewport } from '../video/viewport'
 
 export class ProjectScopeError extends Error {
   constructor(projectId: string, recordId: string) {
@@ -1346,8 +1345,6 @@ export class ContentStudioApplicationService {
       throw new Error('Activity video flow ids must be unique')
     if (!['landscape', 'portrait', 'square'].includes(video.format))
       throw new Error(`Unsupported activity video format: ${video.format}`)
-    if (video.viewport !== undefined)
-      validateVideoViewport(video.viewport, video.format)
     if (video.recordingProfile !== undefined) {
       validateVideoRecordingProfile(
         video.recordingProfile,

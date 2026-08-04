@@ -20,11 +20,14 @@ const plan: VideoPlan = {
   campaignId: 'demo-campaign',
   durationMs: 100,
   format: 'landscape',
-  scenes: [],
-  viewport: {
-    height: 1080,
-    width: 1920,
+  recordingConfig: {
+    colorScheme: 'dark',
+    deviceScaleFactor: 1,
+    locale: 'en',
+    outputSize: { height: 1080, width: 1920 },
+    viewport: { height: 1080, width: 1920 },
   },
+  scenes: [],
 }
 
 function createReceipt(
@@ -59,6 +62,7 @@ function createReceipt(
       outcome,
       planSha256: 'plan-sha',
       projectId,
+      recordingConfig: plan.recordingConfig,
       receiptVersion: 1,
       totalActions: 0,
       totalScenes: 0,

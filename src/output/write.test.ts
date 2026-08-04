@@ -26,11 +26,14 @@ const bundle: StudioBundle = {
     campaignId: 'quick-sort-launch',
     durationMs: 2000,
     format: 'landscape',
-    scenes: [],
-    viewport: {
-      height: 1080,
-      width: 1920,
+    recordingConfig: {
+      colorScheme: 'dark',
+      deviceScaleFactor: 1,
+      locale: 'en',
+      outputSize: { height: 1080, width: 1920 },
+      viewport: { height: 1080, width: 1920 },
     },
+    scenes: [],
   },
 }
 

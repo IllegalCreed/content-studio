@@ -555,6 +555,13 @@ describe('content studio application service', () => {
       outcome: 'succeeded',
       planSha256: 'test-plan',
       projectId: 'project-a',
+      recordingConfig: {
+        colorScheme: 'dark',
+        deviceScaleFactor: 1,
+        locale: 'en',
+        outputSize: { height: 1080, width: 1920 },
+        viewport: { height: 1080, width: 1920 },
+      },
       receiptVersion: 1,
       totalActions: 0,
       totalScenes: 0,
@@ -567,11 +574,14 @@ describe('content studio application service', () => {
           campaignId: activity.campaignId,
           durationMs: 100,
           format: 'landscape',
-          scenes: [],
-          viewport: {
-            height: 1080,
-            width: 1920,
+          recordingConfig: {
+            colorScheme: 'dark',
+            deviceScaleFactor: 1,
+            locale: 'en',
+            outputSize: { height: 1080, width: 1920 },
+            viewport: { height: 1080, width: 1920 },
           },
+          scenes: [],
         },
         projectId: 'project-a',
         projectOrigin: 'https://project-a.example.com',
@@ -705,6 +715,13 @@ describe('content studio application service', () => {
       outcome: 'succeeded',
       planSha256: 'video-plan-test',
       projectId: 'video-project',
+      recordingConfig: {
+        colorScheme: 'dark',
+        deviceScaleFactor: 1,
+        locale: 'en',
+        outputSize: { height: 1080, width: 1920 },
+        viewport: { height: 1080, width: 1920 },
+      },
       receiptVersion: 1,
       totalActions: 1,
       totalScenes: 1,
@@ -940,14 +957,18 @@ describe('content studio application service', () => {
       video: {
         flowIds: ['quick-sort'],
         format: 'landscape',
-        viewport: { height: 768, width: 1366 },
+        recordingProfile: {
+          defaults: {
+            viewport: { height: 768, width: 1366 },
+          },
+        },
       },
     })
 
     expect(revised.version).toBe(2)
-    expect(revised.video?.viewport).toEqual({ height: 768, width: 1366 })
+    expect(revised.video?.recordingProfile?.defaults?.viewport).toEqual({ height: 768, width: 1366 })
     expect(revised.videoPlanReviewStatus).toBe('pending')
-    expect(repository.getActivity('project-a', activity.activityId, 1)?.video?.viewport)
+    expect(repository.getActivity('project-a', activity.activityId, 1)?.video?.recordingProfile)
       .toBeUndefined()
   })
 

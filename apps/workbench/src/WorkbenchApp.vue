@@ -982,9 +982,15 @@ async function reviseSelectedVideoPlan(): Promise<void> {
       topic: activity.topic,
       video: {
         ...activity.video,
-        viewport: {
-          height: videoPlanViewportDraft.height,
-          width: videoPlanViewportDraft.width,
+        recordingProfile: {
+          ...activity.video.recordingProfile,
+          defaults: {
+            ...activity.video.recordingProfile?.defaults,
+            viewport: {
+              height: videoPlanViewportDraft.height,
+              width: videoPlanViewportDraft.width,
+            },
+          },
         },
       },
     })
@@ -1392,9 +1398,13 @@ async function saveActivity(): Promise<void> {
           video: {
             flowIds: projectCaptureFlowIds.value,
             format: activityForm.videoFormat,
-            viewport: {
-              height: activityForm.videoHeight,
-              width: activityForm.videoWidth,
+            recordingProfile: {
+              defaults: {
+                viewport: {
+                  height: activityForm.videoHeight,
+                  width: activityForm.videoWidth,
+                },
+              },
             },
           },
         }

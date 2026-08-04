@@ -153,7 +153,6 @@ export interface CampaignVideo {
   outline?: VideoOutlineScene[]
   planVersion?: number
   recordingProfile?: VideoRecordingProfile
-  viewport?: VideoViewport
 }
 
 export interface CampaignSpec {
@@ -617,9 +616,8 @@ export interface VideoPlan {
   outline?: VideoOutlineScene[]
   planVersion?: number
   reviewStatus?: VideoPlanReviewStatus
-  recordingConfig?: VideoRecordingConfig
+  recordingConfig: VideoRecordingConfig
   scenes: CompiledScene[]
-  viewport: VideoViewport
 }
 
 export interface StudioBundle {
@@ -796,11 +794,10 @@ export interface RecorderAttemptReceipt {
   previousAttempt?: number
   projectId: string
   recordingContext?: RecordingContext
-  recordingConfig?: VideoRecordingConfig
+  recordingConfig: VideoRecordingConfig
   receiptVersion: 1
   totalActions: number
   totalScenes: number
-  viewport?: VideoViewport
 }
 
 /**

@@ -78,7 +78,13 @@ export const useWorkbenchStore = defineStore('workbench', () => {
       topic: activity.topic,
       video: {
         ...activity.video,
-        viewport,
+        recordingProfile: {
+          ...activity.video.recordingProfile,
+          defaults: {
+            ...activity.video.recordingProfile?.defaults,
+            viewport,
+          },
+        },
       },
     })
     await refresh()

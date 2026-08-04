@@ -54,7 +54,6 @@ export function compileVideoPlan(
       : { planVersion: campaign.video.planVersion }),
     recordingConfig,
     scenes,
-    viewport: recordingConfig.viewport,
   }
 }
 

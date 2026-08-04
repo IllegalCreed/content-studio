@@ -348,7 +348,11 @@ describe('workbench runtime client', () => {
         version: 2,
         video: {
           format: 'landscape',
-          viewport: { height: 768, width: 1366 },
+          recordingProfile: {
+            defaults: {
+              viewport: { height: 768, width: 1366 },
+            },
+          },
         },
         videoPlanReviewStatus: 'pending',
       }), { status: 200 }),
@@ -364,7 +368,11 @@ describe('workbench runtime client', () => {
       video: {
         flowIds: ['quick-sort'],
         format: 'landscape',
-        viewport: { height: 768, width: 1366 },
+        recordingProfile: {
+          defaults: {
+            viewport: { height: 768, width: 1366 },
+          },
+        },
       },
     })
     expect(result).toMatchObject({ version: 2, videoPlanReviewStatus: 'pending' })
@@ -379,7 +387,11 @@ describe('workbench runtime client', () => {
           video: {
             flowIds: ['quick-sort'],
             format: 'landscape',
-            viewport: { height: 768, width: 1366 },
+            recordingProfile: {
+              defaults: {
+                viewport: { height: 768, width: 1366 },
+              },
+            },
           },
         }),
         method: 'POST',

@@ -188,9 +188,9 @@ export interface VideoPlanProjection {
 }
 
 export function videoViewportForFormat(
-  video: Pick<CampaignVideo, 'format' | 'viewport'>,
+  video: Pick<CampaignVideo, 'format' | 'recordingProfile'>,
 ): VideoViewport {
-  return video.viewport ?? {
+  return video.recordingProfile?.defaults?.viewport ?? {
     landscape: { height: 1080, width: 1920 },
     portrait: { height: 1920, width: 1080 },
     square: { height: 1080, width: 1080 },

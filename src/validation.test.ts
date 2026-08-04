@@ -243,6 +243,16 @@ describe('manifest validation', () => {
     })
   })
 
+  it('requires viewport overrides to live inside the recording profile', () => {
+    expect(() => validateCampaign({
+      ...campaign,
+      video: {
+        ...campaign.video!,
+        viewport: { height: 768, width: 1366 },
+      },
+    }, project)).toThrow(/unsupported field.*viewport/i)
+  })
+
   it('fails closed for non-HTTPS public URLs and unknown capture flows', () => {
     expect(() =>
       validateProjectManifest({

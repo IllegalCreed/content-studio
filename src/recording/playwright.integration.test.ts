@@ -146,9 +146,12 @@ describe.skipIf(!browserIsInstalled)('playwright recorder integration', () => {
           title: 'Local demo',
         },
       ],
-      viewport: {
-        height: 360,
-        width: 640,
+      recordingConfig: {
+        colorScheme: 'dark',
+        deviceScaleFactor: 1,
+        locale: 'en',
+        outputSize: { height: 360, width: 640 },
+        viewport: { height: 360, width: 640 },
       },
     }
 
@@ -250,9 +253,12 @@ describe.skipIf(!browserIsInstalled)('playwright recorder integration', () => {
               title: 'Missing locator',
             },
           ],
-          viewport: {
-            height: 360,
-            width: 640,
+          recordingConfig: {
+            colorScheme: 'dark',
+            deviceScaleFactor: 1,
+            locale: 'en',
+            outputSize: { height: 360, width: 640 },
+            viewport: { height: 360, width: 640 },
           },
         },
         projectId: 'local-project',

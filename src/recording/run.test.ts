@@ -14,6 +14,19 @@ const plan: VideoPlan = {
   campaignId: 'quick-sort-launch',
   durationMs: 1600,
   format: 'landscape',
+  recordingConfig: {
+    colorScheme: 'dark',
+    deviceScaleFactor: 1,
+    locale: 'en',
+    outputSize: {
+      height: 1080,
+      width: 1920,
+    },
+    viewport: {
+      height: 1080,
+      width: 1920,
+    },
+  },
   scenes: [
     {
       actions: [
@@ -40,23 +53,6 @@ const plan: VideoPlan = {
       title: 'Quick sort',
     },
   ],
-  viewport: {
-    height: 1080,
-    width: 1920,
-  },
-  recordingConfig: {
-    colorScheme: 'dark',
-    deviceScaleFactor: 1,
-    locale: 'en',
-    outputSize: {
-      height: 1080,
-      width: 1920,
-    },
-    viewport: {
-      height: 1080,
-      width: 1920,
-    },
-  },
 }
 
 const preview: RecorderArtifact = {
@@ -420,7 +416,6 @@ describe('recording job runner', () => {
       sourceAccess: 'source-owned',
     })
     expect(result.attempts[0]?.recordingContext).toEqual(result.receipt.recordingContext)
-    expect(result.receipt.viewport).toEqual(plan.viewport)
     expect(result.receipt.recordingConfig).toEqual(plan.recordingConfig)
   })
 })

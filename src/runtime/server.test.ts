@@ -104,16 +104,13 @@ describe('content studio local application server', () => {
             colorScheme: 'light',
             deviceScaleFactor: 2,
             locale: 'en',
+            viewport: { height: 768, width: 1366 },
           },
           channelVariants: {
             github: {
               outputSize: { height: 1080, width: 1920 },
             },
           },
-        },
-        viewport: {
-          height: 768,
-          width: 1366,
         },
         outline: [{
           flowId: 'quick-sort',
@@ -137,6 +134,7 @@ describe('content studio local application server', () => {
             colorScheme: 'light',
             deviceScaleFactor: 2,
             locale: 'en',
+            viewport: { height: 768, width: 1366 },
           },
           channelVariants: {
             github: {
@@ -145,10 +143,6 @@ describe('content studio local application server', () => {
           },
         },
         outline: [{ flowId: 'quick-sort' }],
-        viewport: {
-          height: 768,
-          width: 1366,
-        },
       },
     })
 
@@ -187,9 +181,13 @@ describe('content studio local application server', () => {
       video: {
         flowIds: ['quick-sort'],
         format: 'landscape',
-        viewport: {
-          height: 100,
-          width: 10_000,
+        recordingProfile: {
+          defaults: {
+            viewport: {
+              height: 100,
+              width: 10_000,
+            },
+          },
         },
       },
     }, 'project-a')).toThrow(/viewport/i)
@@ -227,12 +225,20 @@ describe('content studio local application server', () => {
       video: {
         flowIds: ['quick-sort'],
         format: 'landscape',
-        viewport: { height: 768, width: 1366 },
+        recordingProfile: {
+          defaults: {
+            viewport: { height: 768, width: 1366 },
+          },
+        },
       },
     }, 'project-a', 'activity-a')).toMatchObject({
       baseVersion: 1,
       video: {
-        viewport: { height: 768, width: 1366 },
+        recordingProfile: {
+          defaults: {
+            viewport: { height: 768, width: 1366 },
+          },
+        },
       },
     })
   })
@@ -1043,6 +1049,19 @@ describe('content studio local application server', () => {
       outcome: 'succeeded',
       planSha256: 'runtime-plan',
       projectId: project.projectId,
+      recordingConfig: {
+        colorScheme: 'dark',
+        deviceScaleFactor: 1,
+        locale: 'en',
+        outputSize: {
+          height: 1080,
+          width: 1920,
+        },
+        viewport: {
+          height: 1080,
+          width: 1920,
+        },
+      },
       receiptVersion: 1,
       totalActions: 1,
       totalScenes: 1,
@@ -1565,7 +1584,11 @@ describe('content studio local application server', () => {
             video: {
               flowIds: ['quick-sort'],
               format: 'landscape',
-              viewport: { height: 768, width: 1366 },
+              recordingProfile: {
+                defaults: {
+                  viewport: { height: 768, width: 1366 },
+                },
+              },
             },
           }),
           headers: { 'content-type': 'application/json' },
@@ -1575,7 +1598,13 @@ describe('content studio local application server', () => {
       expect(reviseResponse.status).toBe(200)
       expect(await reviseResponse.json()).toMatchObject({
         version: 3,
-        video: { viewport: { height: 768, width: 1366 } },
+        video: {
+          recordingProfile: {
+            defaults: {
+              viewport: { height: 768, width: 1366 },
+            },
+          },
+        },
         videoPlanReviewStatus: 'pending',
       })
     }
@@ -1745,6 +1774,19 @@ describe('content studio local application server', () => {
         outcome: 'cancelled',
         planSha256: 'worker-plan',
         projectId: project.projectId,
+        recordingConfig: {
+          colorScheme: 'dark',
+          deviceScaleFactor: 1,
+          locale: 'en',
+          outputSize: {
+            height: 1080,
+            width: 1920,
+          },
+          viewport: {
+            height: 1080,
+            width: 1920,
+          },
+        },
         receiptVersion: 1,
         totalActions: 1,
         totalScenes: 1,

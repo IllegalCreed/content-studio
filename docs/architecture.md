@@ -372,8 +372,7 @@ AI 创作层在此基础上增加内容修订和非确定性产物，但必须�
 确认不会误用于新的录制尺寸。工作台只是调用这些接口，不在浏览器端复制校验或执行器。
 
 配置按“内置预设 → 项目 `videoRecordingDefaults` → 活动
-`video.recordingProfile.defaults` → 渠道 `channelVariants` → 兼容旧字段
-`video.viewport`”合并。项目默认值、活动拍摄计划和渠道资源变体负责声明经过校验的
+`video.recordingProfile.defaults` → 渠道 `channelVariants`”合并。项目默认值、活动拍摄计划和渠道资源变体负责声明经过校验的
 viewport/输出尺寸，任务执行只读取最终版本化配置。需要
 区分网站 viewport（页面布局和响应式断点看到的 CSS 像素）与最终媒体尺寸（文件像素）；
 device scale factor、语言和色彩环境也要作为可审计配置，而不是隐藏在浏览器启动参数中。

@@ -243,13 +243,10 @@ export async function runRecordingJob(
       ...(validatedInput.recordingContext === undefined
         ? {}
         : { recordingContext: validatedInput.recordingContext }),
-      ...(validatedInput.plan.recordingConfig === undefined
-        ? {}
-        : { recordingConfig: validatedInput.plan.recordingConfig }),
+      recordingConfig: validatedInput.plan.recordingConfig,
       receiptVersion: 1,
       totalActions,
       totalScenes: validatedInput.plan.scenes.length,
-      viewport: validatedInput.plan.viewport,
     }
     attempts.push(receipt)
     if (attemptPrepared)

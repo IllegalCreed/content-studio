@@ -75,6 +75,13 @@ describe('sqlite execution task store', () => {
       outcome: 'succeeded',
       planSha256: 'b'.repeat(64),
       projectId: 'project-a',
+      recordingConfig: {
+        colorScheme: 'dark',
+        deviceScaleFactor: 1,
+        locale: 'en',
+        outputSize: { height: 1920, width: 1080 },
+        viewport: { height: 1920, width: 1080 },
+      },
       receiptVersion: 1,
       totalActions: 2,
       totalScenes: 1,
