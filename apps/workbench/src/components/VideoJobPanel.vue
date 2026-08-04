@@ -33,7 +33,11 @@ const progress = computed(() =>
         </p>
         <p class="video-job-id">任务编号：<code>{{ job.jobId }}</code></p>
       </div>
-      <span class="progress-value">{{ progress }}%</span>
+      <div class="video-progress-summary">
+        <span>动作进度</span>
+        <strong>{{ job.completedActions }} / {{ job.totalActions }} 个动作</strong>
+        <small>{{ progress }}%</small>
+      </div>
     </div>
 
     <div class="progress-track">

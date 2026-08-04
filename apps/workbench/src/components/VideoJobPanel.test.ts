@@ -45,6 +45,8 @@ describe('video job panel', () => {
     expect(wrapper.get('img.preview-image').attributes('src')).toBe(job.previewUrl)
     expect(wrapper.get('.video-job-context').text()).toContain('快速排序可视化指南')
     expect(wrapper.get('.video-job-context').text()).toContain('bilibili')
+    expect(wrapper.get('.video-progress-summary').text()).toContain('动作进度')
+    expect(wrapper.get('.video-progress-summary').text()).toContain('2 / 3 个动作')
     expect(wrapper.text()).toContain('preview-1.png')
     expect(wrapper.text()).toContain('控制台错误 0 · 警告 1 · 页面错误 0')
     expect(wrapper.get('a[download]').attributes('href')).toBe(job.artifacts[0]!.url)

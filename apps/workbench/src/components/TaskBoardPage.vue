@@ -2,7 +2,6 @@
 import { computed } from 'vue'
 import PublicationTaskPanel from './PublicationTaskPanel.vue'
 import VideoJobPanel from './VideoJobPanel.vue'
-import StatusRail from './StatusRail.vue'
 import type { CampaignProjection, OwnerHandoffProjection, WorkbenchSnapshot } from '../model'
 import { humanizeStatus, humanizeTaskEventKind } from '../model'
 
@@ -57,6 +56,27 @@ const showVideoJobPanel = computed(() =>
   && props.selectedTaskCampaign.videoJob !== null,
 )
 
+const taskProgress = computed(() => {
+  const videoJob = props.selectedTaskCampaign.videoJob
+  if (showVideoJobPanel.value && videoJob !== null) {
+    const percent = videoJob.totalActions === 0
+      ? 0
+      : Math.round((videoJob.completedActions / videoJob.totalActions) * 100)
+    return {
+      detail: `${videoJob.completedActions} / ${videoJob.totalActions} 个动作`,
+      label: '动作进度',
+      percent,
+    }
+  }
+  if (props.selectedTask.progress === undefined)
+    return null
+  return {
+    detail: '当前生命周期',
+    label: '阶段进度',
+    percent: props.selectedTask.progress,
+  }
+})
+
 const selectedTaskHandoff = computed(() =>
   props.selectedTask.kind === '发布'
     ? props.selectedTaskCampaign.handoffs.find(handoff => handoff.channel === props.selectedTask.channel)
@@ -110,8 +130,20 @@ const selectedTaskHandoff = computed(() =>
         </div>
         <p class="task-detail-context">{{ props.selectedTask.activityTitle }} → {{ props.selectedTask.contentTitle }} → {{ props.selectedTask.channel }} → {{ props.selectedTask.accountAlias }}</p>
         <p class="task-detail-copy">{{ props.selectedTask.detail }}</p>
-        <div v-if="props.selectedTask.progress !== undefined" class="progress-track"><span :style="{ width: props.selectedTask.progress + '%' }" /></div>
-        <StatusRail :steps="props.selectedTask.steps" />
+        <div v-if="taskProgress" class="task-progress">
+          <div class="task-progress-heading">
+            <span>{{ taskProgress.label }}</span>
+            <strong>{{ taskProgress.detail }} · {{ taskProgress.percent }}%</strong>
+          </div>
+          <div
+            class="progress-track"
+            role="progressbar"
+            :aria-label="taskProgress.label"
+            :aria-valuemax="100"
+            :aria-valuemin="0"
+            :aria-valuenow="taskProgress.percent"
+          ><span :style="{ width: taskProgress.percent + '%' }" /></div>
+        </div>
         <ol class="task-step-list" aria-label="任务阶段">
           <li v-for="step in props.selectedTask.steps" :key="step.label" :data-step-status="step.status">
             <span class="step-marker" />

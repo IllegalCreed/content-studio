@@ -562,72 +562,10 @@ main {
   font-size: 1.6rem;
 }
 
-.asset-count,
-.progress-value {
+.asset-count {
   color: var(--acid);
   font-family: 'DM Mono', monospace;
   font-size: 0.72rem;
-}
-
-.status-rail {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
-  margin: 3rem 0;
-  padding: 0;
-  list-style: none;
-}
-
-.status-rail li {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-  color: #686d62;
-  font-family: 'DM Mono', monospace;
-  font-size: 0.58rem;
-  text-transform: uppercase;
-}
-
-.status-rail li::before {
-  position: absolute;
-  top: 0.26rem;
-  right: 0;
-  left: 0.55rem;
-  height: 1px;
-  background: var(--stroke);
-  content: '';
-}
-
-.status-rail li.complete::before {
-  background: var(--acid);
-}
-
-.status-dot {
-  z-index: 1;
-  width: 0.55rem;
-  height: 0.55rem;
-  border: 1px solid currentcolor;
-  border-radius: 50%;
-  background: var(--panel);
-}
-
-.status-rail li.complete,
-.status-rail li.active {
-  color: var(--acid);
-}
-
-.status-rail li.active .status-dot {
-  background: var(--acid);
-  box-shadow: 0 0 0.8rem rgb(217 255 67 / 65%);
-}
-
-.status-rail li[data-step-status='skipped'] {
-  color: #686d62;
-  opacity: 0.7;
-}
-
-.status-rail li[data-step-status='blocked'] {
-  color: #d68066;
 }
 
 .detail-footer {
@@ -675,6 +613,26 @@ main {
 .video-panel {
   margin-top: 1rem;
   padding: 1rem;
+}
+
+.video-progress-summary {
+  display: grid;
+  justify-items: end;
+  gap: 0.15rem;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  text-align: right;
+}
+
+.video-progress-summary span,
+.video-progress-summary small {
+  font-size: 0.58rem;
+}
+
+.video-progress-summary strong {
+  color: var(--acid);
+  font-size: 0.78rem;
+  font-weight: 500;
 }
 
 .panel-heading {
@@ -1419,6 +1377,38 @@ button:disabled {
   line-height: 1.6;
 }
 
+.task-progress {
+  margin: 1.25rem 0 0;
+}
+
+.task-progress-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: baseline;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+}
+
+.task-progress-heading strong {
+  color: var(--acid);
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.task-progress .progress-track {
+  height: 0.45rem;
+  margin: 0.55rem 0 0;
+  padding: 0.1rem;
+  border: 1px solid var(--stroke);
+  background: #151713;
+}
+
+.task-progress .progress-track span {
+  height: 100%;
+}
+
 .task-events {
   margin-top: 1.25rem;
   padding: 0.8rem;
@@ -1720,20 +1710,6 @@ footer {
     padding: 0.75rem 0;
     border-top: 1px solid var(--stroke);
     border-left: 0;
-  }
-
-  .status-rail {
-    grid-template-columns: 1fr;
-    gap: 0.55rem;
-  }
-
-  .status-rail li {
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .status-rail li::before {
-    display: none;
   }
 
   .job-actions,
