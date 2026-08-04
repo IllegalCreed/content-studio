@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { WorkbenchSnapshot } from '../model'
+import type { ProjectIndexProjection, WorkbenchSnapshot } from '../model'
 import { humanizeActivityStatus, humanizeStatus } from '../model'
 
 const props = defineProps<{
@@ -7,6 +7,7 @@ const props = defineProps<{
   ownerHandoffCount: number
   pendingTaskCount: number
   projectCount: number
+  projectIndex: ProjectIndexProjection[]
   snapshot: WorkbenchSnapshot
 }>()
 
@@ -15,6 +16,7 @@ const emit = defineEmits<{
   'go-project': []
   'go-tasks': []
   'open-activity': [activityId: string]
+  'open-project': [projectId: string]
   'select-task': [taskId: string]
 }>()
 </script>
@@ -46,7 +48,7 @@ const emit = defineEmits<{
   <section class="overview-grid">
     <article class="module-card">
       <div class="module-card-heading">
-        <div><p class="eyebrow">跨项目活动</p><h2>最近活动</h2></div>
+        <div><p class="eyebrow">当前项目活动</p><h2>最近活动</h2></div>
         <button type="button" @click="emit('go-activities')">查看项目活动</button>
       </div>
       <div class="module-list">
@@ -60,7 +62,7 @@ const emit = defineEmits<{
 
     <article class="module-card">
       <div class="module-card-heading">
-        <div><p class="eyebrow">跨项目执行层</p><h2>待处理任务</h2></div>
+        <div><p class="eyebrow">当前项目执行层</p><h2>待处理任务</h2></div>
         <button type="button" @click="emit('go-tasks')">打开全局面板</button>
       </div>
       <div class="module-list">
@@ -80,13 +82,15 @@ const emit = defineEmits<{
         <span class="project-rollup-scope" data-testid="project-rollup-scope">跨项目索引</span>
       </div>
       <div class="project-rollup-list">
-        <div class="project-rollup-item">
+        <div v-for="project in props.projectIndex" :key="project.projectId" class="project-rollup-item">
           <div>
-            <strong>{{ props.snapshot.project.name }}</strong>
-            <code>{{ props.snapshot.project.projectId }}</code>
+            <strong>{{ project.name }}</strong>
+            <code>{{ project.projectId }}</code>
           </div>
-          <small>{{ props.snapshot.campaigns.length }} 个活动 · {{ props.snapshot.tasks.length }} 个任务 · {{ props.snapshot.project.locales.join(' / ') }}</small>
-          <button type="button" @click="emit('go-project')">打开项目空间</button>
+          <small>{{ project.activityCount }} 个活动 · {{ project.taskCount }} 个任务 · v{{ project.snapshotVersion }} · {{ project.previewReady ? '预览就绪' : '暂无预览流' }}</small>
+          <small v-if="project.enabledChannels.length > 0" class="project-rollup-channels">已启用 {{ project.enabledChannels.length }} 个渠道</small>
+          <small v-else class="project-rollup-channels">尚未启用渠道</small>
+          <button type="button" @click="emit('open-project', project.projectId)">打开项目空间</button>
         </div>
       </div>
     </article>

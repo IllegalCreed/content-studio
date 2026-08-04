@@ -1,6 +1,7 @@
 import type {
   ChannelContent,
   ContentGroup,
+  ContentStudioProjectIndex,
   ExecutionTask,
   OwnerHandoff,
   ProjectChannelBinding,
@@ -14,10 +15,44 @@ import {
   activityToCampaign,
   preferRuntimeData,
   projectChannels,
+  projectIndexProjections,
   taskToProjection,
 } from './projections'
 
 describe('workbench runtime projections', () => {
+  it('把项目注册表摘要投影成项目切换和总览所需的数据', () => {
+    const index: ContentStudioProjectIndex = {
+      projects: [{
+        activityCount: 2,
+        enabledChannels: [{ channel: 'github', delivery: 'automatic-candidate' }],
+        previewReady: true,
+        project: {
+          captureMode: 'deterministic',
+          currentSnapshotId: 'snapshot-a',
+          name: 'Project A',
+          projectId: 'project-a',
+          repeatability: 'high',
+          sourceAccess: 'source-owned',
+        },
+        snapshotId: 'snapshot-a',
+        snapshotVersion: 3,
+        taskCount: 4,
+        taskCounts: { monitoring: 1, production: 2, publication: 1 },
+      }],
+    }
+
+    expect(projectIndexProjections(index)).toEqual([{
+      activityCount: 2,
+      enabledChannels: [{ channel: 'github', delivery: 'automatic-candidate' }],
+      name: 'Project A',
+      previewReady: true,
+      projectId: 'project-a',
+      snapshotVersion: 3,
+      taskCount: 4,
+      taskCounts: { monitoring: 1, production: 2, publication: 1 },
+    }])
+  })
+
   it('运行时已连接时只显示运行时数据，即使运行时返回空列表', () => {
     expect(preferRuntimeData([], ['演示活动'], true)).toEqual([])
   })

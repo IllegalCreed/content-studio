@@ -110,6 +110,13 @@ Content Studio 自己登记的文件，并提供预览、确认、回收区和�
 Content Studio Plugin 是 AI 宿主入口，只包含 Skills、MCP 连接和 MCP App UI
 声明，不复制 core 或发布逻辑。用户只安装这一个 Plugin。
 
+项目注册表只收录用户明确登记的项目。应用启动时可以通过显式的 `additionalProjects`
+清单登记多个项目；Runtime 的 `GET /api/v1/projects` 返回轻量的
+跨项目索引（项目记录、快照版本、预览就绪、活动/任务数量和已启用渠道），工作台用它
+做总览和项目切换；读取索引不会扫描项目目录，也不会把不透明账号引用或凭据暴露给
+全局页面。需要完整活动、素材和任务事件时，仍必须进入对应项目读取
+`GET /api/v1/projects/:projectId`。
+
 ### `marketing-ops` 受管依赖
 
 `marketing-ops` 随 Content Studio 安装和做兼容性检查，但保持独立仓库、包、

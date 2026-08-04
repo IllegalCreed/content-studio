@@ -19,6 +19,7 @@ import {
   runtimeActivityArtifacts,
   runtimeProjectAssets,
   runtimeReports,
+  projectIndexProjections,
   taskToProjection,
 } from './projections'
 import VideoJobPanel from './components/VideoJobPanel.vue'
@@ -29,6 +30,7 @@ import type {
   CampaignProjection,
   ChannelContentProjection,
   ChannelProjection,
+  ProjectIndexProjection,
   WorkbenchSnapshot,
 } from './model'
 import type {
@@ -173,6 +175,39 @@ watch(runtimeConnected, value => {
   snapshot.runtimeConnected = value
 }, { immediate: true })
 const workbenchRuntime = createWorkbenchRuntime()
+const projectIndex = ref<ProjectIndexProjection[]>([])
+const projectIndexForView = computed<ProjectIndexProjection[]>(() =>
+  projectIndex.value.length > 0
+    ? projectIndex.value
+    : [{
+        activityCount: snapshot.campaigns.length,
+        enabledChannels: snapshot.channels
+          .filter(channel => channel.enabled)
+          .map(channel => ({
+            ...(channel.alias === null ? {} : { accountAlias: channel.alias }),
+            channel: channel.channel,
+            delivery: channel.delivery === '全自动候选'
+              ? 'automatic-candidate' as const
+              : channel.delivery === '人工辅助'
+                ? 'owner-assisted' as const
+                : 'content-only' as const,
+          })),
+        name: snapshot.project.name,
+        previewReady: snapshot.project.previewReady,
+        projectId: snapshot.project.projectId,
+        snapshotVersion: Number.parseInt(snapshot.project.version.replace(/\D+/u, '') || '0', 10),
+        taskCount: snapshot.tasks.length,
+        taskCounts: {
+          monitoring: snapshot.tasks.filter(task => task.kind === '监测').length,
+          production: snapshot.tasks.filter(task => task.kind === '制作').length,
+          publication: snapshot.tasks.filter(task => task.kind === '发布').length,
+        },
+      }],
+)
+const projectOptions = computed(() => projectIndexForView.value.map(project => ({
+  name: project.name,
+  projectId: project.projectId,
+})))
 const currentSnapshotId = ref(`${snapshot.project.projectId}-snapshot-1`)
 const activityComposerOpen = ref(false)
 const activitySaving = ref(false)
@@ -301,10 +336,13 @@ const videoFormatOptions: Array<{ label: string, value: VideoFormat }> = [
   { label: '方形', value: 'square' },
 ]
 
-const currentModule = computed(() =>
-  moduleDefinitions.find(module => module.id === activeModule.value)
-  ?? moduleDefinitions[0]!,
-)
+const currentModule = computed(() => {
+  const module = moduleDefinitions.find(candidate => candidate.id === activeModule.value)
+    ?? moduleDefinitions[0]!
+  return module.group === 'project'
+    ? { ...module, scope: `项目空间 / ${snapshot.project.name}` }
+    : module
+})
 
 const selectedCampaign = computed(() =>
   snapshot.campaigns.find(
@@ -1270,9 +1308,11 @@ async function connectLocalRuntime(): Promise<void> {
   runtimeStore.beginRuntimeLoad()
   try {
     const health = await workbenchRuntime.health()
+    const index = await workbenchRuntime.projects()
     const projectView = await workbenchRuntime.project(snapshot.project.projectId)
     if (health.status === 'ready')
       runtimeStore.markRuntimeReady()
+    projectIndex.value = projectIndexProjections(index)
     applyProjectView(projectView)
   }
   catch (error: unknown) {
@@ -1351,7 +1391,31 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
 }
 
 async function refreshProjectView(): Promise<void> {
-  applyProjectView(await workbenchRuntime.project(snapshot.project.projectId))
+  const [index, projectView] = await Promise.all([
+    workbenchRuntime.projects(),
+    workbenchRuntime.project(snapshot.project.projectId),
+  ])
+  projectIndex.value = projectIndexProjections(index)
+  applyProjectView(projectView)
+}
+
+async function switchProject(projectId: string): Promise<void> {
+  if (!runtimeConnected.value || projectId === snapshot.project.projectId)
+    return
+  try {
+    const projectView = await workbenchRuntime.project(projectId)
+    applyProjectView(projectView)
+    uiStore.selectCampaign(snapshot.campaigns[0]?.campaignId ?? '')
+    uiStore.selectTask(snapshot.tasks[0]?.taskId ?? '')
+  }
+  catch (error: unknown) {
+    runtimeStore.markRuntimeUnavailable(error)
+  }
+}
+
+async function openProjectSpace(projectId: string): Promise<void> {
+  await switchProject(projectId)
+  selectModule('project')
 }
 </script>
 
@@ -1359,10 +1423,12 @@ async function refreshProjectView(): Promise<void> {
   <WorkbenchShell
     :project-id="snapshot.project.projectId"
     :project-name="snapshot.project.name"
+    :project-options="projectOptions"
     :route-query-for="routeQueryForModule"
     :runtime-connected="runtimeConnected"
     :runtime-loading="runtimeLoading"
     @navigate="selectModule"
+    @switch-project="switchProject"
   >
 
       <p v-if="runtimeError" class="runtime-connection-note" aria-live="polite">
@@ -1402,12 +1468,14 @@ async function refreshProjectView(): Promise<void> {
           :activity-task-summary="activityTaskSummary"
           :owner-handoff-count="pendingOwnerHandoffs.length"
           :pending-task-count="pendingTaskCount"
-          :project-count="snapshot.registeredProjectCount"
+          :project-count="projectIndexForView.length"
+          :project-index="projectIndexForView"
           :snapshot="snapshot"
           @go-activities="selectModule('activities')"
           @go-project="selectModule('project')"
           @go-tasks="selectModule('tasks')"
           @open-activity="openActivityDetail"
+          @open-project="openProjectSpace"
           @select-task="selectTask"
         />
       </template>
@@ -1485,7 +1553,7 @@ async function refreshProjectView(): Promise<void> {
           :can-retry-selected-task="canRetrySelectedTask"
           :can-start-selected-task="canStartSelectedTask"
           :owner-handoffs="pendingOwnerHandoffs"
-          :project-count="snapshot.registeredProjectCount"
+          :project-count="projectIndexForView.length"
           :project-name="snapshot.project.name"
           :runtime-connected="runtimeConnected"
           :selected-task="selectedTask"

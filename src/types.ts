@@ -184,6 +184,32 @@ export interface ContentStudioProjectView {
   taskEvents: Record<string, ExecutionTaskEvent[]>
 }
 
+/**
+ * Read-only summary used by the cross-project control surface.
+ *
+ * It is intentionally smaller than `ContentStudioProjectView`: account
+ * references and project records stay scoped, while the global index can
+ * show enough information to choose a project without loading its assets.
+ */
+export interface ContentStudioProjectIndexItem {
+  activityCount: number
+  enabledChannels: Array<{
+    accountAlias?: string
+    channel: ChannelId
+    delivery: DeliveryMode
+  }>
+  previewReady: boolean
+  project: ProjectRecord
+  snapshotId: string
+  snapshotVersion: number
+  taskCount: number
+  taskCounts: Record<ExecutionTaskKind, number>
+}
+
+export interface ContentStudioProjectIndex {
+  projects: ContentStudioProjectIndexItem[]
+}
+
 export interface ProjectChannelBinding {
   accountAlias?: string
   accountRef?: string

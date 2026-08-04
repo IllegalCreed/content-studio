@@ -2,6 +2,30 @@ import { describe, expect, it, vi } from 'vitest'
 import { createWorkbenchRuntime } from './runtime'
 
 describe('workbench runtime client', () => {
+  it('reads the explicit cross-project index', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      projects: [{
+        activityCount: 2,
+        enabledChannels: [],
+        previewReady: true,
+        project: { projectId: 'project-a' },
+        snapshotId: 'project-a-snapshot-1',
+        snapshotVersion: 1,
+        taskCount: 3,
+        taskCounts: { monitoring: 1, production: 1, publication: 1 },
+      }],
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(createWorkbenchRuntime('/api/v1').projects()).resolves.toMatchObject({
+      projects: [{ project: { projectId: 'project-a' }, taskCount: 3 }],
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects',
+      expect.objectContaining({ headers: { accept: 'application/json' } }),
+    )
+  })
+
   it('reads health and a project view through the local application service', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({

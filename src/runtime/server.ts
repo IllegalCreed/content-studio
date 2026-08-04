@@ -9,6 +9,7 @@ import type {
   ActivityRevisionInput,
   ChannelContentFormat,
   ChannelId,
+  ContentStudioProjectIndex,
   ContentStudioProjectView,
   CreateActivityArtifactInput,
   CreateChannelContentInput,
@@ -122,6 +123,11 @@ const PROJECT_ASSET_KINDS = new Set<ProjectAssetKind>([
 ])
 
 export interface ContentStudioServerOptions {
+  additionalProjects?: Array<{
+    project: ProjectRecord
+    projectChannelBindings?: ProjectChannelBinding[]
+    snapshot: ProjectSnapshot
+  }>
   databasePath?: string
   production?: ProductionTaskDependencies
   productionOutputRoot?: string
@@ -447,6 +453,20 @@ async function handleRequest(
         asset.sha256,
         asset.version,
       )
+      return
+    }
+
+    if (
+      request.method === 'GET'
+      && segments.length === 3
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+    ) {
+      const payload: ContentStudioProjectIndex = {
+        projects: service.listProjects(),
+      }
+      sendJson(response, 200, payload)
       return
     }
 
@@ -863,19 +883,44 @@ function registerInitialProject(
   repository: ContentStudioRepository,
   options: ContentStudioServerOptions,
 ): void {
-  const existingProject = repository.getProject(options.project.projectId)
-  if (existingProject === undefined) {
-    service.registerProject(options.project, options.snapshot)
+  registerProjectIfMissing(
+    service,
+    repository,
+    options.project,
+    options.snapshot,
+    options.projectChannelBindings,
+  )
+  for (const registration of options.additionalProjects ?? []) {
+    registerProjectIfMissing(
+      service,
+      repository,
+      registration.project,
+      registration.snapshot,
+      registration.projectChannelBindings,
+    )
   }
-  else if (existingProject.currentSnapshotId !== options.snapshot.snapshotId) {
+}
+
+function registerProjectIfMissing(
+  service: ContentStudioApplicationService,
+  repository: ContentStudioRepository,
+  project: ProjectRecord,
+  snapshot: ProjectSnapshot,
+  projectChannelBindings: ProjectChannelBinding[] = [],
+): void {
+  const existingProject = repository.getProject(project.projectId)
+  if (existingProject === undefined) {
+    service.registerProject(project, snapshot)
+  }
+  else if (existingProject.currentSnapshotId !== snapshot.snapshotId) {
     throw new Error(
-      `Registered project ${options.project.projectId} uses a different snapshot`,
+      `Registered project ${project.projectId} uses a different snapshot`,
     )
   }
 
-  for (const binding of options.projectChannelBindings ?? []) {
+  for (const binding of projectChannelBindings) {
     const exists = repository
-      .listProjectChannelBindings(options.project.projectId)
+      .listProjectChannelBindings(project.projectId)
       .some(candidate => candidate.channel === binding.channel)
     if (!exists)
       service.bindProjectChannel(binding)

@@ -3,6 +3,7 @@ import type {
   ActivityRevisionInput,
   ChannelContent,
   ContentGroup,
+  ContentStudioProjectIndex,
   ContentStudioProjectView,
   CreateActivityArtifactInput,
   CreateChannelContentInput,
@@ -57,6 +58,7 @@ export interface WorkbenchRuntime {
   createPublicationPlan: (input: PublicationPlan) => Promise<PublicationPlan>
   health: () => Promise<RuntimeHealth>
   project: (projectId: string) => Promise<ContentStudioProjectView>
+  projects: () => Promise<ContentStudioProjectIndex>
   promoteActivityArtifact: (input: PromoteActivityArtifactInput) => Promise<ProjectAsset>
   reviseActivity: (input: ActivityRevisionInput) => Promise<PublishingActivity>
   recordTask: (
@@ -155,6 +157,7 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
     project: projectId => request<ContentStudioProjectView>(
       `/projects/${encodeURIComponent(projectId)}`,
     ),
+    projects: () => request<ContentStudioProjectIndex>('/projects'),
     promoteActivityArtifact: input => request<ProjectAsset>(
       `/projects/${encodeURIComponent(input.projectId)}/activity-artifacts/${encodeURIComponent(input.artifactId)}/promote`,
       {

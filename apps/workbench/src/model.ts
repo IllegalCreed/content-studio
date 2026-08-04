@@ -6,6 +6,7 @@ import type {
   DeliveryMode,
   ExecutionTask,
   ExecutionTaskEvent,
+  ExecutionTaskKind,
   RecordingAttemptRecord,
   VideoFormat,
   VideoViewport,
@@ -22,6 +23,21 @@ export interface ProjectProjection {
   projectId: string
   recordingMode: '项目适配器' | '浏览器辅助'
   version: string
+}
+
+export interface ProjectIndexProjection {
+  activityCount: number
+  enabledChannels: Array<{
+    accountAlias?: string
+    channel: ChannelId
+    delivery: DeliveryMode
+  }>
+  name: string
+  previewReady: boolean
+  projectId: string
+  snapshotVersion: number
+  taskCount: number
+  taskCounts: Record<ExecutionTaskKind, number>
 }
 
 export interface ReportTimelineProjection {
@@ -543,7 +559,6 @@ export interface WorkbenchSnapshot {
   channels: ChannelProjection[]
   projectAssets: AssetProjection[]
   project: ProjectProjection
-  registeredProjectCount: number
   reports: ReportProjection[]
   runtimeConnected: boolean
   storage: StorageProjection
@@ -1278,7 +1293,6 @@ export const snapshot: WorkbenchSnapshot = {
     recordingMode: '项目适配器',
     version: 'manifest v1',
   },
-  registeredProjectCount: 1,
   reports: [
     {
       activityId: 'quick-sort-guide',

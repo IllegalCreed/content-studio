@@ -9,6 +9,7 @@ import type {
   RecorderAttemptReceipt,
 } from '../types'
 import { describe, expect, it } from 'vitest'
+import { InMemoryExecutionTaskStore } from '../jobs/task'
 import {
   ContentStudioApplicationService,
   InMemoryContentStudioRepository,
@@ -160,6 +161,61 @@ function createProductionContent(
 }
 
 describe('content studio application service', () => {
+  it('lists only explicitly registered projects with cross-project summaries', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const taskStore = new InMemoryExecutionTaskStore()
+    const service = new ContentStudioApplicationService(repository, taskStore)
+    registerProject(service, 'project-b', [{
+      id: 'intro',
+      startPath: '/',
+      steps: [],
+      title: { 'en': 'Intro', 'zh-CN': '介绍' },
+    }])
+    registerProject(service, 'project-a')
+    service.bindProjectChannel({
+      accountAlias: '项目视频账号',
+      accountRef: 'opaque-account-ref',
+      channel: 'youtube',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId: 'project-b',
+    })
+    taskStore.createTask({
+      activityId: 'project-b-activity',
+      kind: 'production',
+      productionType: 'video',
+      projectId: 'project-b',
+      taskId: 'project-b-task',
+    })
+
+    expect(service.listProjects()).toEqual([
+      {
+        activityCount: 0,
+        enabledChannels: [],
+        previewReady: false,
+        project: expect.objectContaining({ projectId: 'project-a' }),
+        snapshotId: 'project-a-snapshot-1',
+        snapshotVersion: 1,
+        taskCount: 0,
+        taskCounts: { monitoring: 0, production: 0, publication: 0 },
+      },
+      {
+        activityCount: 0,
+        enabledChannels: [{
+          accountAlias: '项目视频账号',
+          channel: 'youtube',
+          delivery: 'owner-assisted',
+        }],
+        previewReady: true,
+        project: expect.objectContaining({ projectId: 'project-b' }),
+        snapshotId: 'project-b-snapshot-1',
+        snapshotVersion: 1,
+        taskCount: 1,
+        taskCounts: { monitoring: 0, production: 1, publication: 0 },
+      },
+    ])
+  })
+
   it('denies cross-project reads instead of returning another project record', () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)

@@ -1711,6 +1711,52 @@ describe('content studio local application server', () => {
     }
   })
 
+  it('serves an explicit cross-project index without scanning the filesystem', async () => {
+    const { project, snapshot } = createProject()
+    const secondProject = createProject('project-b')
+    const repository = new InMemoryContentStudioRepository()
+    const handle = createContentStudioServer({
+      additionalProjects: [{
+        project: secondProject.project,
+        snapshot: secondProject.snapshot,
+      }],
+      project,
+      repository,
+      snapshot,
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const response = await fetch(`${running.baseUrl}/api/v1/projects`)
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        projects: [
+          {
+            activityCount: 0,
+            enabledChannels: [],
+            previewReady: false,
+            project: { projectId: 'project-a' },
+            snapshotId: 'project-a-snapshot-1',
+            snapshotVersion: 1,
+            taskCount: 0,
+          },
+          {
+            activityCount: 0,
+            enabledChannels: [],
+            previewReady: false,
+            project: { projectId: 'project-b' },
+            snapshotId: 'project-b-snapshot-1',
+            snapshotVersion: 1,
+            taskCount: 0,
+          },
+        ],
+      })
+    }
+    finally {
+      await handle.close()
+    }
+  })
+
   it('does not register the same project twice when a runtime is reopened', async () => {
     const { project, snapshot } = createProject()
     const repository = new InMemoryContentStudioRepository()

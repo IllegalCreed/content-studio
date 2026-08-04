@@ -10,6 +10,7 @@ import type {
   ChannelContent,
   ConfirmActivityVideoPlanInput,
   ContentGroup,
+  ContentStudioProjectIndexItem,
   ContentStudioProjectView,
   ContentStudioReport,
   CreateActivityArtifactInput,
@@ -19,6 +20,7 @@ import type {
   CreatePublishingActivityInput,
   ExecutionTask,
   ExecutionTaskEvent,
+  ExecutionTaskKind,
   ExecutionTaskStore,
   MonitoringObservation,
   OwnerHandoff,
@@ -107,6 +109,7 @@ export interface ContentStudioRepository {
     version?: number,
   ) => ContentGroup | undefined
   getProject: (projectId: string) => ProjectRecord | undefined
+  listProjects: () => ProjectRecord[]
   getProjectAsset: (
     projectId: string,
     assetId: string,
@@ -305,6 +308,12 @@ implements ContentStudioRepository {
 
   getProject(projectId: string): ProjectRecord | undefined {
     return cloneOrUndefined(this.projects.get(projectId))
+  }
+
+  listProjects(): ProjectRecord[] {
+    return [...this.projects.values()]
+      .sort((left, right) => left.projectId.localeCompare(right.projectId))
+      .map(clone)
   }
 
   getProjectSnapshot(
@@ -617,6 +626,43 @@ export class ContentStudioApplicationService {
       ])),
       tasks,
     }
+  }
+
+  listProjects(): ContentStudioProjectIndexItem[] {
+    return this.repository.listProjects().map((project) => {
+      const snapshot = this.requireSnapshot(project.projectId, project.currentSnapshotId)
+      const activities = latestById(
+        this.repository.listActivities(project.projectId),
+        activity => activity.activityId,
+      )
+      const tasks = this.taskStore.listTasks(project.projectId)
+      const taskCounts: Record<ExecutionTaskKind, number> = {
+        monitoring: tasks.filter(task => task.kind === 'monitoring').length,
+        production: tasks.filter(task => task.kind === 'production').length,
+        publication: tasks.filter(task => task.kind === 'publication').length,
+      }
+      const enabledChannels = this.repository
+        .listProjectChannelBindings(project.projectId)
+        .filter(binding => binding.enabled)
+        .sort((left, right) => left.channel.localeCompare(right.channel))
+        .map(binding => ({
+          ...(binding.accountAlias === undefined
+            ? {}
+            : { accountAlias: binding.accountAlias }),
+          channel: binding.channel,
+          delivery: binding.delivery,
+        }))
+      return {
+        activityCount: activities.length,
+        enabledChannels,
+        previewReady: snapshot.manifest.captureFlows.length > 0,
+        project,
+        snapshotId: snapshot.snapshotId,
+        snapshotVersion: snapshot.version,
+        taskCount: tasks.length,
+        taskCounts,
+      }
+    })
   }
 
   getActivityArtifact(

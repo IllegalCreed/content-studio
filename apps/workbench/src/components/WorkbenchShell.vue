@@ -20,9 +20,15 @@ interface ModuleLink {
   scope: 'global' | 'project'
 }
 
+interface ProjectOption {
+  name: string
+  projectId: string
+}
+
 const props = defineProps<{
   projectId: string
   projectName: string
+  projectOptions?: readonly ProjectOption[]
   routeQueryFor?: (moduleId: ModuleId) => LocationQueryRaw
   runtimeConnected: boolean
   runtimeLoading?: boolean
@@ -33,6 +39,7 @@ const projectPickerOpen = ref(false)
 
 const emit = defineEmits<{
   navigate: [moduleId: ModuleId]
+  'switch-project': [projectId: string]
 }>()
 
 const globalModules: ModuleLink[] = [
@@ -162,11 +169,21 @@ function toggleProjectPicker(): void {
           </button>
           <div v-if="projectPickerOpen" class="project-menu" data-testid="project-menu" role="listbox" aria-label="项目列表">
             <p class="project-menu-label">切换项目</p>
-            <button type="button" class="project-option active" role="option" aria-selected="true" disabled>
-              <span><strong>{{ props.projectName }}</strong><small>{{ props.projectId }}</small></span>
-              <em>当前</em>
+            <button
+              v-for="option in props.projectOptions ?? [{ name: props.projectName, projectId: props.projectId }]"
+              :key="option.projectId"
+              type="button"
+              class="project-option"
+              :class="{ active: option.projectId === props.projectId }"
+              role="option"
+              :aria-selected="option.projectId === props.projectId"
+              :disabled="option.projectId === props.projectId"
+              @click="projectPickerOpen = false; emit('switch-project', option.projectId)"
+            >
+              <span><strong>{{ option.name }}</strong><small>{{ option.projectId }}</small></span>
+              <em v-if="option.projectId === props.projectId">当前</em>
             </button>
-            <p class="project-menu-empty">暂无其他已注册项目</p>
+            <p v-if="(props.projectOptions?.length ?? 1) <= 1" class="project-menu-empty">暂无其他已注册项目</p>
           </div>
         </div>
       </header>

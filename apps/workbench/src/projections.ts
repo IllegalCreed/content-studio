@@ -5,6 +5,7 @@ import type {
   ChannelContent,
   ChannelId,
   ContentGroup,
+  ContentStudioProjectIndex,
   ContentStudioProjectView,
   ExecutionTask,
   ExecutionTaskEvent,
@@ -27,6 +28,7 @@ import type {
   ChannelContentProjection,
   ChannelProjection,
   ContentGroupProjection,
+  ProjectIndexProjection,
   ReportProjection,
   ReportTimelineProjection,
   TaskProjection,
@@ -46,6 +48,21 @@ export function preferRuntimeData<T>(
   runtimeConnected: boolean,
 ): T[] {
   return [...(runtimeConnected ? runtimeItems : demoItems)]
+}
+
+export function projectIndexProjections(
+  index: ContentStudioProjectIndex,
+): ProjectIndexProjection[] {
+  return index.projects.map(item => ({
+    activityCount: item.activityCount,
+    enabledChannels: item.enabledChannels,
+    name: item.project.name,
+    previewReady: item.previewReady,
+    projectId: item.project.projectId,
+    snapshotVersion: item.snapshotVersion,
+    taskCount: item.taskCount,
+    taskCounts: item.taskCounts,
+  }))
 }
 
 export interface ProjectChannelsInput {
