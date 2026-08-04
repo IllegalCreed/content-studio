@@ -210,6 +210,33 @@ export interface ContentStudioProjectIndex {
   projects: ContentStudioProjectIndexItem[]
 }
 
+/**
+ * Safe, read-only project slice used by the cross-project control surface.
+ *
+ * Unlike `ContentStudioProjectView`, channel bindings deliberately omit the
+ * opaque account reference. The global page needs the project account alias
+ * to explain a task, but it must not broaden the scope of account handles.
+ */
+export interface ContentStudioGlobalProjectView {
+  activities: PublishingActivity[]
+  activityArtifacts: ActivityArtifact[]
+  channelContents: ChannelContent[]
+  contentGroups: ContentGroup[]
+  ownerHandoffs: OwnerHandoff[]
+  project: ProjectRecord
+  projectAssets: ProjectAsset[]
+  projectChannelBindings: Array<Omit<ProjectChannelBinding, 'accountRef'>>
+  recordingReceipts: RecordingAttemptRecord[]
+  snapshot: ProjectSnapshot
+  taskEvents: Record<string, ExecutionTaskEvent[]>
+  tasks: ExecutionTask[]
+}
+
+export interface ContentStudioGlobalView {
+  projectViews: ContentStudioGlobalProjectView[]
+  projects: ContentStudioProjectIndexItem[]
+}
+
 export interface ProjectChannelBinding {
   accountAlias?: string
   accountRef?: string

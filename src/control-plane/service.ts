@@ -10,6 +10,8 @@ import type {
   ChannelContent,
   ConfirmActivityVideoPlanInput,
   ContentGroup,
+  ContentStudioGlobalProjectView,
+  ContentStudioGlobalView,
   ContentStudioProjectIndexItem,
   ContentStudioProjectView,
   ContentStudioReport,
@@ -663,6 +665,32 @@ export class ContentStudioApplicationService {
         taskCounts,
       }
     })
+  }
+
+  getGlobalView(): ContentStudioGlobalView {
+    const projects = this.listProjects()
+    const projectViews: ContentStudioGlobalProjectView[] = projects.map((item) => {
+      const view = this.getProjectView(item.project.projectId)
+      return {
+        activities: view.activities,
+        activityArtifacts: view.activityArtifacts,
+        channelContents: view.channelContents,
+        contentGroups: view.contentGroups,
+        ownerHandoffs: view.ownerHandoffs,
+        project: view.project,
+        projectAssets: view.projectAssets,
+        projectChannelBindings: view.projectChannelBindings.map((binding) => {
+          const safeBinding = { ...binding }
+          delete safeBinding.accountRef
+          return safeBinding
+        }),
+        recordingReceipts: view.recordingReceipts,
+        snapshot: view.snapshot,
+        taskEvents: view.taskEvents,
+        tasks: view.tasks,
+      }
+    })
+    return { projectViews, projects }
   }
 
   getActivityArtifact(

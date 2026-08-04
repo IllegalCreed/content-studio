@@ -3,6 +3,7 @@ import type {
   ActivityRevisionInput,
   ChannelContent,
   ContentGroup,
+  ContentStudioGlobalView,
   ContentStudioProjectIndex,
   ContentStudioProjectView,
   CreateActivityArtifactInput,
@@ -57,6 +58,7 @@ export interface WorkbenchRuntime {
   createActivityArtifact: (input: CreateActivityArtifactInput) => Promise<ActivityArtifact>
   createPublicationPlan: (input: PublicationPlan) => Promise<PublicationPlan>
   health: () => Promise<RuntimeHealth>
+  global: () => Promise<ContentStudioGlobalView>
   project: (projectId: string) => Promise<ContentStudioProjectView>
   projects: () => Promise<ContentStudioProjectIndex>
   promoteActivityArtifact: (input: PromoteActivityArtifactInput) => Promise<ProjectAsset>
@@ -154,6 +156,7 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
       },
     ),
     health: () => request<RuntimeHealth>('/health'),
+    global: () => request<ContentStudioGlobalView>('/global'),
     project: projectId => request<ContentStudioProjectView>(
       `/projects/${encodeURIComponent(projectId)}`,
     ),

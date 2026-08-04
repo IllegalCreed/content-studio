@@ -1757,6 +1757,74 @@ describe('content studio local application server', () => {
     }
   })
 
+  it('serves a sanitized cross-project execution view', async () => {
+    const { project, snapshot } = createProject()
+    const secondProject = createProject('project-b')
+    const repository = new InMemoryContentStudioRepository()
+    const handle = createContentStudioServer({
+      additionalProjects: [{
+        project: secondProject.project,
+        projectChannelBindings: [{
+          accountAlias: 'Project B video account',
+          accountRef: 'opaque-account-ref',
+          channel: 'youtube',
+          delivery: 'owner-assisted',
+          enabled: true,
+          projectId: 'project-b',
+        }],
+        snapshot: secondProject.snapshot,
+      }],
+      project,
+      repository,
+      snapshot,
+    })
+    handle.taskStore.createTask({
+      activityId: 'project-b-activity',
+      channel: 'youtube',
+      kind: 'publication',
+      projectId: 'project-b',
+      taskId: 'project-b-publication',
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const response = await fetch(`${running.baseUrl}/api/v1/global`)
+      expect(response.status).toBe(200)
+      const payload = await response.json() as {
+        projectViews: Array<{
+          project: { projectId: string }
+          projectChannelBindings: Array<Record<string, unknown>>
+          tasks: Array<{ projectId: string, taskId: string }>
+        }>
+      }
+      expect(payload.projectViews.map(view => view.project.projectId)).toEqual([
+        'project-a',
+        'project-b',
+      ])
+      expect(payload.projectViews[1]?.tasks).toEqual([{
+        activityId: 'project-b-activity',
+        attempt: 1,
+        channel: 'youtube',
+        kind: 'publication',
+        projectId: 'project-b',
+        skipStages: [],
+        status: 'queued',
+        taskId: 'project-b-publication',
+      }])
+      expect(payload.projectViews[1]?.projectChannelBindings[0]).toEqual({
+        accountAlias: 'Project B video account',
+        channel: 'youtube',
+        delivery: 'owner-assisted',
+        enabled: true,
+        projectId: 'project-b',
+      })
+      expect(payload.projectViews[1]?.projectChannelBindings[0]).not.toHaveProperty('accountRef')
+    }
+    finally {
+      await handle.close()
+    }
+  })
+
   it('does not register the same project twice when a runtime is reopened', async () => {
     const { project, snapshot } = createProject()
     const repository = new InMemoryContentStudioRepository()

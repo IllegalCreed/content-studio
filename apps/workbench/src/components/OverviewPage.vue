@@ -1,23 +1,25 @@
 <script setup lang="ts">
-import type { ProjectIndexProjection, WorkbenchSnapshot } from '../model'
+import type { CampaignProjection, ProjectIndexProjection, TaskProjection, WorkbenchSnapshot } from '../model'
 import { humanizeActivityStatus, humanizeStatus } from '../model'
 
 const props = defineProps<{
-  activityTaskSummary: (activityId: string) => string
+  activityTaskSummary: (activityId: string, projectId?: string) => string
+  campaigns: CampaignProjection[]
   ownerHandoffCount: number
   pendingTaskCount: number
   projectCount: number
   projectIndex: ProjectIndexProjection[]
   snapshot: WorkbenchSnapshot
+  tasks: TaskProjection[]
 }>()
 
 const emit = defineEmits<{
   'go-activities': []
   'go-project': []
   'go-tasks': []
-  'open-activity': [activityId: string]
+  'open-activity': [projectId: string, activityId: string]
   'open-project': [projectId: string]
-  'select-task': [taskId: string]
+  'select-task': [projectId: string, taskId: string]
 }>()
 </script>
 
@@ -35,7 +37,7 @@ const emit = defineEmits<{
     </div>
     <div class="overview-stat">
       <span>发布活动</span>
-      <strong>{{ props.snapshot.campaigns.length }}</strong>
+      <strong>{{ props.campaigns.length }}</strong>
       <small>按项目和主题归档</small>
     </div>
     <div class="overview-stat">
@@ -48,12 +50,12 @@ const emit = defineEmits<{
   <section class="overview-grid">
     <article class="module-card">
       <div class="module-card-heading">
-        <div><p class="eyebrow">当前项目活动</p><h2>最近活动</h2></div>
+        <div><p class="eyebrow">跨项目活动</p><h2>最近活动</h2></div>
         <button type="button" @click="emit('go-activities')">查看项目活动</button>
       </div>
       <div class="module-list">
-        <button v-for="campaign in props.snapshot.campaigns" :key="campaign.campaignId" type="button" :data-campaign-id="campaign.campaignId" @click="emit('open-activity', campaign.campaignId)">
-          <span class="list-status">{{ props.snapshot.project.name }} · {{ humanizeActivityStatus(campaign.activityStatus) }} · {{ props.activityTaskSummary(campaign.campaignId) }}</span>
+        <button v-for="campaign in props.campaigns" :key="`${campaign.projectId ?? props.snapshot.project.projectId}:${campaign.campaignId}`" type="button" :data-campaign-id="campaign.campaignId" @click="emit('open-activity', campaign.projectId ?? props.snapshot.project.projectId, campaign.campaignId)">
+          <span class="list-status">{{ campaign.projectName ?? props.snapshot.project.name }} · {{ humanizeActivityStatus(campaign.activityStatus) }} · {{ props.activityTaskSummary(campaign.campaignId, campaign.projectId) }}</span>
           <strong>{{ campaign.title }}</strong>
           <small>{{ campaign.channels.length }} 个渠道 · {{ campaign.activityArtifacts.length }} 个活动产物</small>
         </button>
@@ -62,12 +64,12 @@ const emit = defineEmits<{
 
     <article class="module-card">
       <div class="module-card-heading">
-        <div><p class="eyebrow">当前项目执行层</p><h2>待处理任务</h2></div>
+        <div><p class="eyebrow">跨项目执行层</p><h2>待处理任务</h2></div>
         <button type="button" @click="emit('go-tasks')">打开全局面板</button>
       </div>
       <div class="module-list">
-        <button v-for="task in props.snapshot.tasks" :key="task.taskId" type="button" @click="emit('select-task', task.taskId)">
-          <span class="list-status">{{ props.snapshot.project.name }} · {{ task.kind }} · {{ humanizeStatus(task.status) }}</span>
+        <button v-for="task in props.tasks" :key="`${task.projectId ?? props.snapshot.project.projectId}:${task.taskId}`" type="button" @click="emit('select-task', task.projectId ?? props.snapshot.project.projectId, task.taskId)">
+          <span class="list-status">{{ task.projectName ?? props.snapshot.project.name }} · {{ task.kind }} · {{ humanizeStatus(task.status) }}</span>
           <strong>{{ task.title }}</strong>
           <small>{{ task.activityTitle }} · {{ task.contentTitle }} · {{ task.channel }} · {{ task.accountAlias }}<br>{{ task.detail }}</small>
         </button>

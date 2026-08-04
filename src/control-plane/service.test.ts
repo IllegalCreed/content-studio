@@ -216,6 +216,63 @@ describe('content studio application service', () => {
     ])
   })
 
+  it('builds a sanitized global view from every explicitly registered project', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const taskStore = new InMemoryExecutionTaskStore()
+    const service = new ContentStudioApplicationService(repository, taskStore)
+    registerProject(service, 'project-b', [{
+      id: 'intro',
+      startPath: '/',
+      steps: [],
+      title: { 'en': 'Intro', 'zh-CN': '介绍' },
+    }])
+    registerProject(service, 'project-a')
+    enableYouTube(service, 'project-a')
+    enableYouTube(service, 'project-b')
+    const projectAActivity = createActivity(service, 'project-a')
+    const projectBActivity = createActivity(service, 'project-b')
+    taskStore.createTask({
+      activityId: projectBActivity.activityId,
+      channel: 'youtube',
+      kind: 'production',
+      productionType: 'video',
+      projectId: 'project-b',
+      taskId: 'production-project-b-activity',
+    })
+    taskStore.createTask({
+      activityId: projectBActivity.activityId,
+      channel: 'youtube',
+      kind: 'publication',
+      projectId: 'project-b',
+      taskId: 'project-b-publication',
+    })
+    const global = service.getGlobalView()
+
+    expect(global.projects.map(item => item.project.projectId)).toEqual([
+      'project-a',
+      'project-b',
+    ])
+    expect(global.projectViews.map(view => view.project.projectId)).toEqual([
+      'project-a',
+      'project-b',
+    ])
+    expect(global.projectViews[0]?.activities).toEqual([
+      expect.objectContaining({ activityId: projectAActivity.activityId }),
+    ])
+    expect(global.projectViews[1]?.tasks).toEqual([
+      expect.objectContaining({ projectId: 'project-b', taskId: 'production-project-b-activity' }),
+      expect.objectContaining({ projectId: 'project-b', taskId: 'project-b-publication' }),
+    ])
+    expect(global.projectViews[1]?.projectChannelBindings).toEqual([{
+      accountAlias: undefined,
+      channel: 'youtube',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId: 'project-b',
+    }])
+    expect(global.projectViews[1]?.projectChannelBindings[0]).not.toHaveProperty('accountRef')
+  })
+
   it('denies cross-project reads instead of returning another project record', () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)

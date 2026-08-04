@@ -9,6 +9,7 @@ import type {
   ActivityRevisionInput,
   ChannelContentFormat,
   ChannelId,
+  ContentStudioGlobalView,
   ContentStudioProjectIndex,
   ContentStudioProjectView,
   CreateActivityArtifactInput,
@@ -453,6 +454,18 @@ async function handleRequest(
         asset.sha256,
         asset.version,
       )
+      return
+    }
+
+    if (
+      request.method === 'GET'
+      && segments.length === 3
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'global'
+    ) {
+      const payload: ContentStudioGlobalView = service.getGlobalView()
+      sendJson(response, 200, payload)
       return
     }
 

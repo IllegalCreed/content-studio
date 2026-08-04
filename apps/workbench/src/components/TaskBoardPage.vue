@@ -35,7 +35,7 @@ const emit = defineEmits<{
   'change-task': [action: TaskAction]
   'go-activities': []
   'go-owner': []
-  'select-task': [taskId: string]
+  'select-task': [projectId: string, taskId: string]
 }>()
 
 const taskSummaryCopy: Record<'制作' | '发布' | '监测', string> = {
@@ -93,12 +93,12 @@ const selectedTaskHandoff = computed(() =>
           :key="task.taskId"
           type="button"
           :data-task-id="task.taskId"
-          :class="{ selected: task.taskId === props.selectedTask.taskId }"
-          @click="emit('select-task', task.taskId)"
+          :class="{ selected: task.taskId === props.selectedTask.taskId && task.projectId === props.selectedTask.projectId }"
+          @click="emit('select-task', task.projectId ?? props.selectedTask.projectId ?? '', task.taskId)"
         >
           <span class="task-kind">{{ task.kind }}</span>
           <strong>{{ task.title }}</strong>
-          <small>{{ task.activityTitle }} · {{ task.contentTitle }}</small>
+          <small>{{ task.projectName ?? props.projectName }} · {{ task.activityTitle }} · {{ task.contentTitle }}</small>
           <small>{{ task.channel }} · {{ task.accountAlias }} · {{ humanizeStatus(task.status) }} · 第 {{ task.attempt }} 次尝试</small>
         </button>
       </div>
@@ -117,6 +117,7 @@ const selectedTaskHandoff = computed(() =>
         </ol>
         <div class="task-detail-meta">
           <span>任务编号 <code>{{ props.selectedTask.taskId }}</code></span>
+          <span>所属项目 <code>{{ props.selectedTask.projectId ?? props.projectName }}</code></span>
           <span>所属活动 <code>{{ props.selectedTask.activityId }}</code></span>
           <span>当前尝试 <strong>第 {{ props.selectedTask.attempt }} 次</strong></span>
         </div>

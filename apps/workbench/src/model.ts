@@ -487,6 +487,8 @@ export interface TaskProjection {
   steps: TaskStepProjection[]
   taskId: string
   title: string
+  projectId?: string
+  projectName?: string
 }
 
 export interface StorageProjection {
@@ -550,6 +552,8 @@ export interface CampaignProjection {
   videoPlan: VideoPlanProjection | null
   title: string
   videoJob: VideoJobProjection | null
+  projectId?: string
+  projectName?: string
 }
 
 export interface WorkbenchSnapshot {
@@ -635,6 +639,7 @@ function demoTaskProjection(input: DemoTaskInput): TaskProjection {
     steps: lifecycle.steps,
     taskId: task.taskId,
     title: input.title,
+    projectId: task.projectId,
   }
 }
 

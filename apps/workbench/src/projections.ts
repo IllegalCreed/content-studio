@@ -642,6 +642,7 @@ export function activityToCampaign({
         ? '渠道内容已保存，下一步进入制作任务。'
         : '等待 AI 生成内容和拍摄大纲。',
     referencedAssets: [...referencedAssetIds],
+    projectId: activity.projectId,
     title: topic,
     topic,
     version: activity.version,
@@ -705,6 +706,7 @@ export function taskToProjection({
     steps: lifecycle.steps,
     taskId: task.taskId,
     title: task.kind === 'production' ? `制作：${activityTitle}` : `${task.kind}：${activityTitle}`,
+    projectId: task.projectId,
   }
 }
 

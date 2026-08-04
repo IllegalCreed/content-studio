@@ -39,6 +39,8 @@ import type {
   CreateChannelContentInput,
   CreateContentGroupInput,
   ActivityArtifact,
+  ContentStudioGlobalProjectView,
+  ContentStudioGlobalView,
   ProjectAsset,
   ProjectChannelBinding,
   PublicationPlan,
@@ -176,6 +178,8 @@ watch(runtimeConnected, value => {
 }, { immediate: true })
 const workbenchRuntime = createWorkbenchRuntime()
 const projectIndex = ref<ProjectIndexProjection[]>([])
+const globalProjectViews = ref<ContentStudioGlobalProjectView[]>([])
+const globalViewLoaded = ref(false)
 const projectIndexForView = computed<ProjectIndexProjection[]>(() =>
   projectIndex.value.length > 0
     ? projectIndex.value
@@ -232,8 +236,9 @@ const storageRestorePending = ref<string | null>(null)
 const storageRestoreError = ref<string | null>(null)
 const channelBindingSaving = ref(false)
 const channelBindingSaveError = ref<string | null>(null)
-const runtimeTaskIds = ref<Set<string>>(new Set())
+const runtimeTaskKeys = ref<Set<string>>(new Set())
 const runtimeActivityIds = ref<Set<string>>(new Set())
+const selectedTaskProjectId = ref<string | null>(null)
 const projectCaptureFlowIds = ref<string[]>([])
 const taskActionError = ref<string | null>(null)
 const taskActionPending = ref<'cancel' | 'record' | 'retry' | 'start' | null>(null)
@@ -344,6 +349,65 @@ const currentModule = computed(() => {
     : module
 })
 
+function projectViewAccountAliasForChannel(
+  projectView: ContentStudioGlobalProjectView,
+  channel: ChannelId,
+): string | undefined {
+  return projectView.projectChannelBindings.find(binding =>
+    binding.channel === channel && binding.enabled,
+  )?.accountAlias
+}
+
+function projectViewCampaigns(
+  projectView: ContentStudioGlobalProjectView,
+): CampaignProjection[] {
+  return projectView.activities.map(activity => ({
+    ...activityToCampaign({
+      accountAliasForChannel: channel => projectViewAccountAliasForChannel(projectView, channel),
+      activity,
+      activityArtifacts: projectView.activityArtifacts,
+      captureFlows: projectView.snapshot.manifest.captureFlows,
+      channelContents: projectView.channelContents,
+      contentGroups: projectView.contentGroups,
+      ownerHandoffs: projectView.ownerHandoffs,
+      productionTasks: projectView.tasks,
+      projectAssets: projectView.projectAssets,
+      recordingReceipts: projectView.recordingReceipts,
+    }),
+    projectName: projectView.project.name,
+  }))
+}
+
+function projectViewTasks(
+  projectView: ContentStudioGlobalProjectView,
+  campaigns: readonly CampaignProjection[],
+): WorkbenchSnapshot['tasks'] {
+  return projectView.tasks.map(task => ({
+    ...taskToProjection({
+      accountAliasForChannel: channel => projectViewAccountAliasForChannel(projectView, channel),
+      campaigns,
+      events: projectView.taskEvents[task.taskId] ?? [],
+      task,
+    }),
+    projectName: projectView.project.name,
+  }))
+}
+
+const globalCampaignProjections = computed<CampaignProjection[]>(() => {
+  if (!runtimeConnected.value || !globalViewLoaded.value)
+    return snapshot.campaigns
+  return globalProjectViews.value.flatMap(projectView => projectViewCampaigns(projectView))
+})
+
+const globalTaskProjections = computed<WorkbenchSnapshot['tasks']>(() => {
+  if (!runtimeConnected.value || !globalViewLoaded.value)
+    return snapshot.tasks
+  return globalProjectViews.value.flatMap((projectView) => {
+    const campaigns = projectViewCampaigns(projectView)
+    return projectViewTasks(projectView, campaigns)
+  })
+})
+
 const selectedCampaign = computed(() =>
   snapshot.campaigns.find(
     campaign => campaign.campaignId === selectedCampaignId.value,
@@ -370,14 +434,18 @@ const canReviseSelectedVideoPlan = computed(() =>
   && videoPlanViewportDraft.height > 0,
 )
 
-const selectedTask = computed(() =>
-  snapshot.tasks.find(task => task.taskId === selectedTaskId.value)
-  ?? snapshot.tasks[0]
-  ?? emptyTask,
-)
+const selectedTask = computed(() => {
+  const tasks = activeTaskScope.value === '全部项目'
+    ? globalTaskProjections.value
+    : snapshot.tasks
+  return tasks.find(task =>
+    task.taskId === selectedTaskId.value
+    && (selectedTaskProjectId.value === null || task.projectId === selectedTaskProjectId.value),
+  ) ?? tasks[0] ?? emptyTask
+})
 
 const selectedTaskIsRuntime = computed(() =>
-  runtimeTaskIds.value.has(selectedTask.value.taskId),
+  runtimeTaskKeys.value.has(`${selectedTask.value.projectId ?? snapshot.project.projectId}:${selectedTask.value.taskId}`),
 )
 
 const canCancelSelectedTask = computed(() =>
@@ -409,8 +477,8 @@ const canRetrySelectedTask = computed(() =>
 
 const hasActiveRuntimeTask = computed(() =>
   runtimeConnected.value
-  && snapshot.tasks.some(task =>
-    runtimeTaskIds.value.has(task.taskId)
+  && (activeTaskScope.value === '全部项目' ? globalTaskProjections.value : snapshot.tasks).some(task =>
+    runtimeTaskKeys.value.has(`${task.projectId ?? snapshot.project.projectId}:${task.taskId}`)
     && ['generating', 'recording'].includes(task.status),
   ),
 )
@@ -458,7 +526,7 @@ const selectedAsset = computed(() =>
 const visibleTasks = computed(() =>
   activeTaskScope.value === '当前项目'
     ? snapshot.tasks.filter(task => task.activityId.length > 0)
-    : snapshot.tasks,
+    : globalTaskProjections.value,
 )
 
 const filteredAssets = computed(() =>
@@ -471,11 +539,17 @@ const selectedCampaignTasks = computed(() =>
   snapshot.tasks.filter(task => task.activityId === selectedCampaign.value.campaignId),
 )
 
-const selectedTaskCampaign = computed(() =>
-  snapshot.campaigns.find(campaign => campaign.campaignId === selectedTask.value.activityId)
-  ?? snapshot.campaigns[0]
-  ?? emptyCampaign,
-)
+const selectedTaskCampaign = computed(() => {
+  const campaigns = activeTaskScope.value === '全部项目'
+    ? globalCampaignProjections.value
+    : snapshot.campaigns
+  return campaigns.find(campaign =>
+    campaign.campaignId === selectedTask.value.activityId
+    && (selectedTaskProjectId.value === null
+      || campaign.projectId === undefined
+      || campaign.projectId === selectedTaskProjectId.value),
+  ) ?? campaigns[0] ?? emptyCampaign
+})
 
 const selectedChannel = computed(() =>
   snapshot.channels.find(channel => channel.channel === selectedChannelId.value)
@@ -544,11 +618,15 @@ const selectedCampaignTaskCounts = computed(() => ({
   monitoring: selectedCampaignTasks.value.filter(task => task.kind === '监测').length,
 }))
 
-const ownerHandoffs = computed(() =>
-  snapshot.campaigns.flatMap(campaign =>
+function ownerHandoffsFor(
+  campaigns: readonly CampaignProjection[],
+  tasks: readonly WorkbenchSnapshot['tasks'][number][],
+) {
+  return campaigns.flatMap(campaign =>
     campaign.handoffs.map((handoff) => {
-      const task = snapshot.tasks.find(candidate =>
-        candidate.activityId === campaign.campaignId
+      const task = tasks.find(candidate =>
+        (campaign.projectId === undefined || candidate.projectId === campaign.projectId)
+        && candidate.activityId === campaign.campaignId
         && candidate.kind === '发布'
         && candidate.channel === handoff.channel,
       )
@@ -558,11 +636,21 @@ const ownerHandoffs = computed(() =>
         ...(task === undefined ? {} : { taskId: task.taskId }),
       }
     }),
-  ),
-)
+  )
+}
+
+const ownerHandoffs = computed(() => ownerHandoffsFor(snapshot.campaigns, snapshot.tasks))
 
 const pendingOwnerHandoffs = computed(() =>
   ownerHandoffs.value.filter(handoff => handoff.status === 'ready' || handoff.status === 'waiting'),
+)
+
+const globalOwnerHandoffs = computed(() =>
+  ownerHandoffsFor(globalCampaignProjections.value, globalTaskProjections.value),
+)
+
+const globalPendingOwnerHandoffs = computed(() =>
+  globalOwnerHandoffs.value.filter(handoff => handoff.status === 'ready' || handoff.status === 'waiting'),
 )
 
 const enabledChannels = computed(() =>
@@ -582,12 +670,21 @@ const taskCounts = computed(() => ({
   '监测': snapshot.tasks.filter(task => task.kind === '监测').length,
 }))
 
-const pendingTaskCount = computed(() =>
-  snapshot.tasks.filter(task => task.status !== 'published').length,
+const globalTaskCounts = computed(() => ({
+  '制作': globalTaskProjections.value.filter(task => task.kind === '制作').length,
+  '发布': globalTaskProjections.value.filter(task => task.kind === '发布').length,
+  '监测': globalTaskProjections.value.filter(task => task.kind === '监测').length,
+}))
+
+const globalPendingTaskCount = computed(() =>
+  globalTaskProjections.value.filter(task => task.status !== 'published').length,
 )
 
-function activityTaskSummary(activityId: string): string {
-  const tasks = snapshot.tasks.filter(task => task.activityId === activityId)
+function activityTaskSummary(activityId: string, projectId?: string): string {
+  const tasks = (projectId === undefined ? snapshot.tasks : globalTaskProjections.value).filter(task =>
+    task.activityId === activityId
+    && (projectId === undefined || task.projectId === projectId),
+  )
   if (tasks.length === 0)
     return '尚未生成任务'
   const counts = {
@@ -725,7 +822,25 @@ function openActivityDetail(campaignId: string): void {
   void router.push(`/project/activities/${encodeURIComponent(campaignId)}`)
 }
 
-function selectTask(taskId: string): void {
+function openGlobalActivity(projectId: string, activityId: string): void {
+  if (projectId === snapshot.project.projectId) {
+    openActivityDetail(activityId)
+    return
+  }
+  void switchProject(projectId).then(() => openActivityDetail(activityId))
+}
+
+function selectTask(projectIdOrTaskId: string, taskIdFromEvent?: string): void {
+  const taskId = taskIdFromEvent ?? projectIdOrTaskId
+  selectedTaskProjectId.value = taskIdFromEvent === undefined
+    ? globalTaskProjections.value.find(task => task.taskId === taskId)?.projectId ?? snapshot.project.projectId
+    : projectIdOrTaskId
+  uiStore.selectTask(taskId)
+  uiStore.setActiveModule('tasks')
+}
+
+function selectGlobalTask(projectId: string, taskId: string): void {
+  selectedTaskProjectId.value = projectId
   uiStore.selectTask(taskId)
   uiStore.setActiveModule('tasks')
 }
@@ -882,24 +997,26 @@ async function reviseSelectedVideoPlan(): Promise<void> {
 async function changeSelectedTask(action: 'cancel' | 'record' | 'retry' | 'start'): Promise<void> {
   if (taskActionPending.value !== null || !selectedTaskIsRuntime.value)
     return
+  const projectId = selectedTask.value.projectId ?? snapshot.project.projectId
+  const projectView = globalProjectViews.value.find(view => view.project.projectId === projectId)
   taskActionPending.value = action
   taskActionError.value = null
   try {
     if (action === 'cancel')
-      await workbenchRuntime.cancelTask(snapshot.project.projectId, selectedTask.value.taskId)
+      await workbenchRuntime.cancelTask(projectId, selectedTask.value.taskId)
     else if (action === 'retry')
-      await workbenchRuntime.retryTask(snapshot.project.projectId, selectedTask.value.taskId)
+      await workbenchRuntime.retryTask(projectId, selectedTask.value.taskId)
     else if (action === 'record')
       await workbenchRuntime.recordTask(
-        snapshot.project.projectId,
+        projectId,
         selectedTask.value.taskId,
         {
-          baseUrl: snapshot.project.canonicalUrl,
-          projectOrigin: snapshot.project.canonicalUrl,
+          baseUrl: projectView?.snapshot.manifest.canonicalUrl ?? snapshot.project.canonicalUrl,
+          projectOrigin: projectView?.snapshot.manifest.canonicalUrl ?? snapshot.project.canonicalUrl,
         },
       )
     else
-      await workbenchRuntime.startTask(snapshot.project.projectId, selectedTask.value.taskId)
+      await workbenchRuntime.startTask(projectId, selectedTask.value.taskId)
     await refreshProjectView()
   }
   catch (error: unknown) {
@@ -1308,11 +1425,15 @@ async function connectLocalRuntime(): Promise<void> {
   runtimeStore.beginRuntimeLoad()
   try {
     const health = await workbenchRuntime.health()
-    const index = await workbenchRuntime.projects()
-    const projectView = await workbenchRuntime.project(snapshot.project.projectId)
+    const [index, globalView, projectView] = await Promise.all([
+      workbenchRuntime.projects(),
+      workbenchRuntime.global(),
+      workbenchRuntime.project(snapshot.project.projectId),
+    ])
     if (health.status === 'ready')
       runtimeStore.markRuntimeReady()
     projectIndex.value = projectIndexProjections(index)
+    applyGlobalView(globalView)
     applyProjectView(projectView)
   }
   catch (error: unknown) {
@@ -1373,7 +1494,6 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
       runtimeConnected.value,
     )
     runtimeActivityIds.value = new Set(projectView.activities.map(activity => activity.activityId))
-    runtimeTaskIds.value = new Set(projectView.tasks.map(task => task.taskId))
     const runtimeTasks = projectView.tasks.map(task => taskToProjection({
       accountAliasForChannel: projectAccountAliasForChannel,
       campaigns: runtimeCampaigns,
@@ -1390,12 +1510,22 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
     syncVideoPlanViewportDraft()
 }
 
+function applyGlobalView(globalView: ContentStudioGlobalView): void {
+  globalProjectViews.value = globalView.projectViews
+  globalViewLoaded.value = true
+  runtimeTaskKeys.value = new Set(globalView.projectViews.flatMap(projectView =>
+    projectView.tasks.map(task => `${projectView.project.projectId}:${task.taskId}`),
+  ))
+}
+
 async function refreshProjectView(): Promise<void> {
-  const [index, projectView] = await Promise.all([
+  const [index, globalView, projectView] = await Promise.all([
     workbenchRuntime.projects(),
+    workbenchRuntime.global(),
     workbenchRuntime.project(snapshot.project.projectId),
   ])
   projectIndex.value = projectIndexProjections(index)
+  applyGlobalView(globalView)
   applyProjectView(projectView)
 }
 
@@ -1405,6 +1535,7 @@ async function switchProject(projectId: string): Promise<void> {
   try {
     const projectView = await workbenchRuntime.project(projectId)
     applyProjectView(projectView)
+    selectedTaskProjectId.value = projectId
     uiStore.selectCampaign(snapshot.campaigns[0]?.campaignId ?? '')
     uiStore.selectTask(snapshot.tasks[0]?.taskId ?? '')
   }
@@ -1466,17 +1597,19 @@ async function openProjectSpace(projectId: string): Promise<void> {
       <template v-if="activeModule === 'overview'">
         <OverviewPage
           :activity-task-summary="activityTaskSummary"
-          :owner-handoff-count="pendingOwnerHandoffs.length"
-          :pending-task-count="pendingTaskCount"
+          :campaigns="globalCampaignProjections"
+          :owner-handoff-count="globalPendingOwnerHandoffs.length"
+          :pending-task-count="globalPendingTaskCount"
           :project-count="projectIndexForView.length"
           :project-index="projectIndexForView"
           :snapshot="snapshot"
+          :tasks="globalTaskProjections"
           @go-activities="selectModule('activities')"
           @go-project="selectModule('project')"
           @go-tasks="selectModule('tasks')"
-          @open-activity="openActivityDetail"
+          @open-activity="openGlobalActivity"
           @open-project="openProjectSpace"
-          @select-task="selectTask"
+          @select-task="selectGlobalTask"
         />
       </template>
       <template v-else-if="activeModule === 'project'">
@@ -1552,7 +1685,7 @@ async function openProjectSpace(projectId: string): Promise<void> {
           :can-record-selected-task="canRecordSelectedTask"
           :can-retry-selected-task="canRetrySelectedTask"
           :can-start-selected-task="canStartSelectedTask"
-          :owner-handoffs="pendingOwnerHandoffs"
+          :owner-handoffs="activeTaskScope === '全部项目' ? globalPendingOwnerHandoffs : pendingOwnerHandoffs"
           :project-count="projectIndexForView.length"
           :project-name="snapshot.project.name"
           :runtime-connected="runtimeConnected"
@@ -1560,7 +1693,7 @@ async function openProjectSpace(projectId: string): Promise<void> {
           :selected-task-campaign="selectedTaskCampaign"
           :task-action-error="taskActionError"
           :task-action-pending="taskActionPending"
-          :task-counts="taskCounts"
+          :task-counts="activeTaskScope === '全部项目' ? globalTaskCounts : taskCounts"
           :visible-tasks="visibleTasks"
           @change-task="changeSelectedTask"
           @go-activities="selectModule('activities')"
