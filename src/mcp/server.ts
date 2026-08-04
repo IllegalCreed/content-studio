@@ -32,7 +32,7 @@ import { assertNoSensitiveKeys } from '../validation'
 
 const PROTOCOL_VERSION = '2026-07-28'
 const IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
-const PROJECT_URI_PATTERN = /^content-studio:\/\/projects\/([^/]+)\/(view|activities|content|tasks)$/
+const PROJECT_URI_PATTERN = /^content-studio:\/\/projects\/([^/]+)\/(view|activities|content|tasks|assets|receipts|reports)$/
 
 type McpTaskStatus = 'cancelled' | 'completed' | 'failed' | 'input_required' | 'working'
 
@@ -201,6 +201,21 @@ function projectResources(projectId: string): Array<Record<string, string>> {
       '执行任务',
       '项目下制作、发布和监测任务的只读列表。',
     ),
+    resource(
+      `content-studio://projects/${projectId}/assets`,
+      '素材资产',
+      '项目素材库和活动产物的只读列表，不包含本地绝对路径或凭据。',
+    ),
+    resource(
+      `content-studio://projects/${projectId}/receipts`,
+      '发布回执',
+      '项目发布安排和 marketing-ops 回执的只读列表，不会触发渠道写入。',
+    ),
+    resource(
+      `content-studio://projects/${projectId}/reports`,
+      '监测报告',
+      '项目监测观测和报告的只读列表。',
+    ),
   ]
 }
 
@@ -238,10 +253,25 @@ function readResource(
             channelContents: view.channelContents,
             contentGroups: view.contentGroups,
           }
-        : {
-            taskEvents: view.taskEvents,
-            tasks: view.tasks,
-          }
+        : kind === 'tasks'
+          ? {
+              taskEvents: view.taskEvents,
+              tasks: view.tasks,
+            }
+          : kind === 'assets'
+            ? {
+                activityArtifacts: view.activityArtifacts,
+                projectAssets: view.projectAssets,
+              }
+            : kind === 'receipts'
+              ? {
+                  publicationPlans: view.publicationPlans,
+                  publicationReceipts: view.publicationReceipts,
+                }
+              : {
+                  monitoringObservations: view.monitoringObservations,
+                  reports: view.reports,
+                }
   return {
     contents: [{
       mimeType: 'application/json',

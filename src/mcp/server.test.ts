@@ -109,6 +109,15 @@ describe('content Studio local MCP server', () => {
           expect.objectContaining({
             uri: `content-studio://projects/${projectId}/view`,
           }),
+          expect.objectContaining({
+            uri: `content-studio://projects/${projectId}/assets`,
+          }),
+          expect.objectContaining({
+            uri: `content-studio://projects/${projectId}/receipts`,
+          }),
+          expect.objectContaining({
+            uri: `content-studio://projects/${projectId}/reports`,
+          }),
         ]),
       },
     })
@@ -143,19 +152,31 @@ describe('content Studio local MCP server', () => {
       },
     })
 
-    for (const kind of ['activities', 'content', 'tasks']) {
-      await expect(server.handleMessage({
+    for (const kind of ['activities', 'content', 'tasks', 'assets', 'receipts', 'reports']) {
+      const response = await server.handleMessage({
         jsonrpc: '2.0',
         id: `read-${kind}`,
         method: 'resources/read',
         params: {
           uri: `content-studio://projects/${projectId}/${kind}`,
         },
-      })).resolves.toMatchObject({
+      })
+      expect(response).toMatchObject({
         result: {
           contents: [expect.objectContaining({ mimeType: 'application/json' })],
         },
       })
+      const text = (response?.result as {
+        contents: Array<{ text: string }>
+      }).contents[0]?.text
+      expect(text).toBeDefined()
+      const payload = JSON.parse(text!) as Record<string, unknown>
+      if (kind === 'assets')
+        expect(payload).toEqual({ activityArtifacts: [], projectAssets: [] })
+      if (kind === 'receipts')
+        expect(payload).toEqual({ publicationPlans: [], publicationReceipts: [] })
+      if (kind === 'reports')
+        expect(payload).toEqual({ monitoringObservations: [], reports: [] })
     }
   })
 
