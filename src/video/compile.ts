@@ -6,8 +6,9 @@ import type {
   ProjectManifest,
   VideoPlan,
 } from '../types'
-import { DEFAULT_ACTION_DURATION_MS, VIDEO_VIEWPORTS } from '../constants'
+import { DEFAULT_ACTION_DURATION_MS } from '../constants'
 import { validateCampaign, validateProjectManifest } from '../validation'
+import { resolveVideoRecordingConfig } from './recording-config'
 
 export function compileVideoPlan(
   projectInput: ProjectManifest,
@@ -19,6 +20,7 @@ export function compileVideoPlan(
     throw new Error('Campaign does not define a video plan')
 
   const locale = resolveVideoLocale(campaign)
+  const recordingConfig = resolveVideoRecordingConfig(project, campaign)
   const flowsById = new Map(project.captureFlows.map(flow => [flow.id, flow]))
   let timelineOffset = 0
   const scenes = campaign.video.flowIds.map((flowId) => {
@@ -50,8 +52,9 @@ export function compileVideoPlan(
     ...(campaign.video.planVersion === undefined
       ? {}
       : { planVersion: campaign.video.planVersion }),
+    recordingConfig,
     scenes,
-    viewport: campaign.video.viewport ?? VIDEO_VIEWPORTS[campaign.video.format],
+    viewport: recordingConfig.viewport,
   }
 }
 

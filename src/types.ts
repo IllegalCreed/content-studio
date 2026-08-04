@@ -30,9 +30,32 @@ export type ContentFormat = 'article' | 'short-post' | 'video-metadata'
 
 export type VideoFormat = 'landscape' | 'portrait' | 'square'
 
+export type VideoColorScheme = 'dark' | 'light' | 'no-preference'
+
 export interface VideoViewport {
   height: number
   width: number
+}
+
+export interface VideoRecordingConfigOverrides {
+  colorScheme?: VideoColorScheme
+  deviceScaleFactor?: number
+  locale?: Locale
+  outputSize?: VideoViewport
+  viewport?: VideoViewport
+}
+
+export interface VideoRecordingProfile {
+  channelVariants?: Partial<Record<ChannelId, VideoRecordingConfigOverrides>>
+  defaults?: VideoRecordingConfigOverrides
+}
+
+export interface VideoRecordingConfig {
+  colorScheme: VideoColorScheme
+  deviceScaleFactor: number
+  locale: Locale
+  outputSize: VideoViewport
+  viewport: VideoViewport
 }
 
 export type LocalizedText = Record<Locale, string>
@@ -110,6 +133,7 @@ export interface ProjectManifest {
   sourceAccess?: ProjectAccessMode
   captureMode?: ProjectCaptureMode
   repeatability?: ProjectRepeatability
+  videoRecordingDefaults?: VideoRecordingConfigOverrides
 }
 
 export interface CampaignChannel {
@@ -128,6 +152,7 @@ export interface CampaignVideo {
   format: VideoFormat
   outline?: VideoOutlineScene[]
   planVersion?: number
+  recordingProfile?: VideoRecordingProfile
   viewport?: VideoViewport
 }
 
@@ -592,6 +617,7 @@ export interface VideoPlan {
   outline?: VideoOutlineScene[]
   planVersion?: number
   reviewStatus?: VideoPlanReviewStatus
+  recordingConfig?: VideoRecordingConfig
   scenes: CompiledScene[]
   viewport: VideoViewport
 }
@@ -770,6 +796,7 @@ export interface RecorderAttemptReceipt {
   previousAttempt?: number
   projectId: string
   recordingContext?: RecordingContext
+  recordingConfig?: VideoRecordingConfig
   receiptVersion: 1
   totalActions: number
   totalScenes: number

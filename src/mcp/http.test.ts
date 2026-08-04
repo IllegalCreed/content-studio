@@ -248,7 +248,7 @@ describe('content studio Streamable HTTP MCP adapter', () => {
         headers: {
           ...headers('server/discover'),
           'Content-Type': 'application/json',
-          Origin: 'https://allowed.example',
+          'Origin': 'https://allowed.example',
         },
         method: 'POST',
       })
@@ -268,7 +268,7 @@ describe('content studio Streamable HTTP MCP adapter', () => {
         body: '{}',
         headers: {
           'Content-Type': 'application/json',
-          Origin: 'https://allowed.example',
+          'Origin': 'https://allowed.example',
         },
         method: 'POST',
       })
@@ -304,7 +304,7 @@ describe('content studio Streamable HTTP MCP adapter', () => {
         headers: {
           ...headers('server/discover'),
           'MCP-Protocol-Version': '2025-11-25',
-          Origin: 'https://allowed.example',
+          'Origin': 'https://allowed.example',
         },
         method: 'POST',
       })

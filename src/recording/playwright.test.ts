@@ -1,7 +1,8 @@
-import type { SemanticLocator } from '../types'
+import type { SemanticLocator, VideoPlan } from '../types'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createPlaywrightRecordingSession,
+  resolvePlaywrightRecordingContextOptions,
   resolveSemanticLocator,
   validateProjectNavigation,
 } from './playwright'
@@ -104,5 +105,36 @@ describe('playwright recording policy', () => {
         ),
       ).rejects.toThrow(/actionTimeoutMs/)
     }
+  })
+
+  it('passes the resolved recording profile to the browser context', () => {
+    const plan = {
+      campaignId: 'campaign-a',
+      durationMs: 0,
+      format: 'landscape',
+      recordingConfig: {
+        colorScheme: 'light',
+        deviceScaleFactor: 2,
+        locale: 'zh-CN',
+        outputSize: { height: 720, width: 1280 },
+        viewport: { height: 900, width: 1600 },
+      },
+      scenes: [],
+      viewport: { height: 900, width: 1600 },
+    } satisfies VideoPlan
+
+    expect(resolvePlaywrightRecordingContextOptions(
+      plan,
+      '/tmp/content-studio-recording/attempt-1/.playwright-video',
+    )).toMatchObject({
+      colorScheme: 'light',
+      deviceScaleFactor: 2,
+      locale: 'zh-CN',
+      recordVideo: {
+        dir: '/tmp/content-studio-recording/attempt-1/.playwright-video',
+        size: { height: 720, width: 1280 },
+      },
+      viewport: { height: 900, width: 1600 },
+    })
   })
 })

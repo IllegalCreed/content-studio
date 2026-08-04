@@ -76,6 +76,7 @@ import {
   evaluateStorageRetention,
 } from '../storage/retention'
 import { assertNoSensitiveKeys } from '../validation'
+import { validateVideoRecordingProfile } from '../video/recording-config'
 import { validateVideoViewport } from '../video/viewport'
 
 const MAX_BODY_BYTES = 256 * 1024
@@ -1513,7 +1514,14 @@ function statusField(input: unknown): CreatePublishingActivityInput['status'] {
 
 function videoField(input: unknown): NonNullable<CreatePublishingActivityInput['video']> {
   const value = asRecord(input, 'video')
-  const supportedKeys = new Set(['flowIds', 'format', 'outline', 'planVersion', 'viewport'])
+  const supportedKeys = new Set([
+    'flowIds',
+    'format',
+    'outline',
+    'planVersion',
+    'recordingProfile',
+    'viewport',
+  ])
   for (const key of Object.keys(value)) {
     if (!supportedKeys.has(key))
       throw new RequestError(400, `video contains unsupported field: ${key}`)
@@ -1534,6 +1542,21 @@ function videoField(input: unknown): NonNullable<CreatePublishingActivityInput['
   const outline = value.outline === undefined
     ? undefined
     : videoOutlineField(value.outline)
+  let recordingProfile: NonNullable<CreatePublishingActivityInput['video']>['recordingProfile']
+  if (value.recordingProfile !== undefined) {
+    try {
+      recordingProfile = validateVideoRecordingProfile(
+        value.recordingProfile,
+        format as VideoFormat,
+      )
+    }
+    catch (error: unknown) {
+      throw new RequestError(
+        400,
+        error instanceof Error ? error.message : 'Invalid video recording profile',
+      )
+    }
+  }
   let viewport: VideoViewport | undefined
   if (value.viewport !== undefined) {
     try {
@@ -1551,6 +1574,7 @@ function videoField(input: unknown): NonNullable<CreatePublishingActivityInput['
     format: format as VideoFormat,
     ...(outline === undefined ? {} : { outline }),
     ...(planVersion === undefined ? {} : { planVersion }),
+    ...(recordingProfile === undefined ? {} : { recordingProfile }),
     ...(viewport === undefined ? {} : { viewport }),
   }
 }

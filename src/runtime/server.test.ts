@@ -99,6 +99,18 @@ describe('content studio local application server', () => {
         flowIds: ['quick-sort'],
         format: 'landscape',
         planVersion: 2,
+        recordingProfile: {
+          defaults: {
+            colorScheme: 'light',
+            deviceScaleFactor: 2,
+            locale: 'en',
+          },
+          channelVariants: {
+            github: {
+              outputSize: { height: 1080, width: 1920 },
+            },
+          },
+        },
         viewport: {
           height: 768,
           width: 1366,
@@ -120,6 +132,18 @@ describe('content studio local application server', () => {
         flowIds: ['quick-sort'],
         format: 'landscape',
         planVersion: 2,
+        recordingProfile: {
+          defaults: {
+            colorScheme: 'light',
+            deviceScaleFactor: 2,
+            locale: 'en',
+          },
+          channelVariants: {
+            github: {
+              outputSize: { height: 1080, width: 1920 },
+            },
+          },
+        },
         outline: [{ flowId: 'quick-sort' }],
         viewport: {
           height: 768,

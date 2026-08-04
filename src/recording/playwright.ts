@@ -3,6 +3,7 @@
 import type {
   Browser,
   BrowserContext,
+  BrowserContextOptions,
   Locator,
   Page,
   Video,
@@ -23,6 +24,8 @@ import type {
   RecordingSceneContext,
   RecordingSession,
   SemanticLocator,
+  VideoPlan,
+  VideoRecordingConfig,
 } from '../types'
 import { mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -194,6 +197,32 @@ export function validateProjectNavigation(
   }
 }
 
+export function resolvePlaywrightRecordingContextOptions(
+  plan: VideoPlan,
+  rawVideoDirectory: string,
+): BrowserContextOptions {
+  const recordingConfig: VideoRecordingConfig = plan.recordingConfig
+    ?? {
+      colorScheme: 'dark',
+      deviceScaleFactor: 1,
+      locale: 'en',
+      outputSize: plan.viewport,
+      viewport: plan.viewport,
+    }
+  return {
+    acceptDownloads: false,
+    colorScheme: recordingConfig.colorScheme,
+    deviceScaleFactor: recordingConfig.deviceScaleFactor,
+    locale: recordingConfig.locale,
+    recordVideo: {
+      dir: rawVideoDirectory,
+      size: recordingConfig.outputSize,
+    },
+    reducedMotion: 'reduce',
+    viewport: recordingConfig.viewport,
+  }
+}
+
 class PlaywrightRecordingSession implements RecordingSession {
   private readonly actionTimeoutMs: number
   private readonly artifacts: RecorderArtifact[] = []
@@ -251,15 +280,20 @@ class PlaywrightRecordingSession implements RecordingSession {
       },
     )
 
-    const browserContext = await this.browser.newContext({
-      acceptDownloads: false,
-      recordVideo: {
-        dir: rawVideoDirectory,
-        size: this.context.plan.viewport,
-      },
-      reducedMotion: 'reduce',
-      viewport: this.context.plan.viewport,
-    })
+    const recordingConfig = this.context.plan.recordingConfig
+      ?? {
+        colorScheme: 'dark' as const,
+        deviceScaleFactor: 1,
+        locale: 'en' as const,
+        outputSize: this.context.plan.viewport,
+        viewport: this.context.plan.viewport,
+      }
+    const browserContext = await this.browser.newContext(
+      resolvePlaywrightRecordingContextOptions(
+        this.context.plan,
+        rawVideoDirectory,
+      ),
+    )
     browserContext.setDefaultTimeout(this.actionTimeoutMs)
     this.browserContext = browserContext
     this.currentScene = scene
@@ -282,6 +316,7 @@ class PlaywrightRecordingSession implements RecordingSession {
     this.video = page.video()
     this.observePage(page)
     await page.emulateMedia({
+      colorScheme: recordingConfig.colorScheme,
       reducedMotion: 'reduce',
     })
 

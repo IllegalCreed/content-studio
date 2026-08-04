@@ -44,6 +44,19 @@ const plan: VideoPlan = {
     height: 1080,
     width: 1920,
   },
+  recordingConfig: {
+    colorScheme: 'dark',
+    deviceScaleFactor: 1,
+    locale: 'en',
+    outputSize: {
+      height: 1080,
+      width: 1920,
+    },
+    viewport: {
+      height: 1080,
+      width: 1920,
+    },
+  },
 }
 
 const preview: RecorderArtifact = {
@@ -408,6 +421,7 @@ describe('recording job runner', () => {
     })
     expect(result.attempts[0]?.recordingContext).toEqual(result.receipt.recordingContext)
     expect(result.receipt.viewport).toEqual(plan.viewport)
+    expect(result.receipt.recordingConfig).toEqual(plan.recordingConfig)
   })
 })
 

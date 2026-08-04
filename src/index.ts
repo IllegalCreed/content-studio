@@ -73,6 +73,7 @@ export {
   createPlaywrightRecordingSession,
   recordProjectWithPlaywright,
   recordWithPlaywright,
+  resolvePlaywrightRecordingContextOptions,
   resolveSemanticLocator,
   validateProjectNavigation,
 } from './recording/playwright'
@@ -99,4 +100,9 @@ export {
 export type * from './types'
 export { validateCampaign, validateProjectManifest } from './validation'
 export { compileVideoPlan } from './video/compile'
+export {
+  resolveVideoRecordingConfig,
+  validateVideoRecordingConfigOverrides,
+  validateVideoRecordingProfile,
+} from './video/recording-config'
 export { validateVideoViewport } from './video/viewport'

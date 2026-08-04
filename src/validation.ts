@@ -16,6 +16,10 @@ import type {
   VideoOutlineScene,
 } from './types'
 import { CHANNEL_BLUEPRINTS } from './constants'
+import {
+  validateVideoRecordingConfigOverrides,
+  validateVideoRecordingProfile,
+} from './video/recording-config'
 import { validateVideoViewport } from './video/viewport'
 
 const IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -62,6 +66,14 @@ export function validateProjectManifest(input: unknown): ProjectManifest {
     ...(value.repeatability === undefined
       ? {}
       : { repeatability: parseProjectRepeatability(value.repeatability) }),
+    ...(value.videoRecordingDefaults === undefined
+      ? {}
+      : {
+          videoRecordingDefaults: validateVideoRecordingConfigOverrides(
+            value.videoRecordingDefaults,
+            { locales, path: 'videoRecordingDefaults' },
+          ),
+        }),
   }
 
   if (
@@ -109,8 +121,13 @@ export function validateCampaign(
     channels,
   }
 
-  if (value.video !== undefined)
-    campaign.video = parseCampaignVideo(value.video, project.captureFlows)
+  if (value.video !== undefined) {
+    campaign.video = parseCampaignVideo(
+      value.video,
+      project.captureFlows,
+      project.locales,
+    )
+  }
 
   return campaign
 }
@@ -427,9 +444,17 @@ function parseChannels(
 function parseCampaignVideo(
   input: unknown,
   captureFlows: CaptureFlow[],
+  projectLocales: Locale[],
 ): NonNullable<CampaignSpec['video']> {
   const value = asRecord(input, 'video')
-  const supportedKeys = new Set(['flowIds', 'format', 'outline', 'planVersion', 'viewport'])
+  const supportedKeys = new Set([
+    'flowIds',
+    'format',
+    'outline',
+    'planVersion',
+    'recordingProfile',
+    'viewport',
+  ])
   for (const key of Object.keys(value)) {
     if (!supportedKeys.has(key))
       throw new Error(`video contains unsupported field: ${key}`)
@@ -452,6 +477,13 @@ function parseCampaignVideo(
   const outline = value.outline === undefined
     ? undefined
     : parseVideoOutline(value.outline, flowIds, captureFlows)
+  const recordingProfile = value.recordingProfile === undefined
+    ? undefined
+    : validateVideoRecordingProfile(
+        value.recordingProfile,
+        format as NonNullable<CampaignSpec['video']>['format'],
+        projectLocales,
+      )
   const viewport = value.viewport === undefined
     ? undefined
     : validateVideoViewport(value.viewport, format as NonNullable<CampaignSpec['video']>['format'])
@@ -460,6 +492,7 @@ function parseCampaignVideo(
     format: format as NonNullable<CampaignSpec['video']>['format'],
     ...(outline === undefined ? {} : { outline }),
     ...(planVersion === undefined ? {} : { planVersion }),
+    ...(recordingProfile === undefined ? {} : { recordingProfile }),
     ...(viewport === undefined ? {} : { viewport }),
   }
 }

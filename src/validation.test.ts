@@ -206,6 +206,43 @@ describe('manifest validation', () => {
     }, project)).toThrow(/outline.*missing-flow/i)
   })
 
+  it('accepts project recording defaults and per-channel activity variants', () => {
+    const configuredProject = validateProjectManifest({
+      ...project,
+      videoRecordingDefaults: {
+        deviceScaleFactor: 2,
+        outputSize: { height: 1080, width: 1920 },
+      },
+    })
+    const configuredCampaign = validateCampaign({
+      ...campaign,
+      video: {
+        ...campaign.video!,
+        recordingProfile: {
+          defaults: {
+            colorScheme: 'light',
+            locale: 'zh-CN',
+          },
+          channelVariants: {
+            zhihu: {
+              viewport: { height: 1080, width: 1920 },
+            },
+          },
+        },
+      },
+    }, configuredProject)
+
+    expect(configuredProject.videoRecordingDefaults).toMatchObject({
+      deviceScaleFactor: 2,
+    })
+    expect(configuredCampaign.video?.recordingProfile).toMatchObject({
+      defaults: { colorScheme: 'light', locale: 'zh-CN' },
+      channelVariants: {
+        zhihu: { viewport: { height: 1080, width: 1920 } },
+      },
+    })
+  })
+
   it('fails closed for non-HTTPS public URLs and unknown capture flows', () => {
     expect(() =>
       validateProjectManifest({

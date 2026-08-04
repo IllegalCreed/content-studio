@@ -43,6 +43,7 @@ import { runProductionTask as executeProductionTask } from '../jobs/production'
 import { InMemoryExecutionTaskStore } from '../jobs/task'
 import { assertMatchingMarketingOpsReceipt } from '../marketing-ops/client'
 import { compileVideoPlan } from '../video/compile'
+import { validateVideoRecordingProfile } from '../video/recording-config'
 import { validateVideoViewport } from '../video/viewport'
 
 export class ProjectScopeError extends Error {
@@ -1347,6 +1348,13 @@ export class ContentStudioApplicationService {
       throw new Error(`Unsupported activity video format: ${video.format}`)
     if (video.viewport !== undefined)
       validateVideoViewport(video.viewport, video.format)
+    if (video.recordingProfile !== undefined) {
+      validateVideoRecordingProfile(
+        video.recordingProfile,
+        video.format,
+        snapshot.manifest.locales,
+      )
+    }
     if (video.planVersion !== undefined
       && (!Number.isInteger(video.planVersion) || video.planVersion < 1)) {
       throw new Error('Activity video planVersion must be a positive integer')

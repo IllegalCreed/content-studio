@@ -71,6 +71,19 @@ describe('video plan compiler', () => {
         "campaignId": "quick-sort-launch",
         "durationMs": 3000,
         "format": "landscape",
+        "recordingConfig": {
+          "colorScheme": "dark",
+          "deviceScaleFactor": 1,
+          "locale": "en",
+          "outputSize": {
+            "height": 1080,
+            "width": 1920,
+          },
+          "viewport": {
+            "height": 1080,
+            "width": 1920,
+          },
+        },
         "scenes": [
           {
             "actions": [

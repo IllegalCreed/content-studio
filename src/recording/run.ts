@@ -243,6 +243,9 @@ export async function runRecordingJob(
       ...(validatedInput.recordingContext === undefined
         ? {}
         : { recordingContext: validatedInput.recordingContext }),
+      ...(validatedInput.plan.recordingConfig === undefined
+        ? {}
+        : { recordingConfig: validatedInput.plan.recordingConfig }),
       receiptVersion: 1,
       totalActions,
       totalScenes: validatedInput.plan.scenes.length,

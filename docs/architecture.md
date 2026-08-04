@@ -361,24 +361,29 @@ AI 创作层在此基础上增加内容修订和非确定性产物，但必须�
 
 ### 录制器配置与分辨率
 
-当前 `VideoPlan.viewport` 由活动视频格式编译得到，Playwright 将它同时用于目标网站
-的 CSS viewport 和 `recordVideo.size`。默认预设为横屏 1920×1080、竖屏 1080×1920、
-方形 1080×1080；活动视频计划也可以指定经过边长、像素总量、比例和画幅方向校验的
-自定义宽高。项目默认值、输出媒体尺寸和渠道资源变体还未接入。
+当前 `VideoPlan.recordingConfig` 由活动视频格式编译得到，Playwright 使用其中的
+`viewport` 设置目标网站 CSS viewport，使用 `outputSize` 设置 `recordVideo.size`，并
+应用 `deviceScaleFactor`、`locale` 和 `colorScheme`。默认预设为横屏 1920×1080、
+竖屏 1080×1920、方形 1080×1080；活动视频计划也可以指定经过边长、像素总量、比例和
+画幅方向校验的自定义宽高。
 
 本地 Runtime 通过活动创建和活动修订接口接收这组白名单字段。修订使用活动版本号做
 乐观并发校验，改动视频计划后自动把 `videoPlanReviewStatus` 设回 `pending`，所以旧的
 确认不会误用于新的录制尺寸。工作台只是调用这些接口，不在浏览器端复制校验或执行器。
 
-后续扩展必须保持“计划先确定、执行再消费”的边界：项目默认值、活动拍摄计划和渠道
-资源变体负责声明经过校验的 viewport/输出尺寸，任务执行只读取最终版本化配置。需要
+配置按“内置预设 → 项目 `videoRecordingDefaults` → 活动
+`video.recordingProfile.defaults` → 渠道 `channelVariants` → 兼容旧字段
+`video.viewport`”合并。项目默认值、活动拍摄计划和渠道资源变体负责声明经过校验的
+viewport/输出尺寸，任务执行只读取最终版本化配置。需要
 区分网站 viewport（页面布局和响应式断点看到的 CSS 像素）与最终媒体尺寸（文件像素）；
 device scale factor、语言和色彩环境也要作为可审计配置，而不是隐藏在浏览器启动参数中。
 
-配置合并只能覆盖白名单字段，并校验正整数、最大边长、总像素、宽高比例和项目能力。
+配置合并只能覆盖白名单字段（viewport、outputSize、deviceScaleFactor、locale、
+colorScheme），并校验正整数、最大边长、总像素、宽高比例和项目能力。
 禁止通过配置注入任意浏览器参数、脚本、选择器、cookie、凭据、User-Agent 欺骗或浏览器
 Profile。帧率、编码码率、裁切、转场和响度交给后续 FFmpeg 合成阶段。最终生效的录制
-配置必须写入拍摄计划版本和录制回执，重试不能悄悄改变录制尺寸。
+最终完整配置会写入编译后的 `VideoPlan.recordingConfig` 和每次录制回执，重试不能
+悄悄改变录制尺寸或浏览器环境。
 
 ## 内容、素材和任务
 
