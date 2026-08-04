@@ -58,23 +58,25 @@ function actionStatusLabel(status: 'active' | 'done' | 'pending'): string {
         </p>
         <p class="video-job-id">任务编号：<code>{{ job.jobId }}</code></p>
       </div>
+    </div>
+
+    <div class="video-progress-block">
       <div class="video-progress-summary">
         <span>动作进度</span>
         <strong>{{ job.completedActions }} / {{ job.totalActions }} 个动作</strong>
         <small>{{ progress }}%</small>
       </div>
-    </div>
-
-    <div
-      class="progress-track video-action-progress"
-      data-testid="recording-action-progress"
-      role="progressbar"
-      aria-label="录制动作进度"
-      :aria-valuemax="100"
-      :aria-valuemin="0"
-      :aria-valuenow="progress"
-    >
-      <span :style="{ width: `${progress}%` }" />
+      <div
+        class="progress-track video-action-progress"
+        data-testid="recording-action-progress"
+        role="progressbar"
+        aria-label="录制动作进度"
+        :aria-valuemax="100"
+        :aria-valuemin="0"
+        :aria-valuenow="progress"
+      >
+        <span :style="{ width: `${progress}%` }" />
+      </div>
     </div>
 
     <div v-if="recordingScenes.length > 0" class="recording-actions" data-testid="recording-action-list">

@@ -638,6 +638,15 @@ main {
   text-align: right;
 }
 
+.video-progress-block {
+  margin-top: 1rem;
+}
+
+.video-progress-block .video-progress-summary {
+  width: max-content;
+  margin-left: auto;
+}
+
 .video-progress-summary span,
 .video-progress-summary small {
   font-size: 0.58rem;
@@ -836,7 +845,7 @@ main {
 
 .video-action-progress {
   height: 0.42rem;
-  margin: 1rem 0;
+  margin: 0.45rem 0 1rem;
   padding: 0.08rem;
   border: 1px solid var(--stroke);
   background: #151713;

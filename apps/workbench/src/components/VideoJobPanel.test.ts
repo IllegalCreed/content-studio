@@ -66,6 +66,8 @@ describe('video job panel', () => {
     expect(wrapper.get('.video-job-context').text()).toContain('bilibili')
     expect(wrapper.get('.video-progress-summary').text()).toContain('动作进度')
     expect(wrapper.get('.video-progress-summary').text()).toContain('2 / 3 个动作')
+    expect(wrapper.findAll('.panel-heading > .video-progress-summary')).toHaveLength(0)
+    expect(wrapper.findAll('.video-progress-block > .video-progress-summary')).toHaveLength(1)
     expect(wrapper.get('[data-testid="recording-action-progress"]').attributes()).toMatchObject({
       'aria-valuemax': '100',
       'aria-valuemin': '0',
