@@ -799,7 +799,7 @@ function registerInitialProject(
   }
 }
 
-function createProductionWorkerJob(
+export function createProductionWorkerJob(
   service: ContentStudioApplicationService,
   outputRoot: string,
   task: ExecutionTask | undefined,

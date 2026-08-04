@@ -349,6 +349,170 @@ describe('content-studio CLI', () => {
     }
   })
 
+  it('runs a queued video task through the MCP stdio worker', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
+    const projectPath = join(temporaryDirectory, 'project.json')
+    const campaignPath = join(temporaryDirectory, 'campaign.json')
+    const output: string[] = []
+    const videoProject = {
+      ...project,
+      canonicalUrl: 'https://algo.illegalscreed.cn/',
+      captureFlows: [{
+        id: 'quick-sort',
+        startPath: '/quick-sort',
+        steps: [{ durationMs: 10, kind: 'capture', label: 'algorithm' }],
+        title: { 'en': 'Quick sort', 'zh-CN': '快速排序' },
+      }],
+    }
+    const videoCampaign = {
+      ...campaign,
+      campaignId: 'mcp-cli-video',
+      channels: [{ id: 'youtube', locale: 'en' }],
+      targetUrl: 'https://algo.illegalscreed.cn/quick-sort/',
+      video: { flowIds: ['quick-sort'], format: 'landscape' },
+    }
+    const requests = [
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: {
+          name: 'create_publishing_activity',
+          arguments: {
+            activityId: 'mcp-cli-video',
+            campaignId: 'mcp-cli-video',
+            channels: [{ id: 'youtube', locale: 'en' }],
+            goal: 'education',
+            projectId: 'algorithm-visualizer',
+            projectSnapshotId: 'algorithm-visualizer-snapshot-1',
+            status: 'draft',
+            targetUrl: 'https://algo.illegalscreed.cn/quick-sort/',
+            topic: { 'en': 'Worker demo', 'zh-CN': 'Worker 演示' },
+            video: { flowIds: ['quick-sort'], format: 'landscape' },
+          },
+        },
+      },
+      {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: {
+          name: 'create_content_group',
+          arguments: {
+            activityId: 'mcp-cli-video',
+            contentGroupId: 'mcp-cli-video-group',
+            coreMessage: 'Show the worker demo.',
+            projectId: 'algorithm-visualizer',
+            title: 'Worker demo',
+          },
+        },
+      },
+      {
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'tools/call',
+        params: {
+          name: 'save_channel_content',
+          arguments: {
+            activityId: 'mcp-cli-video',
+            artifactIds: [],
+            body: 'Worker demo video',
+            channel: 'youtube',
+            contentGroupId: 'mcp-cli-video-group',
+            contentId: 'mcp-cli-video-content',
+            format: 'video',
+            locale: 'en',
+            projectId: 'algorithm-visualizer',
+            title: 'Worker demo video',
+          },
+        },
+      },
+      {
+        jsonrpc: '2.0',
+        id: 4,
+        method: 'tools/call',
+        params: {
+          name: 'start_production_task',
+          arguments: {
+            projectId: 'algorithm-visualizer',
+            taskId: 'production-mcp-cli-video-content',
+          },
+        },
+      },
+    ]
+
+    try {
+      await writeFile(projectPath, JSON.stringify(videoProject), 'utf8')
+      await writeFile(campaignPath, JSON.stringify(videoCampaign), 'utf8')
+      await expect(runCli(
+        [
+          'mcp',
+          '--stdio',
+          '--project',
+          projectPath,
+          '--campaign',
+          campaignPath,
+          '--db',
+          join(temporaryDirectory, 'state.sqlite'),
+        ],
+        {
+          cwd: temporaryDirectory,
+          input: Readable.from(requests.map(request => `${JSON.stringify(request)}\n`)),
+          output: new Writable({
+            write(chunk, _encoding, callback) {
+              output.push(String(chunk))
+              callback()
+            },
+          }),
+          write: () => undefined,
+        },
+        {
+          record: async input => ({
+            attempts: [],
+            receipt: {
+              artifactDirectory: input.outputDirectory,
+              artifacts: [],
+              attempt: 1,
+              campaignId: 'mcp-cli-video',
+              completedActions: 1,
+              completedScenes: 1,
+              jobId: input.jobId,
+              logs: {
+                consoleErrors: 0,
+                consoleWarnings: 0,
+                entries: [],
+                pageErrors: 0,
+              },
+              outcome: 'succeeded',
+              planSha256: 'mcp-cli-worker-plan',
+              projectId: input.projectId,
+              receiptVersion: 1,
+              totalActions: 1,
+              totalScenes: 1,
+            },
+          }),
+        },
+      )).resolves.toBe(0)
+
+      const responses = output
+        .join('')
+        .trim()
+        .split('\n')
+        .map(line => JSON.parse(line) as { result?: { structuredContent?: { status?: string } } })
+      expect(responses.at(-1)).toMatchObject({
+        result: {
+          structuredContent: { status: 'working' },
+        },
+      })
+    }
+    finally {
+      await rm(temporaryDirectory, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
+
   it('records a compiled video plan through the fixed CLI grammar', async () => {
     const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
     const projectPath = join(temporaryDirectory, 'project.json')

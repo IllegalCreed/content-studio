@@ -1,3 +1,4 @@
+import type { ProductionWorkerJob } from '../jobs/worker'
 import type {
   ProjectManifest,
   ProjectRecord,
@@ -692,6 +693,152 @@ describe('content Studio local MCP server', () => {
         task: { status: 'cancelled' },
       },
     })
+  })
+
+  it('schedules video production through the configured local worker', async () => {
+    const repository = new InMemoryContentStudioRepository()
+    const taskStore = new InMemoryExecutionTaskStore()
+    const service = new ContentStudioApplicationService(repository, taskStore)
+    service.registerProject(project, snapshot)
+    service.bindProjectChannel({
+      channel: 'github',
+      delivery: 'automatic-candidate',
+      enabled: true,
+      projectId,
+    })
+    const jobs: ProductionWorkerJob[] = []
+    const cancelled: string[] = []
+    const server = createContentStudioMcpServer({
+      projectId,
+      productionWorker: {
+        cancel: (queuedProjectId, taskId) => {
+          cancelled.push(`${queuedProjectId}:${taskId}`)
+          return true
+        },
+        enqueue: (job) => {
+          jobs.push(job)
+          return true
+        },
+      },
+      productionWorkerJob: task => task.productionType === 'video'
+        ? {
+            baseUrl: 'https://example.com',
+            outputDirectory: `.content-studio/production/${task.taskId}`,
+            projectId: task.projectId,
+            projectOrigin: 'https://example.com',
+            taskId: task.taskId,
+          }
+        : undefined,
+      service,
+    })
+
+    service.createActivity({
+      activityId: 'mcp-video-worker',
+      campaignId: 'mcp-video-worker',
+      channels: [{ id: 'github', locale: 'en' }],
+      goal: 'education',
+      projectId,
+      projectSnapshotId: snapshot.snapshotId,
+      status: 'draft',
+      targetUrl: 'https://example.com/mcp-video-worker/',
+      topic: { 'en': 'Worker scheduling', 'zh-CN': 'Worker 调度' },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+      },
+    })
+    const group = service.createContentGroup({
+      activityId: 'mcp-video-worker',
+      contentGroupId: 'mcp-video-worker-group',
+      coreMessage: 'Show the worker scheduling flow.',
+      projectId,
+      title: 'Worker scheduling',
+    })
+    service.createChannelContent({
+      activityId: 'mcp-video-worker',
+      artifactIds: [],
+      body: 'Worker scheduling video',
+      channel: 'github',
+      contentGroupId: group.contentGroupId,
+      contentId: 'mcp-video-worker-content',
+      format: 'video',
+      locale: 'en',
+      projectId,
+      title: 'Worker scheduling video',
+    })
+    const taskId = 'production-mcp-video-worker-content'
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 43,
+      method: 'tools/call',
+      params: {
+        name: 'start_production_task',
+        arguments: { projectId, taskId },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        structuredContent: { internalStatus: 'generating', status: 'working' },
+      },
+    })
+    expect(jobs).toEqual([expect.objectContaining({ projectId, taskId })])
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 44,
+      method: 'tools/call',
+      params: {
+        name: 'cancel_task',
+        arguments: { projectId, taskId },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        structuredContent: { status: 'cancelled' },
+      },
+    })
+    expect(cancelled).toEqual([`${projectId}:${taskId}`])
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 45,
+      method: 'tools/call',
+      params: {
+        name: 'retry_task',
+        arguments: { projectId, taskId },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        structuredContent: { status: 'queued' },
+      },
+    })
+    expect(jobs).toHaveLength(2)
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 46,
+      method: 'tools/call',
+      params: {
+        name: 'start_production_task',
+        arguments: { projectId, taskId },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        structuredContent: { internalStatus: 'generating', status: 'working' },
+      },
+    })
+    expect(jobs).toHaveLength(3)
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 47,
+      method: 'tasks/cancel',
+      params: { projectId, taskId },
+    })).resolves.toMatchObject({
+      result: {
+        task: { internalStatus: 'cancelled', status: 'cancelled' },
+      },
+    })
+    expect(cancelled).toHaveLength(2)
   })
 
   it('saves an AI-produced activity content pack in one project-scoped call', async () => {

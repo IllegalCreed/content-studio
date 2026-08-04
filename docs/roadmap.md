@@ -273,6 +273,11 @@ Worker 自动接手，只有源代码+确定性录制项目才会启动浏览器
 避免服务启动时意外打开浏览器，当前不会自动恢复遗留的 `generating` 任务；启动恢复策略仍
 需在明确的用户确认和项目注册表之后补齐。
 
+同日 MCP stdio 调度切片已接通：CLI 与 HTTP Runtime 共用同一套本地 Worker 约束。MCP 的
+`start_production_task`、`retry_task` 和 `tasks/cancel` 会把视频制作任务同步到队列，文章
+任务仍等待独立的 AI/文本执行器；Worker 只派生无凭据 origin 和固定输出目录，不会获得渠道
+发布权限。stdio 进程结束时会中止未完成尝试，遗留任务不会在下次启动时自动恢复。
+
 第一个 AI 垂直切片：读取 Algorithm Visualizer 项目事实，创建一个发布活动，生成
 不同渠道的文章和视频脚本，启动录制任务并返回可观察回执。
 

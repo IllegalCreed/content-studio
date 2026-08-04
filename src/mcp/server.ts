@@ -1,6 +1,7 @@
 // @env node
 
 import type { ContentStudioApplicationService } from '../control-plane/service'
+import type { ProductionWorker, ProductionWorkerJob } from '../jobs/worker'
 import type {
   CreateActivityContentPackInput,
   ExecutionTask,
@@ -55,6 +56,8 @@ export interface McpJsonRpcResponse {
 
 export interface ContentStudioMcpServerOptions {
   projectId: string
+  productionWorker?: Pick<ProductionWorker, 'cancel' | 'enqueue'>
+  productionWorkerJob?: (task: ExecutionTask) => ProductionWorkerJob | undefined
   service: ContentStudioApplicationService
 }
 
@@ -456,7 +459,7 @@ function toolDefinitions(): Array<Record<string, unknown>> {
         openWorldHint: false,
         readOnlyHint: false,
       },
-      description: '启动项目制作任务的生成阶段；不会启动浏览器，也不会声称录制已完成。',
+      description: '启动项目制作任务并交给已配置的本地执行器；视频任务会异步录制，文章任务等待对应生成器，不会执行渠道发布。',
       inputSchema: taskSchema(),
       name: 'start_production_task',
       title: '启动制作任务',
@@ -961,6 +964,7 @@ function startMcpProductionTask(
 ): Record<string, unknown> {
   const handle = parseTaskHandle(input, options, false)
   const task = options.service.startProductionTask(handle.projectId, handle.taskId)
+  enqueueMcpProductionTask(options, task)
   const events = options.service.listTaskEvents(handle.projectId, handle.taskId)
   return toMcpTask(task, events)
 }
@@ -972,9 +976,22 @@ function changeTask(
 ): ExecutionTask {
   const value = scopedRecord(input, options.projectId, ['projectId', 'taskId'])
   const taskId = identifierField(value.taskId, 'taskId')
-  return operation === 'cancel'
-    ? options.service.cancelTask(value.projectId, taskId)
-    : options.service.retryTask(value.projectId, taskId)
+  if (operation === 'cancel') {
+    options.productionWorker?.cancel(value.projectId, taskId)
+    return options.service.cancelTask(value.projectId, taskId)
+  }
+  const task = options.service.retryTask(value.projectId, taskId)
+  enqueueMcpProductionTask(options, task)
+  return task
+}
+
+function enqueueMcpProductionTask(
+  options: ContentStudioMcpServerOptions,
+  task: ExecutionTask,
+): void {
+  const job = options.productionWorkerJob?.(task)
+  if (job !== undefined)
+    options.productionWorker?.enqueue(job)
 }
 
 function toolResult(value: unknown): Record<string, unknown> {
@@ -1024,6 +1041,7 @@ function cancelMcpTask(
   options: ContentStudioMcpServerOptions,
 ): { task: Record<string, unknown> } {
   const handle = parseTaskHandle(input, options, false)
+  options.productionWorker?.cancel(handle.projectId, handle.taskId)
   const task = options.service.cancelTask(handle.projectId, handle.taskId)
   const events = options.service.listTaskEvents(handle.projectId, handle.taskId)
   return { task: toMcpTask(task, events) }

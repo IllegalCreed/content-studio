@@ -11,15 +11,20 @@ import type {
   RecordingJobResult,
 } from '../types'
 import { readFile, stat } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 import { generateStudioBundle } from '../bundle/generate'
 import { CHANNEL_BLUEPRINTS } from '../constants'
+import { ProductionWorker } from '../jobs/worker'
 import { createContentStudioMcpServer, serveMcpStdio } from '../mcp/server'
 import { writeStudioBundle } from '../output/write'
 import { createProjectRecord } from '../project/record'
 import { recordWithPlaywright } from '../recording/playwright'
-import { createContentStudioApplication, createContentStudioServer } from '../runtime/server'
+import {
+  createContentStudioApplication,
+  createContentStudioServer,
+  createProductionWorkerJob,
+} from '../runtime/server'
 import { validateCampaign, validateProjectManifest } from '../validation'
 import { compileVideoPlan } from '../video/compile'
 import { runDoctor } from './doctor'
@@ -110,7 +115,7 @@ export async function runCli(
           await readJsonFile(serveCampaignPath, runtime.cwd),
           project,
         )
-    return runMcp(project, campaign, options, runtime)
+    return runMcp(project, campaign, options, runtime, services)
   }
   if (command === 'doctor')
     return runDoctor(project, options, runtime)
@@ -304,14 +309,50 @@ async function runMcp(
   campaign: CampaignSpec | undefined,
   options: Map<string, string>,
   runtime: CliRuntime,
+  services: CliServices,
 ): Promise<number> {
-  const handle = createContentStudioApplication(
-    createApplicationOptions(project, campaign, options, runtime),
+  const applicationOptions = createApplicationOptions(project, campaign, options, runtime)
+  const handle = createContentStudioApplication(applicationOptions)
+  const outputRoot = join(
+    dirname(applicationOptions.databasePath ?? resolve(runtime.cwd, '.content-studio/content-studio.sqlite')),
+    'production',
   )
+  const worker = new ProductionWorker({
+    onError: (_error, job) => {
+      const task = handle.taskStore.getTask(job.projectId, job.taskId)
+      if (task?.status === 'generating' || task?.status === 'recording')
+        handle.taskStore.transitionTask(job.projectId, job.taskId, 'failed')
+    },
+    run: async ({
+      baseUrl,
+      outputDirectory,
+      projectId,
+      projectOrigin,
+      signal,
+      taskId,
+    }) => handle.service.runActivityProductionTask(
+      projectId,
+      taskId,
+      {
+        baseUrl,
+        outputDirectory,
+        projectOrigin,
+        signal,
+      },
+      { record: services.record },
+    ),
+  })
+  worker.start()
   try {
     await serveMcpStdio(
       createContentStudioMcpServer({
         projectId: project.projectId,
+        productionWorker: worker,
+        productionWorkerJob: task => createProductionWorkerJob(
+          handle.service,
+          outputRoot,
+          task,
+        ),
         service: handle.service,
       }),
       {
@@ -320,9 +361,12 @@ async function runMcp(
         ...(runtime.signal === undefined ? {} : { signal: runtime.signal }),
       },
     )
+    if (runtime.signal?.aborted !== true)
+      await worker.waitForIdle()
     return runtime.signal?.aborted === true ? 130 : 0
   }
   finally {
+    await worker.stop()
     handle.close()
   }
 }

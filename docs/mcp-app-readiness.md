@@ -164,7 +164,8 @@ Studio 只接收结构化的文章/视频版本，做项目范围、活动渠道
 校验，然后保存到本地应用服务。这样不会把某个模型供应商或 API 密钥写进 core。
 
 `start_production_task` 会先推进本地制作任务的 `queued → generating`，作为 Worker 消费
-任务的明确入口。当前本地 Runtime 已接入单并发 Worker：视频任务会自动消费该状态，调用
+任务的明确入口。当前本地 HTTP Runtime 和 `content-studio mcp --stdio` 都接入同一个单并发
+Worker：视频任务会自动消费该状态，调用
 应用服务的 `runProductionTask`，并根据真实录制回执推进 `recording → composing` 或结束
 当前尝试；文章任务仍等待独立的 AI/文本执行器。外部渠道操作仍保持在独立的
 `marketing-ops` 信任边界内。
@@ -186,6 +187,11 @@ origin、编译好的 `VideoPlan` 和窄输出目录后，才会调用内置录�
 进入 `generating`，由 Runtime Worker 自动排队录制；任务取消、重试和事件查询仍走同一份
 任务存储。Worker 只使用快照派生的无凭据 origin 和固定输出目录，不接受脚本、选择器或
 凭据。为避免启动服务时意外执行，遗留的 `generating` 任务暂不自动恢复。
+
+MCP stdio 使用同一个队列边界：CLI 启动时创建本地 Worker，`start_production_task`、
+`retry_task` 和 `tasks/cancel` 会分别入队、重新入队或中止对应视频任务；Worker 停止时会
+中止未完成的本地尝试。关闭或重启不会自动恢复遗留的 `generating` 任务，避免用户未确认时
+意外打开浏览器。
 
 MCP Tasks 没有 `tasks/list`。全局和项目任务面板必须继续使用经过业务授权的领域
 查询，例如：

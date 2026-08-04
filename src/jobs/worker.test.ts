@@ -114,4 +114,28 @@ describe('production worker', () => {
     expect(worker.enqueue(job('task-b'))).toBe(false)
     expect(worker.snapshot()).toMatchObject({ queued: 0, running: 0, stopped: true })
   })
+
+  it('handles queued cancellation, repeated lifecycle calls, and non-cancel errors', async () => {
+    const onError = vi.fn()
+    const worker = new ProductionWorker({
+      onError,
+      run: async () => {
+        throw new Error('worker failure')
+      },
+    })
+
+    worker.enqueue(job('queued-task'))
+    expect(worker.cancel('project-a', 'queued-task')).toBe(true)
+    worker.start()
+    worker.start()
+    worker.enqueue(job('failed-task'))
+    await worker.waitForIdle()
+
+    expect(onError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ taskId: 'failed-task' }),
+    )
+    await worker.stop()
+    await worker.stop()
+  })
 })
