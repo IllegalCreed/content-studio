@@ -109,12 +109,21 @@ export async function runProductionTask(
     )
   }
   catch (error) {
-    store.transitionTask(input.projectId, input.taskId, 'failed')
+    if (store.getTask(input.projectId, input.taskId)?.status !== 'cancelled')
+      store.transitionTask(input.projectId, input.taskId, 'failed')
     throw error
   }
 
   for (const receipt of result.attempts.length > 0 ? result.attempts : [result.receipt])
     store.saveRecordingReceipt(input.projectId, input.taskId, receipt)
+
+  const currentTask = store.getTask(input.projectId, input.taskId)
+  if (currentTask?.status === 'cancelled') {
+    return {
+      receipt: result.receipt,
+      task: currentTask,
+    }
+  }
 
   const nextStatus = result.receipt.outcome === 'succeeded'
     ? 'composing'

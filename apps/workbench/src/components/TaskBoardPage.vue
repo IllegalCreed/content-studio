@@ -146,11 +146,11 @@ const selectedTaskHandoff = computed(() =>
           <p class="runtime-status task-runtime-status" aria-live="polite">
             <span v-if="props.taskActionError" class="task-action-error">{{ props.taskActionError }}</span>
             <span v-else-if="!props.runtimeConnected">运行时未连接 · 演示任务不可操作</span>
-            <span v-else>操作会写入本地任务事件，不会触发渠道发布</span>
+            <span v-else>开始制作会自动排队视频录制；操作只写入本地任务事件，不会触发渠道发布</span>
           </p>
           <div>
             <button type="button" class="primary-button" data-testid="record-task" :disabled="!props.canRecordSelectedTask || props.taskActionPending !== null" @click="emit('change-task', 'record')">
-              {{ props.taskActionPending === 'record' ? '录制中…' : '开始录制' }}
+              {{ props.taskActionPending === 'record' ? '录制中…' : '手动录制' }}
             </button>
             <button type="button" class="primary-button" data-testid="start-task" :disabled="!props.canStartSelectedTask || props.taskActionPending !== null" @click="emit('change-task', 'start')">
               {{ props.taskActionPending === 'start' ? '启动中…' : '开始制作' }}

@@ -3,6 +3,7 @@
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { ContentStudioRepository } from '../control-plane/service'
 import type { ProductionTaskDependencies } from '../jobs/production'
+import type { ProductionWorkerJob } from '../jobs/worker'
 import type {
   ActivityArtifact,
   ActivityRevisionInput,
@@ -14,6 +15,7 @@ import type {
   CreateContentGroupInput,
   CreatePublishingActivityInput,
   DeliveryMode,
+  ExecutionTask,
   ExecutionTaskStore,
   Locale,
   MonitoringObservation,
@@ -54,6 +56,7 @@ import {
   TaskScopeError,
   TaskStateError,
 } from '../jobs/task'
+import { ProductionWorker } from '../jobs/worker'
 import { recordWithPlaywright } from '../recording/playwright'
 import { assertNoSensitiveKeys } from '../validation'
 import { validateVideoViewport } from '../video/viewport'
@@ -125,6 +128,7 @@ export interface ContentStudioServerHandle {
   server: Server
   service: ContentStudioApplicationService
   taskStore: ExecutionTaskStore
+  worker: ProductionWorker
 }
 
 export interface ContentStudioApplicationHandle {
@@ -146,22 +150,56 @@ export function createContentStudioServer(
       dirname(options.databasePath ?? '.content-studio/content-studio.sqlite'),
       'production',
     )
+  const worker = new ProductionWorker({
+    onError: (_error, job) => {
+      const task = application.taskStore.getTask(job.projectId, job.taskId)
+      if (task?.status === 'generating' || task?.status === 'recording') {
+        application.taskStore.transitionTask(job.projectId, job.taskId, 'failed')
+      }
+    },
+    run: async ({
+      baseUrl,
+      outputDirectory,
+      projectId,
+      projectOrigin,
+      signal,
+      taskId,
+    }) => application.service.runActivityProductionTask(
+      projectId,
+      taskId,
+      {
+        baseUrl,
+        outputDirectory,
+        projectOrigin,
+        signal,
+      },
+      production,
+    ),
+  })
   const server = createServer((request, response) => {
     void handleRequest(
       request,
       response,
       application.service,
       options.project.projectId,
-      { dependencies: production, outputRoot: productionOutputRoot },
+      {
+        dependencies: production,
+        outputRoot: productionOutputRoot,
+        worker,
+      },
     )
+  })
+  server.once('listening', () => {
+    worker.start()
   })
 
   return {
-    close: () => closeServer(server, application.repository, application.taskStore),
+    close: () => closeServer(server, application.repository, application.taskStore, worker),
     repository: application.repository,
     server,
     service: application.service,
     taskStore: application.taskStore,
+    worker,
   }
 }
 
@@ -401,6 +439,11 @@ async function handleRequest(
         decodeSegment(segments[5]!),
         'taskId',
       )
+      if (production.worker.has(requestProjectId, taskId)) {
+        throw new TaskStateError(
+          `Production task ${taskId} is already scheduled by the local Worker`,
+        )
+      }
       const input = parseRecordProductionInput(await readJsonBody(request))
       const result = await service.runActivityProductionTask(
         requestProjectId,
@@ -694,11 +737,22 @@ async function handleRequest(
     ) {
       const projectId = decodeSegment(segments[3]!)
       const taskId = decodeSegment(segments[5]!)
+      if (segments[6] === 'cancel')
+        production.worker.cancel(projectId, taskId)
       const task = segments[6] === 'cancel'
         ? service.cancelTask(projectId, taskId)
         : segments[6] === 'retry'
           ? service.retryTask(projectId, taskId)
           : service.startProductionTask(projectId, taskId)
+      if (segments[6] === 'retry' || segments[6] === 'start') {
+        const job = createProductionWorkerJob(
+          service,
+          production.outputRoot,
+          task,
+        )
+        if (job !== undefined)
+          production.worker.enqueue(job)
+      }
       sendJson(response, 200, task)
       return
     }
@@ -742,6 +796,27 @@ function registerInitialProject(
       .some(candidate => candidate.channel === binding.channel)
     if (!exists)
       service.bindProjectChannel(binding)
+  }
+}
+
+function createProductionWorkerJob(
+  service: ContentStudioApplicationService,
+  outputRoot: string,
+  task: ExecutionTask | undefined,
+): ProductionWorkerJob | undefined {
+  if (task === undefined || task.kind !== 'production' || task.productionType !== 'video')
+    return undefined
+  const view = service.getProjectView(task.projectId)
+  if (view.project.sourceAccess !== 'source-owned' || view.project.captureMode !== 'deterministic')
+    return undefined
+  const canonicalUrl = view.snapshot.manifest.canonicalUrl
+  const origin = new URL(canonicalUrl).origin
+  return {
+    baseUrl: origin,
+    outputDirectory: join(outputRoot, task.projectId, task.taskId),
+    projectId: task.projectId,
+    projectOrigin: origin,
+    taskId: task.taskId,
   }
 }
 
@@ -1709,22 +1784,27 @@ function closeServer(
   server: Server,
   repository: ContentStudioRepository,
   taskStore: ExecutionTaskStore,
+  worker: ProductionWorker,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const closeRepository = (): void => {
       closeApplication(repository, taskStore)
     }
     if (!server.listening) {
-      closeRepository()
-      resolve()
+      void worker.stop().then(() => {
+        closeRepository()
+        resolve()
+      }, reject)
       return
     }
     server.close((error) => {
-      closeRepository()
-      if (error === undefined)
-        resolve()
-      else
-        reject(error)
+      void worker.stop().then(() => {
+        closeRepository()
+        if (error === undefined)
+          resolve()
+        else
+          reject(error)
+      }, reject)
     })
   })
 }
@@ -1752,4 +1832,5 @@ class RequestError extends Error {
 interface RuntimeProductionOptions {
   dependencies: ProductionTaskDependencies
   outputRoot: string
+  worker: ProductionWorker
 }

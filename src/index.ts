@@ -32,6 +32,13 @@ export {
   TaskStateError,
 } from './jobs/task'
 export {
+  ProductionWorker,
+  type ProductionWorkerJob,
+  type ProductionWorkerOptions,
+  type ProductionWorkerRunInput,
+  type ProductionWorkerSnapshot,
+} from './jobs/worker'
+export {
   type ContentStudioMcpServer,
   type ContentStudioMcpServerOptions,
   createContentStudioMcpServer,

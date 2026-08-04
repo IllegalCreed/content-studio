@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import ActivityListPage from './components/ActivityListPage.vue'
@@ -199,6 +199,7 @@ const videoPlanActionError = ref<string | null>(null)
 const videoPlanActionPending = ref(false)
 const videoPlanRevisionError = ref<string | null>(null)
 const videoPlanRevisionPending = ref(false)
+let runtimeRefreshTimer: ReturnType<typeof setInterval> | undefined
 const videoPlanViewportDraft = reactive({
   height: 1080,
   width: 1920,
@@ -349,6 +350,7 @@ const canRecordSelectedTask = computed(() =>
   selectedTaskIsRuntime.value
   && runtimeConnected.value
   && selectedTask.value.kind === '制作'
+  && selectedTask.value.productionType === '视频'
   && selectedTask.value.status === 'generating',
 )
 
@@ -357,6 +359,37 @@ const canRetrySelectedTask = computed(() =>
   && runtimeConnected.value
   && ['cancelled', 'failed'].includes(selectedTask.value.status),
 )
+
+const hasActiveRuntimeTask = computed(() =>
+  runtimeConnected.value
+  && snapshot.tasks.some(task =>
+    runtimeTaskIds.value.has(task.taskId)
+    && ['generating', 'recording'].includes(task.status),
+  ),
+)
+
+watch(
+  [runtimeConnected, hasActiveRuntimeTask],
+  ([connected, active]) => {
+    if (runtimeRefreshTimer !== undefined) {
+      clearInterval(runtimeRefreshTimer)
+      runtimeRefreshTimer = undefined
+    }
+    if (import.meta.env.MODE === 'test' || !connected || !active)
+      return
+    runtimeRefreshTimer = setInterval(() => {
+      void refreshProjectView().catch(error => {
+        runtimeStore.markRuntimeUnavailable(error)
+      })
+    }, 1000)
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  if (runtimeRefreshTimer !== undefined)
+    clearInterval(runtimeRefreshTimer)
+})
 
 const emptyAsset: AssetProjection = {
   assetId: 'no-project-asset',

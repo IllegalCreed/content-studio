@@ -143,6 +143,29 @@ describe('production task executor', () => {
     })
   })
 
+  it('keeps an owner cancellation when the recorder finishes after cancellation', async () => {
+    const store = createStore()
+    let resolveRecording: ((result: RecordingJobResult) => void) | undefined
+    const execution = runProductionTask(
+      store,
+      createInput(),
+      {
+        record: async () => new Promise<RecordingJobResult>((resolve) => {
+          resolveRecording = resolve
+        }),
+      },
+    )
+
+    await vi.waitFor(() => expect(store.getTask(projectId, taskId)?.status).toBe('recording'))
+    store.cancelTask(projectId, taskId)
+    resolveRecording?.(createReceipt('cancelled'))
+
+    await expect(execution).resolves.toMatchObject({
+      receipt: { outcome: 'cancelled' },
+      task: { status: 'cancelled' },
+    })
+  })
+
   it('continues receipt attempt numbering when a task is retried', async () => {
     const store = createStore()
     const inputs: RecordingJobInput[] = []

@@ -466,6 +466,7 @@ export interface TaskProjection {
   }>
   kind: '制作' | '发布' | '监测'
   progress?: number
+  productionType?: '文章' | '视频'
   status: CampaignJobStatus
   steps: TaskStepProjection[]
   taskId: string

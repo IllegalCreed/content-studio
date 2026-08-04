@@ -681,6 +681,9 @@ export function taskToProjection({
         ? '发布'
         : '监测',
     progress: lifecycle.progress,
+    ...(task.productionType === undefined
+      ? {}
+      : { productionType: task.productionType === 'article' ? '文章' : '视频' }),
     status: task.status,
     steps: lifecycle.steps,
     taskId: task.taskId,

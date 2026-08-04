@@ -163,11 +163,11 @@ Content Studio 保留更细的内部流水线状态，同时通过适配器映�
 Studio 只接收结构化的文章/视频版本，做项目范围、活动渠道、语言、重复版本和敏感字段
 校验，然后保存到本地应用服务。这样不会把某个模型供应商或 API 密钥写进 core。
 
-`start_production_task` 目前只推进本地制作任务的 `queued → generating`，作为 Worker
-消费任务的明确入口。核心层随后提供了 `runProductionTask` 执行器：它只接受匹配的项目
-origin、窄范围输出目录和受控录制器依赖，并根据真实录制回执推进 `recording → composing`
-或结束当前尝试。它通过应用服务调用，实际 Worker 仍需接入项目预览适配器和后续 FFmpeg
-组合步骤。外部渠道操作仍保持在独立的 `marketing-ops` 信任边界内。
+`start_production_task` 会先推进本地制作任务的 `queued → generating`，作为 Worker 消费
+任务的明确入口。当前本地 Runtime 已接入单并发 Worker：视频任务会自动消费该状态，调用
+应用服务的 `runProductionTask`，并根据真实录制回执推进 `recording → composing` 或结束
+当前尝试；文章任务仍等待独立的 AI/文本执行器。外部渠道操作仍保持在独立的
+`marketing-ops` 信任边界内。
 
 核心层现在提供 `runProductionTaskWithPlaywright` 这个明确绑定：调用方给出项目预览
 origin、编译好的 `VideoPlan` 和窄输出目录后，才会调用内置录制器。它不读取凭据、不扫描
@@ -180,11 +180,12 @@ origin、编译好的 `VideoPlan` 和窄输出目录后，才会调用内置录�
 
 本地 HTTP Runtime 的 `POST /api/v1/projects/:projectId/tasks/:taskId/record` 已接入这条
 路径：请求只提供无凭据的 `baseUrl` 和 `projectOrigin`，输出目录由 Runtime 固定生成；
-工作台的“开始录制”操作不会接收脚本、选择器或任意文件路径。
+工作台的自动 Worker 和兼容“手动录制”操作都不会接收脚本、选择器或任意文件路径。
 
-本地 HTTP 工作台复用同一个控制面，排队中的制作任务可以调用项目范围的 `start` 路由
-推进到 `generating`；这一步不会启动浏览器，也不会伪造录制回执。任务取消、重试和事件
-查询仍走同一份任务存储。
+本地 HTTP 工作台复用同一个控制面，排队中的视频制作任务调用项目范围的 `start` 路由后
+进入 `generating`，由 Runtime Worker 自动排队录制；任务取消、重试和事件查询仍走同一份
+任务存储。Worker 只使用快照派生的无凭据 origin 和固定输出目录，不接受脚本、选择器或
+凭据。为避免启动服务时意外执行，遗留的 `generating` 任务暂不自动恢复。
 
 MCP Tasks 没有 `tasks/list`。全局和项目任务面板必须继续使用经过业务授权的领域
 查询，例如：

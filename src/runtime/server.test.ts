@@ -8,7 +8,7 @@ import type {
 } from '../types'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   InMemoryContentStudioRepository,
 } from '../control-plane/service'
@@ -1463,6 +1463,138 @@ describe('content studio local application server', () => {
     }
     finally {
       await running.close()
+    }
+  })
+
+  it('schedules a video task from start and aborts it through cancel', async () => {
+    const { project, snapshot: baseSnapshot } = createProject()
+    const snapshot: ProjectSnapshot = {
+      ...baseSnapshot,
+      manifest: {
+        ...baseSnapshot.manifest,
+        captureFlows: [{
+          id: 'quick-sort',
+          startPath: '/quick-sort',
+          steps: [{ durationMs: 100, kind: 'capture', label: 'algorithm' }],
+          title: {
+            'en': 'Quick sort',
+            'zh-CN': '快速排序',
+          },
+        }],
+      },
+    }
+    let recordingSignal: AbortSignal | undefined
+    let resolveRecording: ((result: {
+      attempts: RecorderAttemptReceipt[]
+      receipt: RecorderAttemptReceipt
+    }) => void) | undefined
+    const handle = createContentStudioServer({
+      production: {
+        record: async (input) => {
+          recordingSignal = input.signal
+          return new Promise((resolve) => {
+            resolveRecording = resolve
+          })
+        },
+      },
+      project,
+      projectChannelBindings: [{
+        channel: 'youtube',
+        delivery: 'owner-assisted',
+        enabled: true,
+        projectId: project.projectId,
+      }],
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    const activity = handle.service.createActivity({
+      activityId: 'worker-activity',
+      campaignId: 'worker-campaign',
+      channels: [{ id: 'youtube', locale: 'en' }],
+      goal: 'education',
+      projectId: project.projectId,
+      projectSnapshotId: snapshot.snapshotId,
+      status: 'draft',
+      targetUrl: 'https://project-a.example.com/quick-sort',
+      topic: {
+        'en': 'Quick sort',
+        'zh-CN': '快速排序',
+      },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+      },
+    })
+    const group = handle.service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'worker-content-group',
+      coreMessage: 'Explain quick sort.',
+      projectId: project.projectId,
+      title: 'Quick sort content',
+    })
+    const content = handle.service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: [],
+      body: 'Quick sort video content',
+      channel: 'youtube',
+      contentGroupId: group.contentGroupId,
+      contentId: 'worker-video-content',
+      format: 'video',
+      locale: 'en',
+      projectId: project.projectId,
+      title: 'Quick sort video',
+    })
+    const taskId = `production-${content.contentId}`
+    const running = await listen(handle.server)
+
+    try {
+      const startResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/tasks/${taskId}/start`,
+        { method: 'POST' },
+      )
+      expect(startResponse.status).toBe(200)
+      expect(await startResponse.json()).toMatchObject({ status: 'generating' })
+      await vi.waitFor(() => expect(
+        handle.service.getProjectView(project.projectId).tasks.find(task => task.taskId === taskId)?.status,
+      ).toBe('recording'))
+      expect(recordingSignal).toBeInstanceOf(AbortSignal)
+
+      const cancelResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/tasks/${taskId}/cancel`,
+        { method: 'POST' },
+      )
+      expect(cancelResponse.status).toBe(200)
+      expect(await cancelResponse.json()).toMatchObject({ status: 'cancelled' })
+      expect(recordingSignal?.aborted).toBe(true)
+      const receipt: RecorderAttemptReceipt = {
+        artifactDirectory: '/tmp/content-studio-worker/attempt-1',
+        artifacts: [],
+        attempt: 1,
+        campaignId: activity.campaignId,
+        completedActions: 0,
+        completedScenes: 0,
+        jobId: taskId,
+        logs: {
+          consoleErrors: 0,
+          consoleWarnings: 0,
+          entries: [],
+          pageErrors: 0,
+        },
+        outcome: 'cancelled',
+        planSha256: 'worker-plan',
+        projectId: project.projectId,
+        receiptVersion: 1,
+        totalActions: 1,
+        totalScenes: 1,
+      }
+      resolveRecording?.({ attempts: [receipt], receipt })
+      await handle.worker.waitForIdle()
+      expect(handle.service.getProjectView(project.projectId).tasks).toContainEqual(
+        expect.objectContaining({ status: 'cancelled', taskId }),
+      )
+    }
+    finally {
+      await handle.close()
     }
   })
 
