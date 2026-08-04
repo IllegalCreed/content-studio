@@ -52,6 +52,11 @@ a:focus-visible {
   outline-offset: 3px;
 }
 
+button,
+a[href] {
+  cursor: pointer;
+}
+
 .skip-link {
   position: fixed;
   z-index: 20;
@@ -1163,6 +1168,7 @@ button.primary-button {
   border: 1px solid var(--acid);
   background: var(--acid);
   box-shadow: none;
+  cursor: pointer;
   font-size: 0.72rem;
 }
 
