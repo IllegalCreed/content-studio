@@ -97,8 +97,8 @@ describe('content studio workbench', () => {
     expect(wrapper.get('[data-testid="task-scope-note"]').text()).toContain('1 个已接入项目')
     expect(wrapper.findAll('.task-summary-card')).toHaveLength(4)
     expect(wrapper.get('[data-testid="task-summary-owner"]').text()).toContain('待人工')
-    expect(wrapper.get('[data-testid="task-attention-panel"]').text()).toContain('等待授权人完成登录、验证码、审核或最终点击')
-    expect(wrapper.get('[data-testid="task-attention-panel"] a').attributes('href')).toBe('https://x.com/compose/post')
+    expect(wrapper.find('[data-testid="task-attention-panel"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="task-summary-owner"]').text()).toContain('待人工')
     expect(wrapper.find('.task-scope-switch').exists()).toBe(false)
     expect(router.currentRoute.value.query.task).toBe('quick-sort-guide-recording')
     expect(wrapper.get('[data-testid="runtime-status"]').text()).toContain(
