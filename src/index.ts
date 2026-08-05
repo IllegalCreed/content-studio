@@ -66,6 +66,16 @@ export {
   type McpStdioStreams,
   serveMcpStdio,
 } from './mcp/server'
+export {
+  composeVideoClips,
+  type ComposeVideoClipsInput,
+  type ComposeVideoClipsResult,
+  MediaCompositionError,
+} from './media/compose'
+export {
+  probeMediaDuration,
+  resolveFfmpegPath,
+} from './media/ffmpeg'
 export { writeStudioBundle } from './output/write'
 export { createProjectRecord } from './project/record'
 export {
