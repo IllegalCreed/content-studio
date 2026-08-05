@@ -15,6 +15,7 @@ import { dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 import { generateStudioBundle } from '../bundle/generate'
 import { CHANNEL_BLUEPRINTS } from '../constants'
+import { composeProductionVideoClips } from '../jobs/compose'
 import { OwnerTakeoverRegistry } from '../jobs/owner-takeover'
 import { ProductionWorker } from '../jobs/worker'
 import { createContentStudioMcpHttpServer } from '../mcp/http'
@@ -392,7 +393,10 @@ function createMcpExecutionRuntime(
         signal,
       },
       productionForProject(
-        { record: services.record },
+        {
+          compose: composeProductionVideoClips,
+          record: services.record,
+        },
         ownerTakeovers,
         handle.service,
         projectId,

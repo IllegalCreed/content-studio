@@ -13,6 +13,7 @@ export {
   RecordNotFoundError,
 } from './control-plane/service'
 export { SqliteContentStudioRepository } from './control-plane/sqlite'
+export { composeProductionVideoClips } from './jobs/compose'
 export {
   OwnerTakeoverRegistry,
   type PendingOwnerTakeover,

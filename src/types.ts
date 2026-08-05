@@ -983,6 +983,23 @@ export interface RecordingJobDependencies {
   ) => Promise<void> | void
 }
 
+export interface ComposeProductionInput {
+  clipPaths: string[]
+  outputPath: string
+}
+
+export interface ComposeProductionResult {
+  artifactPath: string
+  durationSeconds: number
+  reencoded: boolean
+  sha256: string
+  sizeBytes: number
+}
+
+export type ComposeProduction = (
+  input: ComposeProductionInput,
+) => Promise<ComposeProductionResult>
+
 export interface PlaywrightRecordingOptions {
   actionTimeoutMs?: number
   emit?: (

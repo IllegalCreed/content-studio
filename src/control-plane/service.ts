@@ -9,6 +9,7 @@ import type {
   ActivityRevisionInput,
   ChannelContent,
   ChannelId,
+  ComposeProduction,
   ConfirmActivityVideoPlanInput,
   ContentGroup,
   ContentStudioGlobalProjectView,
@@ -40,6 +41,7 @@ import type {
   RecordingAttemptRecord,
   VideoPlan,
 } from '../types'
+import { join, relative, resolve } from 'node:path'
 import { runProductionTask as executeProductionTask } from '../jobs/production'
 import { InMemoryExecutionTaskStore } from '../jobs/task'
 import { assertMatchingMarketingOpsReceipt } from '../marketing-ops/client'
@@ -848,7 +850,74 @@ export class ContentStudioApplicationService {
         sourceAccess: project.sourceAccess,
       },
       taskId,
-    }, dependencies)
+    }, dependencies).then(result =>
+      this.composeProductionVariant(
+        projectId,
+        taskId,
+        input,
+        result,
+        dependencies.compose,
+      ))
+  }
+
+  private async composeProductionVariant(
+    projectId: string,
+    taskId: string,
+    input: Pick<
+      ProductionTaskInput,
+      'baseUrl' | 'maxAttempts' | 'outputDirectory' | 'projectOrigin' | 'signal'
+    >,
+    result: ProductionTaskResult,
+    compose: ComposeProduction | undefined,
+  ): Promise<ProductionTaskResult> {
+    const task = this.taskStore.getTask(projectId, taskId)
+    if (
+      task === undefined
+      || task.kind !== 'production'
+      || task.productionType !== 'video'
+      || result.receipt.outcome !== 'succeeded'
+      || compose === undefined
+    ) {
+      return result
+    }
+    const clipPaths = result.receipt.artifacts
+      .filter(artifact => artifact.kind === 'video-clip')
+      .map(artifact =>
+        resolve(result.receipt.artifactDirectory, artifact.relativePath))
+    if (clipPaths.length === 0)
+      return result
+
+    const outputPath = join(input.outputDirectory, 'composed', 'final.webm')
+    let composed: Awaited<ReturnType<ComposeProduction>>
+    try {
+      composed = await compose({ clipPaths, outputPath })
+    }
+    catch (error: unknown) {
+      this.taskStore.transitionTask(projectId, taskId, 'failed')
+      throw error
+    }
+
+    if (input.signal?.aborted === true) {
+      const cancelled = this.taskStore.cancelTask(projectId, taskId)
+      return { ...result, task: cancelled }
+    }
+
+    const relativePath = relative(
+      join(input.outputDirectory, '..'),
+      composed.artifactPath,
+    )
+    this.createActivityArtifact({
+      activityId: task.activityId,
+      artifactId: `composed-${taskId}`,
+      kind: 'video',
+      projectId,
+      relativePath,
+      sha256: composed.sha256,
+    })
+    return {
+      ...result,
+      task: this.taskStore.getTask(projectId, taskId) ?? result.task,
+    }
   }
 
   getActivityVideoPlan(

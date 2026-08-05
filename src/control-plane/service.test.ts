@@ -9,6 +9,7 @@ import type {
   ProjectSnapshot,
   RecorderAttemptReceipt,
 } from '../types'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { InMemoryExecutionTaskStore } from '../jobs/task'
 import {
@@ -1107,6 +1108,136 @@ describe('content studio application service', () => {
         viewport: { height: 1920, width: 1080 },
       },
     })
+  })
+
+  it('composes and registers the final channel variant after a successful recording', async () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(
+      repository,
+      new InMemoryExecutionTaskStore(),
+    )
+    registerProject(
+      service,
+      'compose-project',
+      [{
+        id: 'quick-sort',
+        startPath: '/quick-sort',
+        steps: [{ durationMs: 100, kind: 'capture', label: 'algorithm' }],
+        title: {
+          'en': 'Quick sort',
+          'zh-CN': '快速排序',
+        },
+      }],
+      {
+        captureMode: 'deterministic',
+        repeatability: 'high',
+        sourceAccess: 'source-owned',
+      },
+    )
+    enableYouTube(service, 'compose-project')
+    const activity = service.createActivity({
+      activityId: 'compose-activity',
+      campaignId: 'compose-campaign',
+      channels: [{ id: 'youtube', locale: 'en' }],
+      goal: 'education',
+      projectId: 'compose-project',
+      projectSnapshotId: 'compose-project-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://compose-project.example.com/quick-sort',
+      topic: {
+        'en': 'Quick sort',
+        'zh-CN': '快速排序',
+      },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        planVersion: 1,
+      },
+    })
+    const contentId = createProductionContent(service, activity)
+    const taskId = `production-${contentId}`
+    service.startProductionTask('compose-project', taskId)
+
+    const receipt: RecorderAttemptReceipt = {
+      artifactDirectory: '/tmp/content-studio-compose-register/attempt-1',
+      artifacts: [{
+        id: 'clip-1',
+        kind: 'video-clip',
+        relativePath: 'clips/scene-001.webm',
+        sceneId: 'quick-sort',
+        sha256: 'a'.repeat(64),
+        sizeBytes: 42,
+      }],
+      attempt: 1,
+      campaignId: activity.campaignId,
+      completedActions: 1,
+      completedScenes: 1,
+      jobId: taskId,
+      logs: {
+        consoleErrors: 0,
+        consoleWarnings: 0,
+        entries: [],
+        pageErrors: 0,
+      },
+      outcome: 'succeeded',
+      planSha256: 'compose-plan',
+      projectId: 'compose-project',
+      recordingConfig: {
+        colorScheme: 'dark',
+        deviceScaleFactor: 1,
+        format: 'landscape',
+        locale: 'en',
+        outputSize: { height: 1080, width: 1920 },
+        viewport: { height: 1080, width: 1920 },
+      },
+      receiptVersion: 1,
+      totalActions: 1,
+      totalScenes: 1,
+    }
+    const composeInputs: unknown[] = []
+    const result = await service.runActivityProductionTask(
+      'compose-project',
+      taskId,
+      {
+        baseUrl: 'https://compose-project.example.com',
+        outputDirectory: '/tmp/content-studio-compose-register',
+        projectOrigin: 'https://compose-project.example.com',
+      },
+      {
+        compose: async (input) => {
+          composeInputs.push(input)
+          return {
+            artifactPath: join(
+              '/tmp/content-studio-compose-register',
+              'composed',
+              'final.webm',
+            ),
+            durationSeconds: 3,
+            reencoded: false,
+            sha256: 'c'.repeat(64),
+            sizeBytes: 7,
+          }
+        },
+        record: async () => ({ attempts: [receipt], receipt }),
+      },
+    )
+
+    expect(result.receipt.outcome).toBe('succeeded')
+    expect(result.task.status).toBe('composing')
+    expect(composeInputs).toEqual([{
+      clipPaths: [
+        join('/tmp/content-studio-compose-register/attempt-1', 'clips/scene-001.webm'),
+      ],
+      outputPath: join('/tmp/content-studio-compose-register', 'composed', 'final.webm'),
+    }])
+    expect(
+      repository.listActivityArtifacts('compose-project', activity.activityId),
+    ).toEqual([expect.objectContaining({
+      artifactId: `composed-${taskId}`,
+      kind: 'video',
+      relativePath: 'content-studio-compose-register/composed/final.webm',
+      sha256: 'c'.repeat(64),
+    })])
   })
 
   it('saves an activity content pack after preflighting all channel versions', () => {

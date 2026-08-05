@@ -1,0 +1,80 @@
+import {
+  execFile as execFileCallback,
+  execFileSync,
+} from 'node:child_process'
+import {
+  access,
+  mkdtemp,
+  rm,
+} from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
+import { describe, expect, it } from 'vitest'
+import { resolveFfmpegPath } from '../media/ffmpeg'
+import { composeProductionVideoClips } from './compose'
+
+const execFile = promisify(execFileCallback)
+
+const ffmpegIsAvailable = ((): boolean => {
+  try {
+    execFileSync('ffmpeg', ['-version'], {
+      stdio: 'ignore',
+    })
+    return true
+  }
+  catch {
+    return false
+  }
+})()
+
+async function makeClip(
+  directory: string,
+  name: string,
+  durationSeconds: number,
+): Promise<string> {
+  const path = join(directory, name)
+  await execFile(
+    resolveFfmpegPath(),
+    [
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      `testsrc=duration=${durationSeconds}:size=320x240:rate=10`,
+      '-c:v',
+      'libvpx-vp9',
+      '-b:v',
+      '200k',
+      path,
+    ],
+    { maxBuffer: 4 * 1024 * 1024 },
+  )
+  return path
+}
+
+describe.skipIf(!ffmpegIsAvailable)('production video composition', () => {
+  it('composes recording clips into a final variant with a checksum', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-prod-'))
+    try {
+      const first = await makeClip(directory, 'first.webm', 0.5)
+      const second = await makeClip(directory, 'second.webm', 0.5)
+      const outputPath = join(directory, 'composed', 'final.webm')
+
+      const result = await composeProductionVideoClips({
+        clipPaths: [first, second],
+        outputPath,
+      })
+
+      expect(result.artifactPath).toBe(outputPath)
+      expect(result.sha256).toMatch(/^[a-f0-9]{64}$/)
+      expect(result.sizeBytes).toBeGreaterThan(0)
+      expect(result.durationSeconds).toBeGreaterThan(0.8)
+      expect(result.durationSeconds).toBeLessThan(1.2)
+      await expect(access(outputPath)).resolves.toBeUndefined()
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+})

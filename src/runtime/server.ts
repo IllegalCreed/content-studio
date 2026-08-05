@@ -60,6 +60,7 @@ import {
   RecordNotFoundError,
 } from '../control-plane/service'
 import { SqliteContentStudioRepository } from '../control-plane/sqlite'
+import { composeProductionVideoClips } from '../jobs/compose'
 import { OwnerTakeoverRegistry } from '../jobs/owner-takeover'
 import { SqliteExecutionTaskStore } from '../jobs/sqlite'
 import {
@@ -180,6 +181,7 @@ export function createContentStudioServer(
   const application = createContentStudioApplication(options)
   const ownerTakeovers = new OwnerTakeoverRegistry(application.taskStore)
   const production = options.production ?? {
+    compose: composeProductionVideoClips,
     record: recordWithPlaywright,
   }
   const productionOutputRoot = options.productionOutputRoot

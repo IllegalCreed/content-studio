@@ -1,6 +1,7 @@
 // @env node
 
 import type {
+  ComposeProduction,
   ExecutionTask,
   ExecutionTaskStore,
   PlaywrightRecordingOptions,
@@ -33,6 +34,7 @@ export interface ProductionTaskInput {
 }
 
 export interface ProductionTaskDependencies {
+  compose?: ComposeProduction
   options?: Pick<
     PlaywrightRecordingOptions,
     'actionTimeoutMs' | 'emit' | 'headless' | 'ownerTakeover'
