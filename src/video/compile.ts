@@ -1,6 +1,7 @@
 import type {
   CampaignSpec,
   CaptureStep,
+  ChannelId,
   CompiledCaptureAction,
   Locale,
   ProjectManifest,
@@ -13,6 +14,7 @@ import { resolveVideoRecordingConfig } from './recording-config'
 export function compileVideoPlan(
   projectInput: ProjectManifest,
   campaignInput: CampaignSpec,
+  channelId?: ChannelId,
 ): VideoPlan {
   const project = validateProjectManifest(projectInput)
   const campaign = validateCampaign(campaignInput, project)
@@ -20,7 +22,11 @@ export function compileVideoPlan(
     throw new Error('Campaign does not define a video plan')
 
   const locale = resolveVideoLocale(campaign)
-  const recordingConfig = resolveVideoRecordingConfig(project, campaign)
+  const recordingConfig = resolveVideoRecordingConfig(
+    project,
+    campaign,
+    channelId,
+  )
   const flowsById = new Map(project.captureFlows.map(flow => [flow.id, flow]))
   let timelineOffset = 0
   const scenes = campaign.video.flowIds.map((flowId) => {
@@ -45,7 +51,7 @@ export function compileVideoPlan(
   return {
     campaignId: campaign.campaignId,
     durationMs: timelineOffset,
-    format: campaign.video.format,
+    format: recordingConfig.format ?? campaign.video.format,
     ...(campaign.video.outline === undefined
       ? {}
       : { outline: campaign.video.outline }),

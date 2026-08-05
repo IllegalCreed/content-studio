@@ -64,10 +64,58 @@ describe('video recording configuration', () => {
     expect(resolveVideoRecordingConfig(project, campaign)).toEqual({
       colorScheme: 'dark',
       deviceScaleFactor: 2,
+      format: 'landscape',
       locale: 'en',
       outputSize: { height: 1080, width: 1920 },
       viewport: { height: 768, width: 1366 },
     })
+  })
+
+  it('resolves a channel variant with its own orientation format', () => {
+    const portraitCampaign: CampaignSpec = {
+      ...campaign,
+      channels: [
+        { id: 'youtube', locale: 'en' },
+        { id: 'douyin', locale: 'en' },
+      ],
+      video: {
+        ...campaign.video!,
+        recordingProfile: {
+          defaults: {
+            colorScheme: 'no-preference',
+            locale: 'en',
+            viewport: { height: 810, width: 1440 },
+          },
+          channelVariants: {
+            douyin: {
+              format: 'portrait',
+              outputSize: { height: 1920, width: 1080 },
+              viewport: { height: 1920, width: 1080 },
+            },
+          },
+        },
+      },
+    }
+
+    expect(resolveVideoRecordingConfig(project, portraitCampaign, 'douyin'))
+      .toEqual({
+        colorScheme: 'no-preference',
+        deviceScaleFactor: 2,
+        format: 'portrait',
+        locale: 'en',
+        outputSize: { height: 1920, width: 1080 },
+        viewport: { height: 1920, width: 1080 },
+      })
+  })
+
+  it('rejects a channel variant whose orientation does not match its format', () => {
+    expect(() => validateVideoRecordingConfigOverrides(
+      {
+        format: 'portrait',
+        viewport: { height: 720, width: 1280 },
+      },
+      { format: 'landscape' },
+    )).toThrow(/portrait/i)
   })
 
   it('rejects fields outside the recording configuration whitelist', () => {

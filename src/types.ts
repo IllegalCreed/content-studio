@@ -40,6 +40,11 @@ export interface VideoViewport {
 export interface VideoRecordingConfigOverrides {
   colorScheme?: VideoColorScheme
   deviceScaleFactor?: number
+  /**
+   * Channel-variant orientation override. Only meaningful in channelVariants;
+   * global defaults keep the activity video format.
+   */
+  format?: VideoFormat
   locale?: Locale
   outputSize?: VideoViewport
   viewport?: VideoViewport
@@ -53,6 +58,7 @@ export interface VideoRecordingProfile {
 export interface VideoRecordingConfig {
   colorScheme: VideoColorScheme
   deviceScaleFactor: number
+  format?: VideoFormat
   locale: Locale
   outputSize: VideoViewport
   viewport: VideoViewport

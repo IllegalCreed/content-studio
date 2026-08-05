@@ -8,6 +8,7 @@ import type {
   ActivityContentPack,
   ActivityRevisionInput,
   ChannelContent,
+  ChannelId,
   ConfirmActivityVideoPlanInput,
   ContentGroup,
   ContentStudioGlobalProjectView,
@@ -829,7 +830,11 @@ export class ContentStudioApplicationService {
     if (task === undefined)
       throw new RecordNotFoundError('Task', taskId)
     const activity = this.requireActivity(projectId, task.activityId)
-    const plan = this.getActivityVideoPlan(projectId, task.activityId)
+    const plan = this.getActivityVideoPlan(
+      projectId,
+      task.activityId,
+      task.channel,
+    )
     return executeProductionTask(this.taskStore, {
       ...input,
       plan,
@@ -846,22 +851,30 @@ export class ContentStudioApplicationService {
     }, dependencies)
   }
 
-  getActivityVideoPlan(projectId: string, activityId: string): VideoPlan {
+  getActivityVideoPlan(
+    projectId: string,
+    activityId: string,
+    channelId?: ChannelId,
+  ): VideoPlan {
     const activity = this.requireActivity(projectId, activityId)
     if (activity.video === undefined)
       throw new Error(`Activity ${activityId} does not define a video plan`)
     const snapshot = this.requireSnapshot(projectId, activity.projectSnapshotId)
-    const plan = compileVideoPlan(snapshot.manifest, {
-      channels: activity.channels,
-      campaignId: activity.campaignId,
-      goal: activity.goal,
-      highlights: [],
-      schemaVersion: 1,
-      tags: [],
-      targetUrl: activity.targetUrl,
-      topic: activity.topic,
-      video: activity.video,
-    })
+    const plan = compileVideoPlan(
+      snapshot.manifest,
+      {
+        channels: activity.channels,
+        campaignId: activity.campaignId,
+        goal: activity.goal,
+        highlights: [],
+        schemaVersion: 1,
+        tags: [],
+        targetUrl: activity.targetUrl,
+        topic: activity.topic,
+        video: activity.video,
+      },
+      channelId,
+    )
     return {
       ...plan,
       reviewStatus: activity.videoPlanReviewStatus ?? 'pending',

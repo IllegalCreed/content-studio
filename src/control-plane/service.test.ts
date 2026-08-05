@@ -1,5 +1,6 @@
 import type {
   CaptureFlow,
+  ChannelId,
   ContentStudioReport,
   MonitoringObservation,
   OwnerHandoff,
@@ -140,10 +141,12 @@ function createProductionContent(
   service: ContentStudioApplicationService,
   activity: ReturnType<typeof createActivity>,
   format: 'article' | 'video' = 'video',
+  channel: ChannelId = 'youtube',
+  contentId = `${activity.activityId}-content`,
 ): string {
   const group = service.createContentGroup({
     activityId: activity.activityId,
-    contentGroupId: `${activity.activityId}-content-group`,
+    contentGroupId: `${activity.activityId}-group-${contentId}`,
     coreMessage: 'Explain the idea',
     projectId: activity.projectId,
     title: '内容组',
@@ -152,9 +155,9 @@ function createProductionContent(
     activityId: activity.activityId,
     artifactIds: [],
     body: 'Content body',
-    channel: 'youtube',
+    channel,
     contentGroupId: group.contentGroupId,
-    contentId: `${activity.activityId}-content`,
+    contentId,
     format,
     locale: 'en',
     projectId: activity.projectId,
@@ -938,6 +941,171 @@ describe('content studio application service', () => {
       planVersion: 1,
       repeatability: 'conditional',
       sourceAccess: 'source-owned',
+    })
+  })
+
+  it('compiles each channel production task with its own video variant', async () => {
+    const service = new ContentStudioApplicationService(
+      new InMemoryContentStudioRepository(),
+      new InMemoryExecutionTaskStore(),
+    )
+    registerProject(
+      service,
+      'variant-project',
+      [{
+        id: 'quick-sort',
+        startPath: '/quick-sort',
+        steps: [{ durationMs: 100, kind: 'capture', label: 'algorithm' }],
+        title: {
+          'en': 'Quick sort',
+          'zh-CN': '快速排序',
+        },
+      }],
+      {
+        captureMode: 'deterministic',
+        repeatability: 'high',
+        sourceAccess: 'source-owned',
+      },
+    )
+    enableYouTube(service, 'variant-project')
+    service.bindProjectChannel({
+      channel: 'douyin',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId: 'variant-project',
+    })
+    const activity = service.createActivity({
+      activityId: 'variant-activity',
+      campaignId: 'variant-campaign',
+      channels: [
+        { id: 'youtube', locale: 'en' },
+        { id: 'douyin', locale: 'en' },
+      ],
+      goal: 'education',
+      projectId: 'variant-project',
+      projectSnapshotId: 'variant-project-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://variant-project.example.com/quick-sort',
+      topic: {
+        'en': 'Quick sort',
+        'zh-CN': '快速排序',
+      },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        planVersion: 1,
+        recordingProfile: {
+          channelVariants: {
+            youtube: {
+              outputSize: { height: 1080, width: 1920 },
+              viewport: { height: 1080, width: 1920 },
+            },
+            douyin: {
+              format: 'portrait',
+              outputSize: { height: 1920, width: 1080 },
+              viewport: { height: 1920, width: 1080 },
+            },
+          },
+        },
+      },
+    })
+    const youtubeContentId = createProductionContent(
+      service,
+      activity,
+      'video',
+      'youtube',
+      'variant-youtube',
+    )
+    const douyinContentId = createProductionContent(
+      service,
+      activity,
+      'video',
+      'douyin',
+      'variant-douyin',
+    )
+    service.startProductionTask(
+      'variant-project',
+      `production-${youtubeContentId}`,
+    )
+    service.startProductionTask(
+      'variant-project',
+      `production-${douyinContentId}`,
+    )
+
+    const capturedPlans: Array<{ format?: string, recordingConfig: unknown }> = []
+    const record = async (input: {
+      jobId: string
+      plan: { format?: string, recordingConfig: unknown }
+    }) => {
+      capturedPlans.push(input.plan)
+      const receipt: RecorderAttemptReceipt = {
+        artifactDirectory: '/tmp/content-studio-variant/attempt-1',
+        artifacts: [],
+        attempt: 1,
+        campaignId: activity.campaignId,
+        completedActions: 1,
+        completedScenes: 1,
+        jobId: input.jobId,
+        logs: {
+          consoleErrors: 0,
+          consoleWarnings: 0,
+          entries: [],
+          pageErrors: 0,
+        },
+        outcome: 'succeeded',
+        planSha256: 'variant-plan',
+        projectId: 'variant-project',
+        recordingConfig: {
+          colorScheme: 'dark',
+          deviceScaleFactor: 1,
+          format: 'landscape',
+          locale: 'en',
+          outputSize: { height: 1080, width: 1920 },
+          viewport: { height: 1080, width: 1920 },
+        },
+        receiptVersion: 1,
+        totalActions: 1,
+        totalScenes: 1,
+      }
+      return { attempts: [], receipt }
+    }
+
+    await service.runActivityProductionTask(
+      'variant-project',
+      `production-${youtubeContentId}`,
+      {
+        baseUrl: 'https://variant-project.example.com',
+        outputDirectory: '/tmp/content-studio-variant-youtube',
+        projectOrigin: 'https://variant-project.example.com',
+      },
+      { record },
+    )
+    await service.runActivityProductionTask(
+      'variant-project',
+      `production-${douyinContentId}`,
+      {
+        baseUrl: 'https://variant-project.example.com',
+        outputDirectory: '/tmp/content-studio-variant-douyin',
+        projectOrigin: 'https://variant-project.example.com',
+      },
+      { record },
+    )
+
+    expect(capturedPlans[0]).toMatchObject({
+      format: 'landscape',
+      recordingConfig: {
+        format: 'landscape',
+        outputSize: { height: 1080, width: 1920 },
+        viewport: { height: 1080, width: 1920 },
+      },
+    })
+    expect(capturedPlans[1]).toMatchObject({
+      format: 'portrait',
+      recordingConfig: {
+        format: 'portrait',
+        outputSize: { height: 1920, width: 1080 },
+        viewport: { height: 1920, width: 1080 },
+      },
     })
   })
 

@@ -74,6 +74,7 @@ describe('video plan compiler', () => {
         "recordingConfig": {
           "colorScheme": "dark",
           "deviceScaleFactor": 1,
+          "format": "landscape",
           "locale": "en",
           "outputSize": {
             "height": 1080,
@@ -134,6 +135,38 @@ describe('video plan compiler', () => {
       width: 1080,
     })
     expect(plan.scenes[0]!.title).toBe('快速排序演示')
+  })
+
+  it('compiles a channel-specific portrait variant plan', () => {
+    const plan = compileVideoPlan(project, {
+      ...campaign,
+      channels: [
+        { id: 'youtube', locale: 'en' },
+        { id: 'douyin', locale: 'en' },
+      ],
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        recordingProfile: {
+          channelVariants: {
+            douyin: {
+              format: 'portrait',
+              outputSize: { height: 1920, width: 1080 },
+              viewport: { height: 1920, width: 1080 },
+            },
+          },
+        },
+      },
+    }, 'douyin')
+
+    expect(plan).toMatchObject({
+      format: 'portrait',
+      recordingConfig: {
+        format: 'portrait',
+        outputSize: { height: 1920, width: 1080 },
+        viewport: { height: 1920, width: 1080 },
+      },
+    })
   })
 
   it('uses a bounded custom viewport from the activity video plan', () => {

@@ -22,6 +22,7 @@ const SUPPORTED_SCALE_FACTORS = new Set([1, 2])
 const SUPPORTED_KEYS = new Set([
   'colorScheme',
   'deviceScaleFactor',
+  'format',
   'locale',
   'outputSize',
   'viewport',
@@ -53,19 +54,23 @@ export function validateVideoRecordingConfigOverrides(
         value.deviceScaleFactor,
         `${path}.deviceScaleFactor`,
       )
+  const format = value.format === undefined
+    ? undefined
+    : parseVideoFormat(value.format, `${path}.format`)
   const locale = value.locale === undefined
     ? undefined
     : parseLocale(value.locale, `${path}.locale`, options.locales)
   const viewport = value.viewport === undefined
     ? undefined
-    : validateVideoViewport(value.viewport, options.format)
+    : validateVideoViewport(value.viewport, format ?? options.format)
   const outputSize = value.outputSize === undefined
     ? undefined
-    : validateVideoViewport(value.outputSize, options.format)
+    : validateVideoViewport(value.outputSize, format ?? options.format)
 
   return {
     ...(colorScheme === undefined ? {} : { colorScheme }),
     ...(deviceScaleFactor === undefined ? {} : { deviceScaleFactor }),
+    ...(format === undefined ? {} : { format }),
     ...(locale === undefined ? {} : { locale }),
     ...(outputSize === undefined ? {} : { outputSize }),
     ...(viewport === undefined ? {} : { viewport }),
@@ -104,6 +109,7 @@ export function validateVideoRecordingProfile(
 export function resolveVideoRecordingConfig(
   project: ProjectManifest,
   campaign: CampaignSpec,
+  channelId?: ChannelId,
 ): VideoRecordingConfig {
   if (campaign.video === undefined)
     throw new Error('Campaign does not define a video plan')
@@ -112,8 +118,15 @@ export function resolveVideoRecordingConfig(
   const videoChannel = campaign.channels.find(channel =>
     ['bilibili', 'douyin', 'youtube'].includes(channel.id),
   )
-  const channelId = videoChannel?.id ?? campaign.channels[0]?.id
-  const defaultLocale = videoChannel?.locale
+  const targetChannel = campaign.channels.find(channel =>
+    channel.id === channelId,
+  ) ?? videoChannel ?? campaign.channels[0]
+  const resolvedChannelId = targetChannel?.id
+  const variantFormat = campaign.video.recordingProfile
+    ?.channelVariants?.[resolvedChannelId ?? '']
+    ?.format
+  const effectiveFormat = variantFormat ?? format
+  const defaultLocale = targetChannel?.locale
     ?? campaign.channels[0]?.locale
     ?? project.locales[0]
   if (defaultLocale === undefined)
@@ -123,14 +136,14 @@ export function resolveVideoRecordingConfig(
     colorScheme: 'dark',
     deviceScaleFactor: 1,
     locale: defaultLocale,
-    viewport: VIDEO_VIEWPORTS[format],
+    viewport: VIDEO_VIEWPORTS[effectiveFormat],
   }
   mergeOverrides(merged, project.videoRecordingDefaults)
   mergeOverrides(merged, campaign.video.recordingProfile?.defaults)
-  if (channelId !== undefined) {
+  if (resolvedChannelId !== undefined) {
     mergeOverrides(
       merged,
-      campaign.video.recordingProfile?.channelVariants?.[channelId],
+      campaign.video.recordingProfile?.channelVariants?.[resolvedChannelId],
     )
   }
 
@@ -146,14 +159,15 @@ export function resolveVideoRecordingConfig(
   if (merged.viewport === undefined)
     throw new Error('Video recording viewport is required')
 
-  const viewport = validateVideoViewport(merged.viewport, format)
+  const viewport = validateVideoViewport(merged.viewport, effectiveFormat)
   const outputSize = validateVideoViewport(
     merged.outputSize ?? viewport,
-    format,
+    effectiveFormat,
   )
   return {
     colorScheme: merged.colorScheme,
     deviceScaleFactor: merged.deviceScaleFactor,
+    format: effectiveFormat,
     locale: merged.locale,
     outputSize,
     viewport,
@@ -170,10 +184,20 @@ function parseChannelVariants(
   for (const [channel, overrides] of Object.entries(value)) {
     if (!(channel in CHANNEL_BLUEPRINTS))
       throw new Error(`Unsupported video recording channel variant: ${channel}`)
+    const raw = asRecord(
+      overrides,
+      `video.recordingProfile.channelVariants.${channel}`,
+    )
+    const variantFormat = raw.format === undefined
+      ? undefined
+      : parseVideoFormat(
+          raw.format,
+          `video.recordingProfile.channelVariants.${channel}.format`,
+        )
     variants[channel as ChannelId] = validateVideoRecordingConfigOverrides(
       overrides,
       {
-        format,
+        format: variantFormat ?? format,
         ...(locales === undefined ? {} : { locales }),
         path: `video.recordingProfile.channelVariants.${channel}`,
       },
@@ -210,6 +234,16 @@ function parseColorScheme(input: unknown, path: string): VideoColorScheme {
   if (typeof input !== 'string' || !COLOR_SCHEMES.has(input as VideoColorScheme))
     throw new Error(`${path} must be dark, light, or no-preference`)
   return input as VideoColorScheme
+}
+
+function parseVideoFormat(input: unknown, path: string): VideoFormat {
+  if (
+    typeof input !== 'string'
+    || (input !== 'landscape' && input !== 'portrait' && input !== 'square')
+  ) {
+    throw new Error(`${path} must be landscape, portrait, or square`)
+  }
+  return input
 }
 
 function parseDeviceScaleFactor(input: unknown, path: string): number {
