@@ -1,6 +1,7 @@
 // @env node
 
 import type {
+  PlaywrightRecordingOptions,
   ProjectChannelBinding,
   ProjectRecord,
   ProjectSnapshot,
@@ -1305,6 +1306,210 @@ describe('content studio local application server', () => {
     finally {
       await running.close()
       await rm(productionOutputRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('pauses recording into awaiting-owner and resumes through the owner confirmation route', async () => {
+    const { project, snapshot: baseSnapshot } = createProject('takeover-project')
+    const snapshot: ProjectSnapshot = {
+      ...baseSnapshot,
+      manifest: {
+        ...baseSnapshot.manifest,
+        captureFlows: [{
+          id: 'quick-sort',
+          startPath: '/quick-sort',
+          steps: [{ durationMs: 100, kind: 'capture', label: 'algorithm' }],
+          title: {
+            'en': 'Quick sort',
+            'zh-CN': '快速排序',
+          },
+        }],
+        ownerTakeover: true,
+        repeatability: 'conditional',
+      },
+    }
+    const takeoverProject: ProjectRecord = {
+      ...project,
+      ownerTakeover: true,
+      repeatability: 'conditional',
+    }
+    const productionOutputRoot = resolve('/tmp/content-studio-runtime-owner-takeover')
+    let capturedOptions: PlaywrightRecordingOptions | undefined
+    let notifyTakeoverRequested!: () => void
+    const takeoverRequested = new Promise<void>((resolve) => {
+      notifyTakeoverRequested = resolve
+    })
+    const receipt: RecorderAttemptReceipt = {
+      artifactDirectory: join(
+        productionOutputRoot,
+        project.projectId,
+        'production-takeover-content',
+        'attempt-1',
+      ),
+      artifacts: [],
+      attempt: 1,
+      campaignId: 'takeover-campaign',
+      completedActions: 1,
+      completedScenes: 1,
+      jobId: 'production-takeover-content',
+      logs: {
+        consoleErrors: 0,
+        consoleWarnings: 0,
+        entries: [],
+        pageErrors: 0,
+      },
+      outcome: 'succeeded',
+      planSha256: 'runtime-takeover-plan',
+      projectId: project.projectId,
+      recordingConfig: {
+        colorScheme: 'dark',
+        deviceScaleFactor: 1,
+        locale: 'en',
+        outputSize: {
+          height: 1080,
+          width: 1920,
+        },
+        viewport: {
+          height: 1080,
+          width: 1920,
+        },
+      },
+      receiptVersion: 1,
+      totalActions: 1,
+      totalScenes: 1,
+    }
+    const handle = createContentStudioServer({
+      production: {
+        record: async (input, options) => {
+          capturedOptions = options
+          const pending = options?.ownerTakeover?.request({
+            jobId: input.jobId,
+            pageUrl: 'https://takeover-project.example.com/login',
+            projectId: input.projectId,
+          })
+          notifyTakeoverRequested()
+          await pending
+          return { attempts: [receipt], receipt }
+        },
+      },
+      productionOutputRoot,
+      project: takeoverProject,
+      projectChannelBindings: [{
+        channel: 'youtube',
+        delivery: 'owner-assisted',
+        enabled: true,
+        projectId: project.projectId,
+      }],
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    const activity = handle.service.createActivity({
+      activityId: 'takeover-activity',
+      campaignId: 'takeover-campaign',
+      channels: [{ id: 'youtube', locale: 'en' }],
+      goal: 'education',
+      projectId: project.projectId,
+      projectSnapshotId: snapshot.snapshotId,
+      status: 'draft',
+      targetUrl: 'https://takeover-project.example.com/quick-sort',
+      topic: {
+        'en': 'Quick sort',
+        'zh-CN': '快速排序',
+      },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+      },
+    })
+    const group = handle.service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'takeover-content-group',
+      coreMessage: 'Explain quick sort.',
+      projectId: project.projectId,
+      title: 'Quick sort content',
+    })
+    const content = handle.service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: [],
+      body: 'Quick sort video content',
+      channel: 'youtube',
+      contentGroupId: group.contentGroupId,
+      contentId: 'takeover-content',
+      format: 'video',
+      locale: 'en',
+      projectId: project.projectId,
+      title: 'Quick sort video',
+    })
+    const taskId = `production-${content.contentId}`
+    handle.service.startProductionTask(project.projectId, taskId)
+    const running = await listen(handle.server)
+
+    try {
+      const recordResponsePromise = fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/tasks/${taskId}/record`,
+        {
+          body: JSON.stringify({
+            baseUrl: 'https://takeover-project.example.com',
+            projectOrigin: 'https://takeover-project.example.com',
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      await takeoverRequested
+      expect(capturedOptions?.ownerTakeover).toBeDefined()
+
+      const pausedView = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}`,
+      ).then(response => response.json()) as {
+        tasks: Array<{ status: string, taskId: string }>
+      }
+      expect(pausedView.tasks.find(task => task.taskId === taskId)?.status)
+        .toBe('awaiting-owner')
+
+      const confirmResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/tasks/${taskId}/owner-confirm`,
+        { method: 'POST' },
+      )
+      expect(confirmResponse.status).toBe(200)
+      expect(await confirmResponse.json()).toMatchObject({
+        ownerTakeover: {
+          confirmedAt: expect.any(String),
+          requestedAt: expect.any(String),
+        },
+        projectId: project.projectId,
+        taskId,
+      })
+
+      const recordResponse = await recordResponsePromise
+      expect(recordResponse.status).toBe(200)
+      expect(await recordResponse.json()).toMatchObject({
+        task: { status: 'composing' },
+      })
+    }
+    finally {
+      await running.close()
+      await rm(productionOutputRoot, { force: true, recursive: true })
+    }
+  }, 15_000)
+
+  it('rejects an owner confirmation when no takeover is pending', async () => {
+    const { project, snapshot } = createProject()
+    const handle = createContentStudioServer({
+      project,
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    const running = await listen(handle.server)
+    try {
+      const response = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/tasks/missing-task/owner-confirm`,
+        { method: 'POST' },
+      )
+      expect(response.status).toBe(409)
+    }
+    finally {
+      await running.close()
     }
   })
 

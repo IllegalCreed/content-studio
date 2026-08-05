@@ -164,6 +164,7 @@ export interface ProjectManifest {
   sourceAccess?: ProjectAccessMode
   captureMode?: ProjectCaptureMode
   repeatability?: ProjectRepeatability
+  ownerTakeover?: boolean
   videoRecordingDefaults?: VideoRecordingConfigOverrides
 }
 
@@ -208,6 +209,7 @@ export interface ProjectRecord {
   captureMode: ProjectCaptureMode
   currentSnapshotId: string
   name: string
+  ownerTakeover?: boolean
   projectId: string
   repeatability: ProjectRepeatability
   sourceAccess: ProjectAccessMode
@@ -809,6 +811,29 @@ export interface RecorderFailure {
   retryable: boolean
 }
 
+export interface OwnerTakeoverRequest {
+  jobId: string
+  pageUrl: string
+  projectId: string
+}
+
+/**
+ * The confirmation boundary for an owner takeover. The controller only
+ * signals when the owner is ready; it never carries or replays manual input.
+ */
+export interface OwnerTakeoverController {
+  request: (request: OwnerTakeoverRequest) => Promise<void>
+}
+
+/**
+ * Timestamp record for an owner takeover window. Deliberately contains no
+ * input, credentials, or page content.
+ */
+export interface OwnerTakeoverRecord {
+  confirmedAt: string
+  requestedAt: string
+}
+
 export type RecorderOutcome = 'cancelled' | 'failed' | 'succeeded'
 
 export interface RecorderAttemptReceipt {
@@ -821,6 +846,7 @@ export interface RecorderAttemptReceipt {
   failure?: RecorderFailure
   jobId: string
   logs: RecorderLogSummary
+  ownerTakeover?: OwnerTakeoverRecord
   outcome: RecorderOutcome
   planSha256: string
   previousAttempt?: number
@@ -841,6 +867,7 @@ export type RecordingAttemptRecord = Omit<RecorderAttemptReceipt, 'artifactDirec
 export interface RecordingContext {
   captureMode: ProjectCaptureMode
   humanIntervention: boolean
+  ownerTakeover?: boolean
   planVersion: number
   repeatability: ProjectRepeatability
   sourceAccess: ProjectAccessMode
@@ -916,6 +943,7 @@ export interface RecordingActionResult {
 export interface RecordingSessionSummary {
   artifacts: RecorderArtifact[]
   logs: RecorderLogSummary
+  ownerTakeover?: OwnerTakeoverRecord
 }
 
 export interface RecordingSession {
@@ -955,6 +983,7 @@ export interface PlaywrightRecordingOptions {
     event: RecordingProgressEvent,
   ) => Promise<void> | void
   headless?: boolean
+  ownerTakeover?: OwnerTakeoverController
 }
 
 export interface ProjectPreviewContext {

@@ -60,6 +60,7 @@ import {
   RecordNotFoundError,
 } from '../control-plane/service'
 import { SqliteContentStudioRepository } from '../control-plane/sqlite'
+import { OwnerTakeoverRegistry } from '../jobs/owner-takeover'
 import { SqliteExecutionTaskStore } from '../jobs/sqlite'
 import {
   InMemoryExecutionTaskStore,
@@ -176,6 +177,7 @@ export function createContentStudioServer(
   )
   assertRegisteredProjectAdapters(options, previewAdapters)
   const application = createContentStudioApplication(options)
+  const ownerTakeovers = new OwnerTakeoverRegistry(application.taskStore)
   const production = options.production ?? {
     record: recordWithPlaywright,
   }
@@ -209,7 +211,12 @@ export function createContentStudioServer(
         projectOrigin,
         signal,
       },
-      production,
+      productionForProject(
+        production,
+        ownerTakeovers,
+        application.service,
+        projectId,
+      ),
     ),
   })
   const server = createServer((request, response) => {
@@ -220,6 +227,7 @@ export function createContentStudioServer(
       options.project.projectId,
       {
         dependencies: production,
+        ownerTakeovers,
         outputRoot: productionOutputRoot,
         previewAdapters,
         worker,
@@ -590,7 +598,12 @@ async function handleRequest(
           ...input,
           outputDirectory: join(production.outputRoot, requestProjectId, taskId),
         },
-        production.dependencies,
+        productionForProject(
+          production.dependencies,
+          production.ownerTakeovers,
+          service,
+          requestProjectId,
+        ),
       )
       sendJson(response, 200, result)
       return
@@ -875,8 +888,10 @@ async function handleRequest(
     ) {
       const projectId = decodeSegment(segments[3]!)
       const taskId = decodeSegment(segments[5]!)
-      if (segments[6] === 'cancel')
+      if (segments[6] === 'cancel') {
         production.worker.cancel(projectId, taskId)
+        production.ownerTakeovers.dismiss(projectId, taskId)
+      }
       const task = segments[6] === 'cancel'
         ? service.cancelTask(projectId, taskId)
         : segments[6] === 'retry'
@@ -892,6 +907,32 @@ async function handleRequest(
           production.worker.enqueue(job)
       }
       sendJson(response, 200, task)
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'tasks'
+      && segments[6] === 'owner-confirm'
+    ) {
+      const projectId = identifierField(
+        decodeSegment(segments[3]!),
+        'projectId',
+      )
+      const taskId = identifierField(
+        decodeSegment(segments[5]!),
+        'taskId',
+      )
+      const ownerTakeover = production.ownerTakeovers.confirm(projectId, taskId)
+      sendJson(response, 200, {
+        ownerTakeover,
+        projectId,
+        taskId,
+      })
       return
     }
 
@@ -987,6 +1028,35 @@ type ActivityProductionInput = Pick<
   ProductionTaskInput,
   'baseUrl' | 'maxAttempts' | 'outputDirectory' | 'projectOrigin' | 'signal'
 >
+
+function productionForProject(
+  production: ProductionTaskDependencies,
+  ownerTakeovers: OwnerTakeoverRegistry,
+  service: ContentStudioApplicationService,
+  projectId: string,
+): ProductionTaskDependencies {
+  if (service.getProjectView(projectId).project.ownerTakeover !== true)
+    return production
+  return {
+    ...production,
+    options: {
+      ...production.options,
+      ownerTakeover: {
+        request: async ({
+          jobId,
+          pageUrl,
+          projectId: requestProjectId,
+        }) => {
+          await ownerTakeovers.request({
+            jobId,
+            pageUrl,
+            projectId: requestProjectId,
+          })
+        },
+      },
+    },
+  }
+}
 
 async function runActivityProductionTaskWithPreviewAdapter(
   service: ContentStudioApplicationService,
@@ -2276,6 +2346,7 @@ class RequestError extends Error {
 
 interface RuntimeProductionOptions {
   dependencies: ProductionTaskDependencies
+  ownerTakeovers: OwnerTakeoverRegistry
   outputRoot: string
   previewAdapters: ProjectPreviewAdapterRegistry
   worker: ProductionWorker

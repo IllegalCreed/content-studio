@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createPlaywrightRecordingSession,
   recordWithPlaywright,
+  resolveOwnerTakeoverController,
   resolvePlaywrightRecordingContextOptions,
   resolveSemanticLocator,
   validateProjectNavigation,
@@ -135,6 +136,41 @@ describe('playwright recording policy', () => {
         sourceAccess: 'web-assisted',
       },
     })).rejects.toThrow(/web-assisted.*built-in|built-in.*web-assisted/i)
+  })
+
+  it('only enables owner takeover with an explicit recording context opt-in', () => {
+    const controller = {
+      request: vi.fn(async () => {}),
+    }
+    expect(resolveOwnerTakeoverController(undefined, undefined)).toBeUndefined()
+
+    expect(() =>
+      resolveOwnerTakeoverController(undefined, controller),
+    ).toThrow(/ownerTakeover/i)
+    expect(() =>
+      resolveOwnerTakeoverController(
+        {
+          captureMode: 'deterministic',
+          humanIntervention: false,
+          planVersion: 1,
+          repeatability: 'high',
+          sourceAccess: 'source-owned',
+        },
+        controller,
+      ),
+    ).toThrow(/ownerTakeover/i)
+
+    expect(resolveOwnerTakeoverController(
+      {
+        captureMode: 'deterministic',
+        humanIntervention: true,
+        ownerTakeover: true,
+        planVersion: 1,
+        repeatability: 'conditional',
+        sourceAccess: 'source-owned',
+      },
+      controller,
+    )).toBe(controller)
   })
 
   it('passes the resolved recording profile to the browser context', () => {

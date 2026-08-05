@@ -6,7 +6,7 @@ import type { CampaignProjection, OwnerHandoffProjection, WorkbenchSnapshot } fr
 import { humanizeStatus, humanizeTaskEventKind } from '../model'
 
 type TaskScope = '全部项目' | '当前项目'
-type TaskAction = 'cancel' | 'record' | 'retry' | 'start'
+type TaskAction = 'cancel' | 'confirm-owner' | 'record' | 'retry' | 'start'
 type TaskProjection = WorkbenchSnapshot['tasks'][number]
 type TaskOwnerHandoff = OwnerHandoffProjection & {
   campaignTitle: string
@@ -16,6 +16,7 @@ type TaskOwnerHandoff = OwnerHandoffProjection & {
 const props = defineProps<{
   activeTaskScope: TaskScope
   canCancelSelectedTask: boolean
+  canConfirmOwnerTakeover: boolean
   canRecordSelectedTask: boolean
   canRetrySelectedTask: boolean
   canStartSelectedTask: boolean
@@ -162,6 +163,16 @@ const selectedTaskHandoff = computed(() =>
             </button>
             <button type="button" class="primary-button" data-testid="start-task" :disabled="!props.canStartSelectedTask || props.taskActionPending !== null" @click="emit('change-task', 'start')">
               {{ props.taskActionPending === 'start' ? '启动中…' : '开始制作' }}
+            </button>
+            <button
+              v-if="props.selectedTask.kind === '制作' && props.selectedTask.status === 'awaiting-owner'"
+              type="button"
+              class="primary-button"
+              data-testid="confirm-owner-takeover"
+              :disabled="!props.canConfirmOwnerTakeover || props.taskActionPending !== null"
+              @click="emit('change-task', 'confirm-owner')"
+            >
+              {{ props.taskActionPending === 'confirm-owner' ? '确认中…' : '人工已确认，继续录制' }}
             </button>
             <button type="button" :disabled="!props.canCancelSelectedTask || props.taskActionPending !== null" @click="emit('change-task', 'cancel')">
               {{ props.taskActionPending === 'cancel' ? '取消中…' : '取消当前尝试' }}

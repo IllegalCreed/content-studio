@@ -20,7 +20,7 @@ function registerProject(
   service: ContentStudioApplicationService,
   projectId: string,
   captureFlows: CaptureFlow[] = [],
-  integration: Pick<ProjectRecord, 'captureMode' | 'repeatability' | 'sourceAccess'> = {
+  integration: Pick<ProjectRecord, 'captureMode' | 'ownerTakeover' | 'repeatability' | 'sourceAccess'> = {
     captureMode: 'deterministic',
     repeatability: 'high',
     sourceAccess: 'source-owned',
@@ -51,6 +51,7 @@ function registerProject(
     currentSnapshotId: snapshot.snapshotId,
     name: projectId,
     projectId,
+    ...(integration.ownerTakeover === true ? { ownerTakeover: true } : {}),
     repeatability: integration.repeatability,
     sourceAccess: integration.sourceAccess,
   }
@@ -833,6 +834,111 @@ describe('content studio application service', () => {
         },
       },
     )).toThrow(/source-owned deterministic/i)
+  })
+
+  it('passes an owner takeover opt-in into the recording context', async () => {
+    const service = new ContentStudioApplicationService(
+      new InMemoryContentStudioRepository(),
+      new InMemoryExecutionTaskStore(),
+    )
+    registerProject(
+      service,
+      'takeover-project',
+      [{
+        id: 'quick-sort',
+        startPath: '/quick-sort',
+        steps: [{ durationMs: 100, kind: 'capture', label: 'algorithm' }],
+        title: {
+          'en': 'Quick sort',
+          'zh-CN': '快速排序',
+        },
+      }],
+      {
+        captureMode: 'deterministic',
+        ownerTakeover: true,
+        repeatability: 'conditional',
+        sourceAccess: 'source-owned',
+      },
+    )
+    enableYouTube(service, 'takeover-project')
+    const activity = service.createActivity({
+      activityId: 'takeover-activity',
+      campaignId: 'takeover-campaign',
+      channels: [{ id: 'youtube', locale: 'en' }],
+      goal: 'education',
+      projectId: 'takeover-project',
+      projectSnapshotId: 'takeover-project-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://takeover-project.example.com/quick-sort',
+      topic: {
+        'en': 'Quick sort',
+        'zh-CN': '快速排序',
+      },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        planVersion: 1,
+      },
+    })
+    const contentId = createProductionContent(service, activity)
+    const taskId = `production-${contentId}`
+    service.startProductionTask('takeover-project', taskId)
+
+    const recorderInputs: Array<{ recordingContext: unknown }> = []
+    await service.runActivityProductionTask(
+      'takeover-project',
+      taskId,
+      {
+        baseUrl: 'https://takeover-project.example.com',
+        outputDirectory: '/tmp/content-studio-takeover-test',
+        projectOrigin: 'https://takeover-project.example.com',
+      },
+      {
+        record: async (input) => {
+          recorderInputs.push({ recordingContext: input.recordingContext })
+          return {
+            attempts: [],
+            receipt: {
+              artifactDirectory: '/tmp/content-studio-takeover-test/attempt-1',
+              artifacts: [],
+              attempt: 1,
+              campaignId: activity.campaignId,
+              completedActions: 1,
+              completedScenes: 1,
+              jobId: taskId,
+              logs: {
+                consoleErrors: 0,
+                consoleWarnings: 0,
+                entries: [],
+                pageErrors: 0,
+              },
+              outcome: 'succeeded',
+              planSha256: 'takeover-test',
+              projectId: 'takeover-project',
+              recordingConfig: {
+                colorScheme: 'dark',
+                deviceScaleFactor: 1,
+                locale: 'en',
+                outputSize: { height: 1080, width: 1920 },
+                viewport: { height: 1080, width: 1920 },
+              },
+              receiptVersion: 1,
+              totalActions: 1,
+              totalScenes: 1,
+            },
+          }
+        },
+      },
+    )
+
+    expect(recorderInputs[0]?.recordingContext).toEqual({
+      captureMode: 'deterministic',
+      humanIntervention: true,
+      ownerTakeover: true,
+      planVersion: 1,
+      repeatability: 'conditional',
+      sourceAccess: 'source-owned',
+    })
   })
 
   it('saves an activity content pack after preflighting all channel versions', () => {

@@ -33,6 +33,7 @@
     "verify": "pnpm lint:check && pnpm type-check && pnpm test && pnpm build"
   },
   "dependencies": {
+    "ffmpeg-static": "catalog:",
     "playwright": "catalog:"
   },
   "devDependencies": {

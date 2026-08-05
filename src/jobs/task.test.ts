@@ -33,6 +33,27 @@ describe('通用执行任务', () => {
       ])
   })
 
+  it('允许制作任务在录制中等待 owner 接管并回到录制', () => {
+    const store = new InMemoryExecutionTaskStore()
+    store.createTask({
+      activityId: 'activity-a',
+      kind: 'production',
+      projectId: 'project-a',
+      taskId: 'takeover-task',
+    })
+
+    store.transitionTask('project-a', 'takeover-task', 'generating')
+    store.transitionTask('project-a', 'takeover-task', 'recording')
+    store.transitionTask('project-a', 'takeover-task', 'awaiting-owner')
+
+    expect(store.getTask('project-a', 'takeover-task')?.status)
+      .toBe('awaiting-owner')
+
+    store.transitionTask('project-a', 'takeover-task', 'recording')
+    expect(store.getTask('project-a', 'takeover-task')?.status)
+      .toBe('recording')
+  })
+
   it('保存制作回执并按项目和任务隔离尝试证据', () => {
     const store = new InMemoryExecutionTaskStore()
     store.createTask({

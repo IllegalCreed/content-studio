@@ -836,7 +836,8 @@ export class ContentStudioApplicationService {
       projectId,
       recordingContext: {
         captureMode: project.captureMode,
-        humanIntervention: false,
+        humanIntervention: project.ownerTakeover === true,
+        ...(project.ownerTakeover === true ? { ownerTakeover: true } : {}),
         planVersion: activity.video?.planVersion ?? activity.version,
         repeatability: project.repeatability,
         sourceAccess: project.sourceAccess,

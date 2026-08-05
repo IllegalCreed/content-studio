@@ -35,13 +35,13 @@ export interface ProductionTaskInput {
 export interface ProductionTaskDependencies {
   options?: Pick<
     PlaywrightRecordingOptions,
-    'actionTimeoutMs' | 'emit' | 'headless'
+    'actionTimeoutMs' | 'emit' | 'headless' | 'ownerTakeover'
   >
   record: (
     input: RecordingJobInput,
     options?: Pick<
       PlaywrightRecordingOptions,
-      'actionTimeoutMs' | 'emit' | 'headless'
+      'actionTimeoutMs' | 'emit' | 'headless' | 'ownerTakeover'
     >,
   ) => Promise<RecordingJobResult>
 }

@@ -12,9 +12,12 @@ export function createProjectRecord(
     captureMode,
     currentSnapshotId: snapshotId,
     name: manifest.name,
+    ...(manifest.ownerTakeover === true ? { ownerTakeover: true } : {}),
     projectId: manifest.projectId,
     repeatability: manifest.repeatability
-      ?? (captureMode === 'deterministic' ? 'high' : 'low'),
+      ?? (captureMode === 'deterministic'
+        ? (manifest.ownerTakeover === true ? 'conditional' : 'high')
+        : 'low'),
     sourceAccess,
   }
 }

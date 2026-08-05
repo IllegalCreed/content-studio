@@ -52,4 +52,27 @@ describe('project record integration mode', () => {
       sourceAccess: 'source-owned',
     })
   })
+
+  it('preserves an explicit owner takeover declaration', () => {
+    expect(createProjectRecord({
+      ...manifest,
+      ownerTakeover: true,
+      repeatability: 'conditional',
+    }, 'demo-project-snapshot-4')).toMatchObject({
+      captureMode: 'deterministic',
+      ownerTakeover: true,
+      repeatability: 'conditional',
+      sourceAccess: 'source-owned',
+    })
+  })
+
+  it('derives conditional repeatability when owner takeover is declared without one', () => {
+    expect(createProjectRecord({
+      ...manifest,
+      ownerTakeover: true,
+    }, 'demo-project-snapshot-5')).toMatchObject({
+      ownerTakeover: true,
+      repeatability: 'conditional',
+    })
+  })
 })

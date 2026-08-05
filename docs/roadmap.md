@@ -353,6 +353,23 @@ Owner 明确许可的适配器会直接拒绝。MCP/HTTP 不提供代码注册�
 脚本和敏感字段都会被拒绝。内置 Playwright 直接拒绝辅助上下文，因此这一步只建立 AI
 观察与浏览器宿主之间的安全契约，不伪装成已经完成的浏览器插件或人工登录续录。
 
+2026-08-05 人机接管闭环切片已完成：内置 Playwright 录制器在显式声明
+`recordingContext.ownerTakeover: true`（并要求 `humanIntervention: true`）的源项目
+中，遇到同源认证页会暂停当前会话并调用注入的 owner 确认控制器；确认后在同一浏览器
+会话继续非认证步骤，回执只记录接管窗口的请求/确认时间戳，日志只记录
+`owner-takeover:requested/confirmed`，不接收、不持久化也不重放任何人工输入。未声明
+`ownerTakeover` 或未注入控制器时，认证页仍按原策略 fail closed；确认后仍停留在认证页，
+或在接管窗口内发生跨 origin、弹窗或下载时，同样 fail closed。项目清单新增
+`ownerTakeover: true` 声明，录制任务支持 `recording → awaiting-owner → recording`
+状态迁移；本地 Runtime 提供 `POST /api/v1/projects/:projectId/tasks/:taskId/owner-confirm`
+确认入口，任务取消会清除待确认接管，工作台任务面板在制作任务等待接管时显示
+“人工已确认，继续录制”按钮。接管会话的视频改为分段 screencast：接管点用
+Playwright 公开的 `page.screencast.start/stop` 结束第一段，
+确认后在同一页面再开第二段，场景结束时用 ffmpeg 把两段 `-c copy` 拼接为单个
+`scene-*.webm` 产物（回执契约不变），接管窗口本身不落帧；ffmpeg 优先使用自带的
+ffmpeg-static 二进制，回退到系统 ffmpeg，两者都不可用时接管录制 fail closed。
+这套“分段 + 拼接”管线也为 V0.4 的 FFmpeg 场景合成与多片段成片提供了同一运行基础。
+
 ### V0.3.4 真实 Vue 工作台
 
 - [x] 建立最小 Vue 3 + TypeScript 控制面。

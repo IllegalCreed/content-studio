@@ -78,6 +78,27 @@ describe('recording job runner', () => {
     )).rejects.toThrow(/initialAttempt/i)
   })
 
+  it('rejects owner takeover without an explicit human intervention expectation', async () => {
+    await expect(runRecordingJob(
+      {
+        baseUrl: 'http://127.0.0.1:11000',
+        jobId: 'recording-job-invalid-takeover',
+        outputDirectory: '/tmp/content-studio-recording-job-invalid-takeover',
+        plan,
+        projectId: 'algorithm-visualizer',
+        recordingContext: {
+          captureMode: 'deterministic',
+          humanIntervention: false,
+          ownerTakeover: true,
+          planVersion: 1,
+          repeatability: 'conditional',
+          sourceAccess: 'source-owned',
+        },
+      },
+      { createSession: async () => createSession(() => ({})) },
+    )).rejects.toThrow(/ownerTakeover/i)
+  })
+
   it('can continue task attempt numbering without reusing an output directory', async () => {
     const attempts: number[] = []
     const result = await runRecordingJob(

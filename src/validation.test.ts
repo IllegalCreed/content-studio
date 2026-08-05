@@ -112,6 +112,19 @@ describe('manifest validation', () => {
     })).toThrow(/web-assisted.*deterministic/i)
   })
 
+  it('accepts an explicit owner takeover declaration and rejects non-boolean values', () => {
+    expect(validateProjectManifest({
+      ...project,
+      ownerTakeover: true,
+    })).toMatchObject({
+      ownerTakeover: true,
+    })
+    expect(() => validateProjectManifest({
+      ...project,
+      ownerTakeover: 'yes',
+    })).toThrow(/ownerTakeover/i)
+  })
+
   it('accepts only a lowercase registered adapter id on a project manifest', () => {
     expect(validateProjectManifest({
       ...project,

@@ -250,6 +250,31 @@ describe('workbench runtime client', () => {
     )
   })
 
+  it('confirms a pending owner takeover for a paused recording task', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ownerTakeover: {
+        confirmedAt: '2026-08-05T00:00:00.000Z',
+        requestedAt: '2026-08-05T00:00:00.000Z',
+      },
+      projectId: 'project-a',
+      taskId: 'video-task',
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      createWorkbenchRuntime('/api/v1').confirmOwnerTakeover('project-a', 'video-task'),
+    ).resolves.toMatchObject({
+      ownerTakeover: {
+        confirmedAt: '2026-08-05T00:00:00.000Z',
+      },
+      taskId: 'video-task',
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/project-a/tasks/video-task/owner-confirm',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
   it('saves a content group and channel content through scoped routes', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ contentGroupId: 'group-a' }), { status: 201 }))

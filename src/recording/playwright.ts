@@ -11,6 +11,8 @@ import type {
 import type {
   CompiledCaptureAction,
   CompiledScene,
+  OwnerTakeoverController,
+  OwnerTakeoverRecord,
   PlaywrightRecordingOptions,
   ProjectPreviewAdapter,
   ProjectRecordingJobInput,
@@ -27,9 +29,20 @@ import type {
   SemanticLocator,
   VideoPlan,
 } from '../types'
-import { mkdir } from 'node:fs/promises'
+import {
+  execFile as execFileCallback,
+  execFileSync,
+} from 'node:child_process'
+import {
+  mkdir,
+  rename,
+  unlink,
+  writeFile,
+} from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { setTimeout as wait } from 'node:timers/promises'
+import { promisify } from 'node:util'
+import ffmpegStatic from 'ffmpeg-static'
 import { chromium } from 'playwright'
 import {
   createRecorderArtifact,
@@ -46,6 +59,7 @@ const DEFAULT_ACTION_TIMEOUT_MS = 10_000
 const MAX_LOG_ENTRIES = 20
 const AUTHENTICATION_PATH_PATTERN
   = /(?:^|\/)(?:auth|captcha|challenge|log-in|login|oauth|sign-in|signin|verify)(?:\/|$)/i
+const execFile = promisify(execFileCallback)
 
 interface SemanticLocatorPage<TLocator = unknown> {
   getByLabel: (
@@ -133,6 +147,12 @@ export async function createPlaywrightRecordingSession(
     )
   }
 
+  const ownerTakeover = resolveOwnerTakeoverController(
+    context.recordingContext,
+    options.ownerTakeover,
+  )
+  if (ownerTakeover !== undefined)
+    resolveManagedRecorderFfmpegPath()
   const browser = await chromium.launch({
     headless: options.headless ?? true,
   })
@@ -140,7 +160,77 @@ export async function createPlaywrightRecordingSession(
     browser,
     context,
     actionTimeoutMs,
+    ownerTakeover,
   )
+}
+
+export function resolveOwnerTakeoverController(
+  recordingContext: RecordingContext | undefined,
+  controller: OwnerTakeoverController | undefined,
+): OwnerTakeoverController | undefined {
+  if (controller === undefined)
+    return undefined
+  if (recordingContext?.ownerTakeover !== true) {
+    throw new RecorderError(
+      'runtime-error',
+      'An owner takeover controller requires recordingContext.ownerTakeover to be true.',
+      false,
+    )
+  }
+  return controller
+}
+
+function resolveManagedRecorderFfmpegPath(): string {
+  if (ffmpegStatic !== null)
+    return ffmpegStatic
+  try {
+    execFileSync('ffmpeg', ['-version'], {
+      stdio: 'ignore',
+    })
+    return 'ffmpeg'
+  }
+  catch {
+    throw new RecorderError(
+      'runtime-error',
+      'Owner takeover recording requires a system ffmpeg binary on PATH.',
+      false,
+    )
+  }
+}
+
+async function concatWebmSegments(
+  segments: string[],
+  outputPath: string,
+  ffmpegPath: string,
+): Promise<void> {
+  const listPath = `${outputPath}.concat.txt`
+  await writeFile(listPath, concatListFileContent(segments), 'utf8')
+  try {
+    await execFile(
+      ffmpegPath,
+      ['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', outputPath],
+      {
+        maxBuffer: 4 * 1024 * 1024,
+      },
+    )
+  }
+  catch {
+    await unlink(listPath).catch(() => {})
+    throw new RecorderError(
+      'runtime-error',
+      'Video segment concatenation failed.',
+      true,
+    )
+  }
+  await unlink(listPath).catch(() => {})
+  for (const segment of segments)
+    await unlink(segment).catch(() => {})
+}
+
+function concatListFileContent(segments: string[]): string {
+  return `${segments
+    .map(segment => `file '${segment.replace(/'/g, `'\\''`)}'`)
+    .join('\n')}\n`
 }
 
 function assertBuiltInRecorderContext(
@@ -214,6 +304,28 @@ export function validateProjectNavigation(
   }
 }
 
+function assertOwnerLeftAuthenticationPage(
+  pageUrl: string,
+  projectOrigin: string,
+): void {
+  try {
+    validateProjectNavigation(pageUrl, projectOrigin)
+  }
+  catch (error) {
+    if (
+      error instanceof RecorderError
+      && error.code === 'authentication-page'
+    ) {
+      throw new RecorderError(
+        'authentication-page',
+        'Owner confirmed but the recording is still on an authentication page.',
+        false,
+      )
+    }
+    throw error
+  }
+}
+
 export function resolvePlaywrightRecordingContextOptions(
   plan: VideoPlan,
   rawVideoDirectory: string,
@@ -244,21 +356,31 @@ class PlaywrightRecordingSession implements RecordingSession {
     pageErrors: 0,
   }
 
+  private readonly ownerTakeover: OwnerTakeoverController | undefined
+
   private browserContext: BrowserContext | undefined
   private currentScene: CompiledScene | undefined
   private currentSceneIndex: number | undefined
+  private ownerTakeoverRecord: OwnerTakeoverRecord | undefined
   private page: Page | undefined
   private policyViolation: RecorderError | undefined
+  private screencastActive = false
+  private readonly screencastSegments: string[] = []
+  private screencastSegmentIndex = 0
+  private readonly useSegmentedVideo: boolean
   private video: Video | null | undefined
 
   constructor(
     browser: Browser,
     context: RecordingAttemptContext,
     actionTimeoutMs: number,
+    ownerTakeover: OwnerTakeoverController | undefined,
   ) {
     this.actionTimeoutMs = actionTimeoutMs
     this.browser = browser
     this.context = context
+    this.ownerTakeover = ownerTakeover
+    this.useSegmentedVideo = ownerTakeover !== undefined
   }
 
   async beginScene(
@@ -289,12 +411,13 @@ class PlaywrightRecordingSession implements RecordingSession {
       },
     )
 
-    const browserContext = await this.browser.newContext(
-      resolvePlaywrightRecordingContextOptions(
-        this.context.plan,
-        rawVideoDirectory,
-      ),
+    const contextOptions = resolvePlaywrightRecordingContextOptions(
+      this.context.plan,
+      rawVideoDirectory,
     )
+    if (this.useSegmentedVideo)
+      delete contextOptions.recordVideo
+    const browserContext = await this.browser.newContext(contextOptions)
     browserContext.setDefaultTimeout(this.actionTimeoutMs)
     this.browserContext = browserContext
     this.currentScene = scene
@@ -314,7 +437,16 @@ class PlaywrightRecordingSession implements RecordingSession {
 
     const page = await browserContext.newPage()
     this.page = page
-    this.video = page.video()
+    if (this.useSegmentedVideo) {
+      this.video = null
+      this.screencastSegments.length = 0
+      this.screencastSegmentIndex = 0
+      this.screencastActive = false
+      await this.startScreencastSegment(sceneContext.sceneIndex)
+    }
+    else {
+      this.video = page.video()
+    }
     this.observePage(page)
     await page.emulateMedia({
       colorScheme: this.context.plan.recordingConfig.colorScheme,
@@ -322,15 +454,27 @@ class PlaywrightRecordingSession implements RecordingSession {
     })
 
     const sceneUrl = new URL(scene.startPath, this.context.baseUrl)
-    validateProjectNavigation(sceneUrl.toString(), this.context.baseUrl)
+    try {
+      validateProjectNavigation(sceneUrl.toString(), this.context.baseUrl)
+    }
+    catch (error) {
+      if (
+        !(
+          error instanceof RecorderError
+          && error.code === 'authentication-page'
+          && this.ownerTakeover !== undefined
+        )
+      ) {
+        throw error
+      }
+    }
     await withAbort(
       page.goto(sceneUrl.toString(), {
         waitUntil: 'domcontentloaded',
       }),
       sceneContext.signal,
     )
-    this.assertPolicy()
-    validateProjectNavigation(page.url(), this.context.baseUrl)
+    await this.assertPolicy()
   }
 
   async runAction(
@@ -339,11 +483,11 @@ class PlaywrightRecordingSession implements RecordingSession {
   ): Promise<RecordingActionResult> {
     const page = this.requirePage()
     throwIfAborted(actionContext.signal)
-    this.assertPolicy()
+    await this.assertPolicy()
 
     if (action.kind === 'wait') {
       await abortableDelay(action.durationMs, actionContext.signal)
-      this.assertPolicy()
+      await this.assertPolicy()
       return {}
     }
 
@@ -360,7 +504,7 @@ class PlaywrightRecordingSession implements RecordingSession {
         actionContext.signal,
       )
       await abortableDelay(action.durationMs, actionContext.signal)
-      this.assertPolicy()
+      await this.assertPolicy()
       const preview = await createRecorderArtifact(
         this.context.artifactDirectory,
         relativePath,
@@ -379,7 +523,7 @@ class PlaywrightRecordingSession implements RecordingSession {
         action.locator,
       )
       await waitForVisibleLocator(locator, action.durationMs, actionContext.signal)
-      this.assertPolicy()
+      await this.assertPolicy()
       return {}
     }
 
@@ -389,7 +533,7 @@ class PlaywrightRecordingSession implements RecordingSession {
         actionContext.signal,
       )
       await abortableDelay(action.durationMs, actionContext.signal)
-      this.assertPolicy()
+      await this.assertPolicy()
       return {}
     }
 
@@ -411,7 +555,7 @@ class PlaywrightRecordingSession implements RecordingSession {
       )
     }
     await abortableDelay(action.durationMs, actionContext.signal)
-    this.assertPolicy()
+    await this.assertPolicy()
     return {}
   }
 
@@ -425,7 +569,7 @@ class PlaywrightRecordingSession implements RecordingSession {
     ) {
       throw new Error('Recorder scene completion did not match the active scene')
     }
-    this.assertPolicy()
+    await this.assertPolicy()
     await this.finishCurrentScene()
   }
 
@@ -446,6 +590,9 @@ class PlaywrightRecordingSession implements RecordingSession {
         ...this.logs,
         entries: [...this.logs.entries],
       },
+      ...(this.ownerTakeoverRecord === undefined
+        ? {}
+        : { ownerTakeover: this.ownerTakeoverRecord }),
     }
   }
 
@@ -503,15 +650,121 @@ class PlaywrightRecordingSession implements RecordingSession {
       this.logs.entries.push(entry)
   }
 
-  private assertPolicy(): void {
-    if (this.policyViolation !== undefined)
-      throw this.policyViolation
+  private async assertPolicy(): Promise<void> {
+    if (this.policyViolation !== undefined) {
+      const violation = this.policyViolation
+      this.policyViolation = undefined
+      if (
+        violation.code === 'authentication-page'
+        && this.ownerTakeover !== undefined
+      ) {
+        await this.pauseForOwnerTakeover()
+        return
+      }
+      throw violation
+    }
     if (this.page !== undefined) {
-      validateProjectNavigation(
-        this.page.url(),
-        this.context.baseUrl,
+      try {
+        validateProjectNavigation(
+          this.page.url(),
+          this.context.baseUrl,
+        )
+      }
+      catch (error) {
+        if (
+          error instanceof RecorderError
+          && error.code === 'authentication-page'
+          && this.ownerTakeover !== undefined
+        ) {
+          await this.pauseForOwnerTakeover()
+          return
+        }
+        throw error
+      }
+    }
+  }
+
+  private async pauseForOwnerTakeover(): Promise<void> {
+    const page = this.requirePage()
+    const requestedAt = new Date().toISOString()
+    await this.stopScreencastSegment()
+    this.addLogEntry('owner-takeover:requested')
+    await withAbort(
+      this.ownerTakeover!.request({
+        jobId: this.context.jobId,
+        pageUrl: page.url(),
+        projectId: this.context.projectId,
+      }),
+      this.context.signal,
+    )
+    const confirmedAt = new Date().toISOString()
+    const violation = this.policyViolation
+    if (violation !== undefined && violation.code !== 'authentication-page') {
+      throw violation
+    }
+    assertOwnerLeftAuthenticationPage(page.url(), this.context.baseUrl)
+    await this.startScreencastSegment(this.currentSceneIndex ?? 0)
+    this.ownerTakeoverRecord = {
+      confirmedAt,
+      requestedAt,
+    }
+    this.addLogEntry('owner-takeover:confirmed')
+  }
+
+  private async startScreencastSegment(sceneIndex: number): Promise<void> {
+    const page = this.requirePage()
+    this.screencastSegmentIndex += 1
+    const segmentPath = join(
+      this.context.artifactDirectory,
+      `clips/scene-${formatIndex(sceneIndex)}.segment-${this.screencastSegmentIndex}.webm`,
+    )
+    this.screencastSegments.push(segmentPath)
+    await page.screencast.start({
+      path: segmentPath,
+      size: {
+        height: this.context.plan.recordingConfig.viewport.height,
+        width: this.context.plan.recordingConfig.viewport.width,
+      },
+    })
+    this.screencastActive = true
+  }
+
+  private async stopScreencastSegment(): Promise<void> {
+    const page = this.page
+    if (!this.screencastActive || page === undefined)
+      return
+    await page.screencast.stop()
+    this.screencastActive = false
+  }
+
+  private async finalizeScreencastScene(
+    sceneIndex: number,
+    scene: CompiledScene,
+  ): Promise<void> {
+    if (this.screencastSegments.length === 0)
+      return
+    const relativePath = `clips/scene-${formatIndex(sceneIndex)}.webm`
+    const finalPath = join(this.context.artifactDirectory, relativePath)
+    if (this.screencastSegments.length === 1) {
+      await rename(this.screencastSegments[0]!, finalPath)
+    }
+    else {
+      await concatWebmSegments(
+        [...this.screencastSegments],
+        finalPath,
+        resolveManagedRecorderFfmpegPath(),
       )
     }
+    this.screencastSegments.length = 0
+    this.artifacts.push(
+      await createRecorderArtifact(
+        this.context.artifactDirectory,
+        relativePath,
+        'video-clip',
+        `clip-${formatIndex(sceneIndex)}`,
+        scene.id,
+      ),
+    )
   }
 
   private requirePage(): Page {
@@ -542,12 +795,17 @@ class PlaywrightRecordingSession implements RecordingSession {
       return
     }
 
+    if (this.useSegmentedVideo)
+      await this.stopScreencastSegment()
     await page.close()
     await browserContext.close()
+    const relativePath = `clips/scene-${formatIndex(sceneIndex)}.webm`
+    if (this.useSegmentedVideo) {
+      await this.finalizeScreencastScene(sceneIndex, scene)
+      return
+    }
     if (video === null || video === undefined)
       return
-
-    const relativePath = `clips/scene-${formatIndex(sceneIndex)}.webm`
     await video.saveAs(
       join(this.context.artifactDirectory, relativePath),
     )

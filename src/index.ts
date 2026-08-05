@@ -14,6 +14,10 @@ export {
 } from './control-plane/service'
 export { SqliteContentStudioRepository } from './control-plane/sqlite'
 export {
+  OwnerTakeoverRegistry,
+  type PendingOwnerTakeover,
+} from './jobs/owner-takeover'
+export {
   type ProductionTaskDependencies,
   type ProductionTaskInput,
   type ProductionTaskResult,
@@ -78,6 +82,7 @@ export {
   createPlaywrightRecordingSession,
   recordProjectWithPlaywright,
   recordWithPlaywright,
+  resolveOwnerTakeoverController,
   resolvePlaywrightRecordingContextOptions,
   resolveSemanticLocator,
   validateProjectNavigation,

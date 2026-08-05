@@ -214,6 +214,9 @@ export async function runRecordingJob(
             ...closedSummary.artifacts,
           ],
           logs: closedSummary.logs,
+          ...(closedSummary.ownerTakeover === undefined
+            ? {}
+            : { ownerTakeover: closedSummary.ownerTakeover }),
         }
       }
       catch (error) {
@@ -236,6 +239,9 @@ export async function runRecordingJob(
       ...(failure === undefined ? {} : { failure }),
       jobId: validatedInput.jobId,
       logs: summary.logs,
+      ...(summary.ownerTakeover === undefined
+        ? {}
+        : { ownerTakeover: summary.ownerTakeover }),
       outcome,
       planSha256: hashPlan(validatedInput.plan),
       ...(attempt === 1 ? {} : { previousAttempt: attempt - 1 }),
@@ -361,6 +367,8 @@ function validateRecordingContext(input: RecordingContext): RecordingContext {
   }
   if (input.sourceAccess === 'web-assisted' && input.captureMode === 'deterministic')
     throw new Error('Recording context cannot mark web-assisted capture as deterministic')
+  if (input.ownerTakeover === true && input.humanIntervention !== true)
+    throw new Error('Recording context ownerTakeover requires humanIntervention')
   return { ...input }
 }
 

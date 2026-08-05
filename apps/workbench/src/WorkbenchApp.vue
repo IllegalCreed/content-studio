@@ -241,7 +241,7 @@ const runtimeTaskKeys = ref<Set<string>>(new Set())
 const runtimeActivityIds = ref<Set<string>>(new Set())
 const projectCaptureFlowIds = ref<string[]>([])
 const taskActionError = ref<string | null>(null)
-const taskActionPending = ref<'cancel' | 'record' | 'retry' | 'start' | null>(null)
+const taskActionPending = ref<'cancel' | 'confirm-owner' | 'record' | 'retry' | 'start' | null>(null)
 const ownerHandoffActionError = ref<string | null>(null)
 const ownerHandoffActionPending = ref<'cancel' | 'complete' | null>(null)
 const videoPlanActionError = ref<string | null>(null)
@@ -469,6 +469,13 @@ const canRecordSelectedTask = computed(() =>
   && selectedTask.value.status === 'generating',
 )
 
+const canConfirmSelectedOwnerTakeover = computed(() =>
+  selectedTaskIsRuntime.value
+  && runtimeConnected.value
+  && selectedTask.value.kind === '制作'
+  && selectedTask.value.status === 'awaiting-owner',
+)
+
 const canRetrySelectedTask = computed(() =>
   selectedTaskIsRuntime.value
   && runtimeConnected.value
@@ -479,7 +486,7 @@ const hasActiveRuntimeTask = computed(() =>
   runtimeConnected.value
   && (activeTaskScope.value === '全部项目' ? globalTaskProjections.value : snapshot.tasks).some(task =>
     runtimeTaskKeys.value.has(`${task.projectId ?? snapshot.project.projectId}:${task.taskId}`)
-    && ['generating', 'recording'].includes(task.status),
+    && ['awaiting-owner', 'generating', 'recording'].includes(task.status),
   ),
 )
 
@@ -1006,7 +1013,9 @@ async function reviseSelectedVideoPlan(): Promise<void> {
   }
 }
 
-async function changeSelectedTask(action: 'cancel' | 'record' | 'retry' | 'start'): Promise<void> {
+async function changeSelectedTask(
+  action: 'cancel' | 'confirm-owner' | 'record' | 'retry' | 'start',
+): Promise<void> {
   if (taskActionPending.value !== null || !selectedTaskIsRuntime.value)
     return
   const projectId = selectedTask.value.projectId ?? snapshot.project.projectId
@@ -1016,6 +1025,8 @@ async function changeSelectedTask(action: 'cancel' | 'record' | 'retry' | 'start
   try {
     if (action === 'cancel')
       await workbenchRuntime.cancelTask(projectId, selectedTask.value.taskId)
+    else if (action === 'confirm-owner')
+      await workbenchRuntime.confirmOwnerTakeover(projectId, selectedTask.value.taskId)
     else if (action === 'retry')
       await workbenchRuntime.retryTask(projectId, selectedTask.value.taskId)
     else if (action === 'record')
@@ -1700,6 +1711,7 @@ async function openProjectSpace(projectId: string): Promise<void> {
         <TaskBoardPage
           :active-task-scope="activeTaskScope"
           :can-cancel-selected-task="canCancelSelectedTask"
+          :can-confirm-owner-takeover="canConfirmSelectedOwnerTakeover"
           :can-record-selected-task="canRecordSelectedTask"
           :can-retry-selected-task="canRetrySelectedTask"
           :can-start-selected-task="canStartSelectedTask"

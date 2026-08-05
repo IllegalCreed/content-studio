@@ -68,6 +68,9 @@ export function validateProjectManifest(input: unknown): ProjectManifest {
     ...(value.repeatability === undefined
       ? {}
       : { repeatability: parseProjectRepeatability(value.repeatability) }),
+    ...(value.ownerTakeover === undefined
+      ? {}
+      : { ownerTakeover: parseProjectOwnerTakeover(value.ownerTakeover) }),
     ...(value.videoRecordingDefaults === undefined
       ? {}
       : {
@@ -553,6 +556,12 @@ function parseProjectCaptureMode(input: unknown): ProjectCaptureMode {
 function parseProjectRepeatability(input: unknown): ProjectRepeatability {
   if (input !== 'high' && input !== 'conditional' && input !== 'low')
     throw new Error(`Unsupported project repeatability: ${String(input)}`)
+  return input
+}
+
+function parseProjectOwnerTakeover(input: unknown): boolean {
+  if (typeof input !== 'boolean')
+    throw new Error(`project manifest ownerTakeover must be a boolean: ${String(input)}`)
   return input
 }
 

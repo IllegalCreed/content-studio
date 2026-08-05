@@ -13,6 +13,7 @@ import type {
   ExecutionTask,
   ExecutionTaskEvent,
   OwnerHandoff,
+  OwnerTakeoverRecord,
   ProjectAsset,
   ProjectChannelBinding,
   PromoteActivityArtifactInput,
@@ -42,9 +43,19 @@ export interface RecordTaskResult {
   task: ExecutionTask
 }
 
+export interface OwnerTakeoverConfirmationResult {
+  ownerTakeover: OwnerTakeoverRecord
+  projectId: string
+  taskId: string
+}
+
 export interface WorkbenchRuntime {
   cancelOwnerHandoff: (projectId: string, handoffId: string) => Promise<OwnerHandoff>
   cancelTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
+  confirmOwnerTakeover: (
+    projectId: string,
+    taskId: string,
+  ) => Promise<OwnerTakeoverConfirmationResult>
   confirmStorageCleanup: (input: StorageCleanupConfirmation) => Promise<StorageCleanupResult>
   completeOwnerHandoff: (projectId: string, handoffId: string) => Promise<OwnerHandoff>
   confirmActivityVideoPlan: (
@@ -100,6 +111,10 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
     ),
     cancelTask: (projectId, taskId) => request<ExecutionTask>(
       `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/cancel`,
+      { method: 'POST' },
+    ),
+    confirmOwnerTakeover: (projectId, taskId) => request<OwnerTakeoverConfirmationResult>(
+      `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/owner-confirm`,
       { method: 'POST' },
     ),
     confirmStorageCleanup: input => request<StorageCleanupResult>(

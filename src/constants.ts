@@ -62,7 +62,7 @@ export const VIDEO_VIEWPORT_LIMITS = {
 } as const
 
 export const CAMPAIGN_JOB_TRANSITIONS = {
-  'awaiting-owner': ['cancelled', 'published'],
+  'awaiting-owner': ['cancelled', 'published', 'recording'],
   'cancelled': ['queued'],
   'composing': ['awaiting-owner', 'cancelled', 'failed'],
   'failed': ['queued'],
@@ -70,7 +70,7 @@ export const CAMPAIGN_JOB_TRANSITIONS = {
   'monitoring': [],
   'published': ['monitoring'],
   'queued': ['cancelled', 'generating'],
-  'recording': ['cancelled', 'composing', 'failed'],
+  'recording': ['awaiting-owner', 'cancelled', 'composing', 'failed'],
 } as const satisfies Record<CampaignJobStatus, readonly CampaignJobStatus[]>
 
 export const DEFAULT_RECORDING_MAX_ATTEMPTS = 1
