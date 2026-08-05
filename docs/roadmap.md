@@ -368,6 +368,8 @@ Playwright 公开的 `page.screencast.start/stop` 结束第一段，
 确认后在同一页面再开第二段，场景结束时用 ffmpeg 把两段 `-c copy` 拼接为单个
 `scene-*.webm` 产物（回执契约不变），接管窗口本身不落帧；ffmpeg 优先使用自带的
 ffmpeg-static 二进制，回退到系统 ffmpeg，两者都不可用时接管录制 fail closed。
+接管项目由本地 Runtime 强制以可见窗口（`headless: false`）启动录制，owner 才能
+在实际浏览器中完成登录/验证码；非接管项目仍保持无头录制不变。
 这套“分段 + 拼接”管线也为 V0.4 的 FFmpeg 场景合成与多片段成片提供了同一运行基础。
 
 ### V0.3.4 真实 Vue 工作台

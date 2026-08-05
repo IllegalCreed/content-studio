@@ -1041,6 +1041,7 @@ function productionForProject(
     ...production,
     options: {
       ...production.options,
+      headless: false,
       ownerTakeover: {
         request: async ({
           jobId,

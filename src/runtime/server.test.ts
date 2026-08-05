@@ -1039,6 +1039,7 @@ describe('content studio local application server', () => {
       },
     }
     let recordingInput: { baseUrl: string, outputDirectory: string, plan: unknown } | undefined
+    let recordingOptions: PlaywrightRecordingOptions | undefined
     const productionOutputRoot = resolve('/tmp/content-studio-runtime-recording')
     const receipt: RecorderAttemptReceipt = {
       artifactDirectory: join(
@@ -1087,7 +1088,8 @@ describe('content studio local application server', () => {
     }
     const handle = createContentStudioServer({
       production: {
-        record: async (input) => {
+        record: async (input, options) => {
+          recordingOptions = options
           recordingInput = {
             baseUrl: input.baseUrl,
             outputDirectory: input.outputDirectory,
@@ -1190,6 +1192,7 @@ describe('content studio local application server', () => {
       expect(recordingInput?.outputDirectory).toBe(
         join(productionOutputRoot, project.projectId, taskId),
       )
+      expect(recordingOptions?.headless).toBeUndefined()
       expect(recordingInput?.baseUrl).toBe('http://127.0.0.1:11000')
       expect(recordingInput?.plan).toMatchObject({
         campaignId: 'video-campaign',
@@ -1458,6 +1461,7 @@ describe('content studio local application server', () => {
       )
       await takeoverRequested
       expect(capturedOptions?.ownerTakeover).toBeDefined()
+      expect(capturedOptions?.headless).toBe(false)
 
       const pausedView = await fetch(
         `${running.baseUrl}/api/v1/projects/${project.projectId}`,
