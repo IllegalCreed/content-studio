@@ -10,6 +10,7 @@ import {
   ContentStudioApplicationService,
   InMemoryContentStudioRepository,
 } from '../control-plane/service'
+import { OwnerTakeoverRegistry } from '../jobs/owner-takeover'
 import { InMemoryExecutionTaskStore } from '../jobs/task'
 import {
   createContentStudioMcpServer,
@@ -57,9 +58,15 @@ const snapshot: ProjectSnapshot = {
   version: 1,
 }
 
-function createFixture() {
+function createFixture(options: {
+  ownerTakeovers?: OwnerTakeoverRegistry
+  taskStore?: InMemoryExecutionTaskStore
+} = {}) {
   const repository = new InMemoryContentStudioRepository()
-  const service = new ContentStudioApplicationService(repository)
+  const service = new ContentStudioApplicationService(
+    repository,
+    options.taskStore ?? new InMemoryExecutionTaskStore(),
+  )
   service.registerProject(project, snapshot)
   service.bindProjectChannel({
     channel: 'github',
@@ -68,6 +75,7 @@ function createFixture() {
     projectId,
   })
   return createContentStudioMcpServer({
+    ownerTakeovers: options.ownerTakeovers,
     projectId,
     service,
   })
@@ -1204,5 +1212,114 @@ describe('content Studio local MCP server', () => {
       id: 11,
       result: { protocolVersion: '2026-07-28' },
     })
+  })
+
+  it('confirms a pending owner takeover through the confirm_owner_takeover tool', async () => {
+    const taskStore = new InMemoryExecutionTaskStore()
+    const ownerTakeovers = new OwnerTakeoverRegistry(taskStore)
+    taskStore.createTask({
+      activityId: 'activity-a',
+      kind: 'production',
+      projectId,
+      taskId: 'video-task',
+    })
+    taskStore.transitionTask(projectId, 'video-task', 'generating')
+    taskStore.transitionTask(projectId, 'video-task', 'recording')
+    const pending = ownerTakeovers.request({
+      jobId: 'video-task',
+      pageUrl: 'https://example.com/login',
+      projectId,
+    })
+    const server = createFixture({ ownerTakeovers, taskStore })
+
+    const response = await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 90,
+      method: 'tools/call',
+      params: {
+        name: 'confirm_owner_takeover',
+        arguments: {
+          projectId,
+          taskId: 'video-task',
+        },
+      },
+    })
+
+    expect(response).toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          ownerTakeover: {
+            confirmedAt: expect.any(String),
+            requestedAt: expect.any(String),
+          },
+          projectId,
+          task: { status: 'recording' },
+          taskId: 'video-task',
+        },
+      },
+    })
+    await expect(pending).resolves.toEqual(
+      expect.objectContaining({ confirmedAt: expect.any(String) }),
+    )
+    expect(taskStore.getTask(projectId, 'video-task')?.status).toBe('recording')
+    expect(ownerTakeovers.listPending()).toHaveLength(0)
+  })
+
+  it('rejects owner takeover confirmation when the runtime has no registry', async () => {
+    const server = createFixture()
+
+    const response = await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 91,
+      method: 'tools/call',
+      params: {
+        name: 'confirm_owner_takeover',
+        arguments: {
+          projectId,
+          taskId: 'video-task',
+        },
+      },
+    })
+
+    expect(response).toMatchObject({
+      result: { isError: true },
+    })
+  })
+
+  it('dismisses a pending owner takeover when the task is cancelled', async () => {
+    const taskStore = new InMemoryExecutionTaskStore()
+    const ownerTakeovers = new OwnerTakeoverRegistry(taskStore)
+    taskStore.createTask({
+      activityId: 'activity-a',
+      kind: 'production',
+      projectId,
+      taskId: 'video-task',
+    })
+    taskStore.transitionTask(projectId, 'video-task', 'generating')
+    taskStore.transitionTask(projectId, 'video-task', 'recording')
+    const pending = ownerTakeovers.request({
+      jobId: 'video-task',
+      pageUrl: 'https://example.com/login',
+      projectId,
+    })
+    const server = createFixture({ ownerTakeovers, taskStore })
+
+    await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 92,
+      method: 'tools/call',
+      params: {
+        name: 'cancel_task',
+        arguments: {
+          projectId,
+          taskId: 'video-task',
+        },
+      },
+    })
+
+    await expect(pending).rejects.toThrow(/cancelled/i)
+    expect(ownerTakeovers.listPending()).toHaveLength(0)
+    expect(taskStore.getTask(projectId, 'video-task')?.status).toBe('cancelled')
   })
 })

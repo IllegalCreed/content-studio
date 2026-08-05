@@ -85,6 +85,7 @@ import {
 } from '../storage/retention'
 import { assertNoSensitiveKeys } from '../validation'
 import { validateVideoRecordingProfile } from '../video/recording-config'
+import { productionForProject } from './production-options'
 
 const MAX_BODY_BYTES = 256 * 1024
 const IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -1028,36 +1029,6 @@ type ActivityProductionInput = Pick<
   ProductionTaskInput,
   'baseUrl' | 'maxAttempts' | 'outputDirectory' | 'projectOrigin' | 'signal'
 >
-
-function productionForProject(
-  production: ProductionTaskDependencies,
-  ownerTakeovers: OwnerTakeoverRegistry,
-  service: ContentStudioApplicationService,
-  projectId: string,
-): ProductionTaskDependencies {
-  if (service.getProjectView(projectId).project.ownerTakeover !== true)
-    return production
-  return {
-    ...production,
-    options: {
-      ...production.options,
-      headless: false,
-      ownerTakeover: {
-        request: async ({
-          jobId,
-          pageUrl,
-          projectId: requestProjectId,
-        }) => {
-          await ownerTakeovers.request({
-            jobId,
-            pageUrl,
-            projectId: requestProjectId,
-          })
-        },
-      },
-    },
-  }
-}
 
 async function runActivityProductionTaskWithPreviewAdapter(
   service: ContentStudioApplicationService,

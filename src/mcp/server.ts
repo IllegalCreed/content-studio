@@ -1,6 +1,7 @@
 // @env node
 
 import type { ContentStudioApplicationService } from '../control-plane/service'
+import type { OwnerTakeoverRegistry } from '../jobs/owner-takeover'
 import type { ProductionWorker, ProductionWorkerJob } from '../jobs/worker'
 import type {
   CreateActivityContentPackInput,
@@ -55,6 +56,7 @@ export interface McpJsonRpcResponse {
 }
 
 export interface ContentStudioMcpServerOptions {
+  ownerTakeovers?: OwnerTakeoverRegistry
   projectId: string
   productionWorker?: Pick<ProductionWorker, 'cancel' | 'enqueue'>
   productionWorkerJob?: (task: ExecutionTask) => ProductionWorkerJob | undefined
@@ -526,6 +528,17 @@ function toolDefinitions(): Array<Record<string, unknown>> {
       inputSchema: taskSchema(),
       name: 'retry_task',
       title: '重试任务',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: false,
+      },
+      description: '确认等待 owner 人工接管的制作任务；任务回到录制并继续同一会话，不接收凭据。',
+      inputSchema: taskSchema(),
+      name: 'confirm_owner_takeover',
+      title: '确认 owner 接管',
     },
   ]
 }
@@ -1000,8 +1013,34 @@ function executeTool(
       return changeTask(input, options, 'cancel')
     case 'retry_task':
       return changeTask(input, options, 'retry')
+    case 'confirm_owner_takeover':
+      return confirmOwnerTakeover(input, options)
     default:
       throw new McpToolError(`Unknown tool: ${name}`)
+  }
+}
+
+function confirmOwnerTakeover(
+  input: unknown,
+  options: ContentStudioMcpServerOptions,
+): Record<string, unknown> {
+  const value = scopedRecord(input, options.projectId, ['projectId', 'taskId'])
+  const taskId = identifierField(value.taskId, 'taskId')
+  if (options.ownerTakeovers === undefined) {
+    throw new McpToolError(
+      'Owner takeover confirmation is not wired into this runtime',
+    )
+  }
+  const ownerTakeover = options.ownerTakeovers.confirm(value.projectId, taskId)
+  const task = options.service
+    .getProjectView(value.projectId)
+    .tasks
+    .find(candidate => candidate.taskId === taskId)
+  return {
+    ...(task === undefined ? {} : { task }),
+    ownerTakeover,
+    projectId: value.projectId,
+    taskId,
   }
 }
 
@@ -1040,6 +1079,7 @@ function changeTask(
   const value = scopedRecord(input, options.projectId, ['projectId', 'taskId'])
   const taskId = identifierField(value.taskId, 'taskId')
   if (operation === 'cancel') {
+    options.ownerTakeovers?.dismiss(value.projectId, taskId)
     options.productionWorker?.cancel(value.projectId, taskId)
     return options.service.cancelTask(value.projectId, taskId)
   }
@@ -1104,6 +1144,7 @@ function cancelMcpTask(
   options: ContentStudioMcpServerOptions,
 ): { task: Record<string, unknown> } {
   const handle = parseTaskHandle(input, options, false)
+  options.ownerTakeovers?.dismiss(handle.projectId, handle.taskId)
   options.productionWorker?.cancel(handle.projectId, handle.taskId)
   const task = options.service.cancelTask(handle.projectId, handle.taskId)
   const events = options.service.listTaskEvents(handle.projectId, handle.taskId)

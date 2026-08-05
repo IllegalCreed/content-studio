@@ -15,12 +15,14 @@ import { dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 import { generateStudioBundle } from '../bundle/generate'
 import { CHANNEL_BLUEPRINTS } from '../constants'
+import { OwnerTakeoverRegistry } from '../jobs/owner-takeover'
 import { ProductionWorker } from '../jobs/worker'
 import { createContentStudioMcpHttpServer } from '../mcp/http'
 import { createContentStudioMcpServer, serveMcpStdio } from '../mcp/server'
 import { writeStudioBundle } from '../output/write'
 import { createProjectRecord } from '../project/record'
 import { recordWithPlaywright } from '../recording/playwright'
+import { productionForProject } from '../runtime/production-options'
 import {
   createContentStudioApplication,
   createContentStudioServer,
@@ -320,6 +322,7 @@ async function runMcp(
       return await runMcpHttp(execution, project.projectId, options, runtime)
     await serveMcpStdio(
       createContentStudioMcpServer({
+        ownerTakeovers: execution.ownerTakeovers,
         projectId: project.projectId,
         productionWorker: execution.worker,
         productionWorkerJob: task => createProductionWorkerJob(
@@ -347,6 +350,7 @@ async function runMcp(
 
 interface McpExecutionRuntime {
   handle: ReturnType<typeof createContentStudioApplication>
+  ownerTakeovers: OwnerTakeoverRegistry
   outputRoot: string
   worker: ProductionWorker
 }
@@ -360,6 +364,7 @@ function createMcpExecutionRuntime(
 ): McpExecutionRuntime {
   const applicationOptions = createApplicationOptions(project, campaign, options, runtime)
   const handle = createContentStudioApplication(applicationOptions)
+  const ownerTakeovers = new OwnerTakeoverRegistry(handle.taskStore)
   const outputRoot = join(
     dirname(applicationOptions.databasePath ?? resolve(runtime.cwd, '.content-studio/content-studio.sqlite')),
     'production',
@@ -386,10 +391,15 @@ function createMcpExecutionRuntime(
         projectOrigin,
         signal,
       },
-      { record: services.record },
+      productionForProject(
+        { record: services.record },
+        ownerTakeovers,
+        handle.service,
+        projectId,
+      ),
     ),
   })
-  return { handle, outputRoot, worker }
+  return { handle, ownerTakeovers, outputRoot, worker }
 }
 
 async function runMcpHttp(
@@ -400,6 +410,7 @@ async function runMcpHttp(
 ): Promise<number> {
   const http = createContentStudioMcpHttpServer({
     server: createContentStudioMcpServer({
+      ownerTakeovers: execution.ownerTakeovers,
       projectId,
       productionWorker: execution.worker,
       productionWorkerJob: task => createProductionWorkerJob(
