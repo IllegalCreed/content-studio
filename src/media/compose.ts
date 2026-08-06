@@ -1,5 +1,6 @@
 // @env node
 
+import type { VideoViewport } from '../types'
 import { execFile as execFileCallback } from 'node:child_process'
 import {
   access,
@@ -14,6 +15,7 @@ import {
 } from './ffmpeg'
 
 const execFile = promisify(execFileCallback)
+const LOUDNESS_FILTER = 'loudnorm=I=-16:TP=-1.5:LRA=11'
 
 export class MediaCompositionError extends Error {
   constructor(message: string) {
@@ -25,7 +27,9 @@ export class MediaCompositionError extends Error {
 export interface ComposeVideoClipsInput {
   clips: string[]
   ffmpegPath?: string
+  normalizeLoudness?: boolean
   outputPath: string
+  outputSize?: VideoViewport
   reencode?: boolean
 }
 
@@ -70,9 +74,11 @@ export async function composeVideoClips(
 
   const listPath = `${input.outputPath}.concat.txt`
   await writeFile(listPath, concatListFileContent(input.clips), 'utf8')
+  const needsFilters = input.outputSize !== undefined
+    || input.normalizeLoudness === true
   let reencoded = false
   try {
-    if (input.reencode !== true) {
+    if (input.reencode !== true && !needsFilters) {
       try {
         await execFile(
           ffmpegPath,
@@ -88,9 +94,16 @@ export async function composeVideoClips(
       reencoded = true
     }
     if (reencoded) {
+      const args = ['-y', '-f', 'concat', '-safe', '0', '-i', listPath]
+      if (input.outputSize !== undefined) {
+        args.push('-vf', scalePadFilter(input.outputSize))
+      }
+      if (input.normalizeLoudness === true) {
+        args.push('-af', LOUDNESS_FILTER)
+      }
       await execFile(
         ffmpegPath,
-        ['-y', '-f', 'concat', '-safe', '0', '-i', listPath, input.outputPath],
+        [...args, input.outputPath],
         { maxBuffer: 4 * 1024 * 1024 },
       )
     }
@@ -110,6 +123,13 @@ export async function composeVideoClips(
     outputPath: input.outputPath,
     reencoded,
   }
+}
+
+function scalePadFilter(size: VideoViewport): string {
+  return [
+    `scale=${size.width}:${size.height}:force_original_aspect_ratio=decrease:flags=lanczos`,
+    `pad=${size.width}:${size.height}:(ow-iw)/2:(oh-ih)/2:color=black`,
+  ].join(',')
 }
 
 function concatListFileContent(clips: string[]): string {

@@ -75,6 +75,7 @@ export {
 } from './media/compose'
 export {
   probeMediaDuration,
+  probeVideoSize,
   resolveFfmpegPath,
 } from './media/ffmpeg'
 export { writeStudioBundle } from './output/write'

@@ -888,9 +888,19 @@ export class ContentStudioApplicationService {
       return result
 
     const outputPath = join(input.outputDirectory, 'composed', 'final.webm')
+    const plan = this.getActivityVideoPlan(
+      projectId,
+      task.activityId,
+      task.channel,
+    )
     let composed: Awaited<ReturnType<ComposeProduction>>
     try {
-      composed = await compose({ clipPaths, outputPath })
+      composed = await compose({
+        clipPaths,
+        normalizeLoudness: true,
+        outputPath,
+        outputSize: plan.recordingConfig.outputSize,
+      })
     }
     catch (error: unknown) {
       this.taskStore.transitionTask(projectId, taskId, 'failed')

@@ -1228,7 +1228,9 @@ describe('content studio application service', () => {
       clipPaths: [
         join('/tmp/content-studio-compose-register/attempt-1', 'clips/scene-001.webm'),
       ],
+      normalizeLoudness: true,
       outputPath: join('/tmp/content-studio-compose-register', 'composed', 'final.webm'),
+      outputSize: { height: 1080, width: 1920 },
     }])
     expect(
       repository.listActivityArtifacts('compose-project', activity.activityId),

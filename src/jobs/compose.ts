@@ -29,6 +29,10 @@ export async function composeProductionVideoClips(
   })
   const composed = await composeVideoClips({
     clips: input.clipPaths,
+    ...(input.normalizeLoudness === undefined
+      ? {}
+      : { normalizeLoudness: input.normalizeLoudness }),
+    ...(input.outputSize === undefined ? {} : { outputSize: input.outputSize }),
     outputPath: input.outputPath,
   })
   const info = await stat(input.outputPath)

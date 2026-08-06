@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest'
 import { composeVideoClips } from './compose'
 import {
   probeMediaDuration,
+  probeVideoSize,
   resolveFfmpegPath,
 } from './ffmpeg'
 
@@ -50,6 +51,36 @@ async function makeWebmClip(
       'libvpx-vp9',
       '-b:v',
       '200k',
+      path,
+    ],
+    { maxBuffer: 4 * 1024 * 1024 },
+  )
+  return path
+}
+
+async function makeAudioWebmClip(
+  directory: string,
+  name: string,
+  durationSeconds: number,
+): Promise<string> {
+  const path = join(directory, name)
+  await execFile(
+    resolveFfmpegPath(),
+    [
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      `testsrc=duration=${durationSeconds}:size=320x240:rate=10`,
+      '-f',
+      'lavfi',
+      '-i',
+      `sine=frequency=440:duration=${durationSeconds}`,
+      '-c:v',
+      'libvpx-vp9',
+      '-c:a',
+      'libopus',
+      '-shortest',
       path,
     ],
     { maxBuffer: 4 * 1024 * 1024 },
@@ -100,6 +131,68 @@ describe.skipIf(!ffmpegIsAvailable)('ffmpeg composition engine', () => {
     }
   })
 
+  it('scales and pads the composed output to a target size', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
+    try {
+      const first = await makeWebmClip(directory, 'first.webm', 0.5)
+      const second = await makeWebmClip(directory, 'second.webm', 0.5)
+      const outputPath = join(directory, 'sized.webm')
+
+      const result = await composeVideoClips({
+        clips: [first, second],
+        outputPath,
+        outputSize: { height: 360, width: 640 },
+      })
+
+      expect(result.reencoded).toBe(true)
+      expect(await probeVideoSize(outputPath)).toEqual({
+        height: 360,
+        width: 640,
+      })
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('normalizes loudness when the composed clips carry audio', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
+    try {
+      const clip = await makeAudioWebmClip(directory, 'audio.webm', 0.5)
+      const outputPath = join(directory, 'loudness.webm')
+
+      const result = await composeVideoClips({
+        clips: [clip],
+        normalizeLoudness: true,
+        outputPath,
+      })
+
+      expect(result.durationSeconds).toBeGreaterThan(0.3)
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('composes video-only clips with loudness normalization requested', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
+    try {
+      const clip = await makeWebmClip(directory, 'silent.webm', 0.5)
+      const outputPath = join(directory, 'silent-loudness.webm')
+
+      const result = await composeVideoClips({
+        clips: [clip],
+        normalizeLoudness: true,
+        outputPath,
+      })
+
+      expect(result.durationSeconds).toBeGreaterThan(0.3)
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
   it('rejects a missing clip before running ffmpeg', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
     try {
@@ -107,6 +200,34 @@ describe.skipIf(!ffmpegIsAvailable)('ffmpeg composition engine', () => {
         clips: [join(directory, 'missing.webm')],
         outputPath: join(directory, 'out.webm'),
       })).rejects.toThrow(/clip/i)
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('rejects an empty clip list', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
+    try {
+      await expect(composeVideoClips({
+        clips: [],
+        outputPath: join(directory, 'out.webm'),
+      })).rejects.toThrow(/at least one composition clip/i)
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('rejects when ffmpeg cannot open the output path', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
+    try {
+      const clip = await makeWebmClip(directory, 'clip.webm', 0.5)
+      await expect(composeVideoClips({
+        clips: [clip],
+        outputPath: directory,
+        reencode: true,
+      })).rejects.toThrow(/composition failed/i)
     }
     finally {
       await rm(directory, { force: true, recursive: true })

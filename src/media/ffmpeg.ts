@@ -51,3 +51,35 @@ export async function probeMediaDuration(
     throw new Error(`Could not probe media duration for ${filePath}`)
   return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3])
 }
+
+export interface ProbedVideoSize {
+  height: number
+  width: number
+}
+
+export async function probeVideoSize(
+  filePath: string,
+  ffmpegPath = resolveFfmpegPath(),
+): Promise<ProbedVideoSize> {
+  let stderr = ''
+  try {
+    const result = await execFile(
+      ffmpegPath,
+      ['-i', filePath, '-f', 'null', '-'],
+      { maxBuffer: 4 * 1024 * 1024 },
+    )
+    stderr = String(result.stderr)
+  }
+  catch (error: unknown) {
+    stderr = error instanceof Error && 'stderr' in error
+      ? String((error as { stderr: string | Buffer }).stderr)
+      : ''
+  }
+  const match = /Stream #0:0: Video: .*?,\s*(\d+)x(\d+)/u.exec(stderr)
+  if (match === null)
+    throw new Error(`Could not probe video size for ${filePath}`)
+  return {
+    height: Number(match[2]),
+    width: Number(match[1]),
+  }
+}

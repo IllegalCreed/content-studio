@@ -985,7 +985,9 @@ export interface RecordingJobDependencies {
 
 export interface ComposeProductionInput {
   clipPaths: string[]
+  normalizeLoudness?: boolean
   outputPath: string
+  outputSize?: VideoViewport
 }
 
 export interface ComposeProductionResult {
