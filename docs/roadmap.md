@@ -389,12 +389,17 @@ Runtime 同一套接管控制器与可见窗口约束；通过 MCP 取消任务�
       清单校验，不接收任意脚本、命令或选择器；重复登记同一快照幂等。
 - [x] 工作台“导入项目”页支持引导表单和粘贴/上传 `project.json` 两种方式，登记前
       展示清单摘要并要求确认。
+- [x] 有源导入自动起草 `captureFlows`（README 内链）和 `captureTargets`（源码
+      `data-testid`，只保留合法小写 kebab-case，并带占位 capture 步骤）；`--name`
+      覆盖不再丢失 README 描述定位。
 - [x] 插件安装契约把用户确认后的清单写入 `${PLUGIN_DATA}/project.json`，接上
       `mcp.json` 的 stdio `--project` 绑定。
 
 2026-08-07 项目导入与登记切片已完成：CLI 起草、Runtime 登记端点和工作台导入页共用
 同一条“草稿 → 确认 → 登记”链；`GET /api/v1/projects` 索引在登记后立即可见。导入
-流程不改变“项目注册必须用户明确确认”的边界，登记端点只接收合法项目清单。
+流程不改变“项目注册必须用户明确确认”的边界，登记端点只接收合法项目清单。同日用
+Algorithm Visualizer 真实仓库完成了端到端验证：`project import` 起草 →
+工作台“导入项目”确认 → `POST /api/v1/registry/projects` 登记 → 总览可见。
 
 ### V0.3.4 真实 Vue 工作台
 

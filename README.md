@@ -1,7 +1,7 @@
 # Content Studio
 
 Content Studio 是开源、本地优先、跨项目、AI 原生的内容生产与发布控制台。它以
-MCP App 为主要交互边界：AI 读取版本化项目事实和发布活动简报，生成文章、图片、
+Agent Plugin + MCP App UI 为主要交互边界：AI 读取版本化项目事实和发布活动简报，生成文章、图片、
 视频脚本及不同渠道版本，再通过可观察、可取消、可重试的任务完成录制和后续媒体
 制作。
 
@@ -110,8 +110,9 @@ AI 创作是目标产品的核心能力，目前的确定性编译器是安全�
 
 ## MCP App 与公开上架目标
 
-Content Studio 将以 Skills、无状态 MCP Server 和 Vue MCP App UI 组成可公开
-提交的 Plugin，目标进入 ChatGPT 与 Codex 共用的 Plugins Directory。
+Content Studio 将以 Skills、无状态 MCP Server 组成可公开提交的 Agent Plugin 包
+（`plugin.json` + `skills/` + `mcp.json`，遵循 Agent Plugins 1.0），MCP App UI
+作为客户端命名空间扩展存在，目标进入 ChatGPT 与 Codex 共用的 Plugins Directory。
 
 远程服务首选 MCP `2026-07-28`，业务状态通过 `projectId`、`activityId`、
 `taskId` 等显式句柄和服务端持久化管理；长制作流程映射为 MCP Tasks。没有 UI

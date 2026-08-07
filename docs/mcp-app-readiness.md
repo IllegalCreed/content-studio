@@ -12,21 +12,20 @@ Content Studio 的发布目标不是“提供一个带 MCP 接口的独立后台
 项目、素材、浏览器和媒体制作的默认执行环境；用户不需要购买托管服务才能运行
 完整个人工作流。
 
-面向 OpenAI 生态时，正式可发现、安装和发布的分发单位是 **Plugin**；开放的
-**MCP Apps** 标准负责让 MCP Server 返回交互式 UI。Content Studio 的目标包形态
-为：
+面向 OpenAI 生态时，正式可发现、安装和发布的分发单位遵循 **Agent Plugins
+1.0**（`plugin.json` + `skills/` + `mcp.json`）。**MCP Apps UI** 是客户端命名
+空间扩展：开放标准负责让 MCP Server 返回交互式 UI，但 UI 不在 Agent Plugins
+可移植契约内。Content Studio 的目标包形态为：
 
 ```text
-Content Studio Plugin
-├─ Skills
-│  ├─ 创建和推进发布活动
-│  ├─ 创作文章、图片和视频方案
-│  └─ 审核、发布协作和复盘工作流
-├─ Stateless MCP Server
-│  ├─ 项目、活动、素材和渠道工具
-│  ├─ 制作、发布和监测工具
-│  └─ MCP Tasks 适配器
-└─ MCP App UI
+Content Studio Agent Plugin（Agent Plugins 1.0）
+├─ plugin.json
+├─ skills/
+│  ├─ 接入项目（onboard-project）
+│  ├─ 制作发布活动（produce-activity）
+│  └─ 发布协作与人工接管（review-and-handoff）
+├─ mcp.json（本地 stdio 运行时）
+└─ com.openai.*（可选）MCP App UI 客户端命名空间扩展
    ├─ 行内活动与任务卡片
    ├─ 内容审核和资源对比
    └─ 全屏活动工作台与报告
@@ -55,9 +54,9 @@ OpenAI 当前文档已经提供 Plugin 公共提交、审核、批准和发布�
 | MCP/OpenAI 生态       | 小程序类比                         |
 | --------------------- | ---------------------------------- |
 | ChatGPT/Codex         | 宿主和分发入口                     |
-| Plugin                | 可发现、安装和审核的应用包         |
+| Agent Plugin          | 可发现、安装和审核的应用包         |
 | MCP Server            | 应用后端和受控能力接口             |
-| MCP App UI            | 宿主内沙箱运行的交互页面           |
+| MCP App UI            | 客户端命名空间扩展内的交互页面     |
 | Skills                | 应用随附的标准操作方法和工作流说明 |
 | Tools/Resources/Tasks | 应用 API、数据资源和异步任务协议   |
 
@@ -121,7 +120,9 @@ receiptId
 
 [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) 允许 MCP
 Server 把交互式 HTML 作为 UI resource 返回，由宿主在沙箱 iframe 中渲染。UI
-通过基于 `postMessage` 的 JSON-RPC bridge 与宿主通信。
+通过基于 `postMessage` 的 JSON-RPC bridge 与宿主通信。在 Agent Plugins 包中，
+这部分内容位于客户端命名空间目录（如 `com.openai.*/`）或 `extensions` 字段下，
+其他客户端忽略它，不影响可移植的 Skills 与 MCP Server。
 
 Content Studio 的 Vue 3 工作台继续复用，但按使用场景拆成可嵌入界面：
 
@@ -132,6 +133,7 @@ Content Studio 的 Vue 3 工作台继续复用，但按使用场景拆成可嵌�
 实现要求：
 
 - 优先使用开放 MCP Apps 字段和 `ui/*` bridge；
+- 保持 MCP App UI 为客户端命名空间扩展，可移植内核只有 Skills 和 MCP Server；
 - 仅在共享标准不覆盖时 feature-detect ChatGPT 扩展；
 - 工具在不渲染组件时仍然可用；
 - UI resource 使用版本化 URI，破坏性 UI 更新生成新 URI；
@@ -309,7 +311,7 @@ Content Studio MCP API、UI resources 和小规模元数据服务。采用本地
 无状态 Content Studio MCP API
         │
         ├─ 项目/活动/任务/素材元数据存储
-        ├─ MCP App UI resources
+        ├─ MCP App UI resources（客户端命名空间扩展）
         └─ 受控任务队列
                   │
                   ▼

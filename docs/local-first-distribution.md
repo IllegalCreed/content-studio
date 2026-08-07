@@ -80,8 +80,9 @@ Content Studio local runtime
 Content Studio Plugin 负责：
 
 - 提供文章、图片、视频方案、活动推进、审核和复盘 Skills；
-- 注册 Content Studio MCP 连接；
-- 声明 MCP App UI resources；
+- 通过 `plugin.json` + `skills/` + `mcp.json` 按 Agent Plugins 1.0 打包 Skills
+  和本地 MCP 连接；
+- 把 MCP App UI 声明为客户端命名空间扩展（不进入可移植契约）；
 - 引导项目注册、任务观察和人工接管；
 - 通过 Content Studio 应用服务使用发布能力，不直接绕过应用服务调用渠道。
 

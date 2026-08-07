@@ -7,7 +7,7 @@
 
 ```mermaid
 flowchart TB
-  AI["MCP 主机中的 AI"] <--> MCP["Content Studio Plugin / MCP App"]
+  AI["MCP 主机中的 AI"] <--> MCP["Content Studio Agent Plugin"]
   UI["Vue 3 控制面"] --> APP["控制面应用服务"]
   MCP --> APP
   CLI["CLI"] --> CORE["Content Studio core"]
@@ -108,8 +108,10 @@ Content Studio installer
 变化时必须重新确认。V0.3.0 的内存 Repository 仍用于纯内存测试；
 `SqliteContentStudioRepository` 已提供第一版本地控制数据持久化。
 
-Content Studio Plugin 是 AI 宿主入口，只包含 Skills、MCP 连接和 MCP App UI
-声明，不复制 core 或发布逻辑。用户只安装这一个 Plugin。
+Content Studio Agent Plugin 是 AI 宿主入口，遵循 Agent Plugins 1.0 包格式
+（`plugin.json` + `skills/` + `mcp.json`），只包含 Skills 和 MCP 连接声明，不
+复制 core 或发布逻辑。MCP App UI 属于客户端命名空间扩展，不作为可移植组件；
+用户只安装这一个 Plugin。
 
 项目注册表只收录用户明确登记的项目。导入不是扫描：`content-studio project import`
 （有源）和 `content-studio project init`（无源）只负责起草项目清单，用户确认后才
@@ -224,8 +226,9 @@ MCP Tasks 只承担单个长工具调用的通用异步生命周期。Content St
 数据库。
 
 MCP App UI 以版本化 `ui://` resource 交付，通过开放 `ui/*` JSON-RPC bridge
-调用工具。Vue 控制面按行内卡片、内容审核视图和全屏活动工作台拆分。所有核心
-工具在不渲染 UI 时仍必须可用。
+调用工具，作为 OpenAI 客户端命名空间扩展存在，不进入 Agent Plugins 可移植
+契约。Vue 控制面按行内卡片、内容审核视图和全屏活动工作台拆分。所有核心工具
+在不渲染 UI 时仍必须可用。
 
 新实现不依赖已经弃用的 Roots、Sampling 或 MCP Logging。项目范围通过工具参数
 和资源 URI 表达；交互式 AI 来自 MCP 主机；后台 AI 使用宿主任务机制或独立

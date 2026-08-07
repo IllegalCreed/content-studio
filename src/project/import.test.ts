@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -6,7 +6,10 @@ import { validateProjectManifest } from '../validation'
 import {
   draftSourceOwnedProject,
   draftWebAssistedProject,
+  extractCaptureFlowsFromMarkdown,
+  extractCaptureTargets,
   inspectSourceDirectory,
+  scanSourceTestIds,
 } from './import'
 
 describe('project import drafts', () => {
@@ -102,5 +105,191 @@ describe('project import drafts', () => {
     finally {
       await rm(directory, { force: true, recursive: true })
     }
+  })
+
+  it('drafts capture flows from internal markdown links and targets from data-testid', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-import-'))
+    try {
+      await writeFile(
+        join(directory, 'README.md'),
+        '# Demo\n- [快速排序演示](/docs/quick-sort)\n- [分区过程](/docs/partition)\n',
+        'utf8',
+      )
+      await mkdir(join(directory, 'src'), { recursive: true })
+      await writeFile(
+        join(directory, 'src', 'Player.vue'),
+        '<button data-testid="animation-play">Play</button>\n<div data-testid="result-panel" />\n',
+        'utf8',
+      )
+      const manifest = await draftSourceOwnedProject({
+        canonicalUrl: 'https://demo.example.com/',
+        repositoryUrl: 'https://example.invalid/',
+        sourceDirectory: directory,
+      })
+      expect(validateProjectManifest(manifest)).toEqual(manifest)
+      expect(manifest.captureFlows).toEqual([
+        {
+          id: 'docs-quick-sort',
+          startPath: '/docs/quick-sort',
+          steps: [{
+            kind: 'capture',
+            label: 'capture-start',
+          }],
+          title: {
+            'en': '快速排序演示',
+            'zh-CN': '快速排序演示',
+          },
+        },
+        {
+          id: 'docs-partition',
+          startPath: '/docs/partition',
+          steps: [{
+            kind: 'capture',
+            label: 'capture-start',
+          }],
+          title: {
+            'en': '分区过程',
+            'zh-CN': '分区过程',
+          },
+        },
+      ])
+      expect(manifest.captureTargets).toEqual([
+        {
+          id: 'animation-play',
+          label: {
+            'en': 'Animation play',
+            'zh-CN': 'Animation play',
+          },
+          locator: {
+            by: 'test-id',
+            value: 'animation-play',
+          },
+          purpose: 'control',
+        },
+        {
+          id: 'result-panel',
+          label: {
+            'en': 'Result panel',
+            'zh-CN': 'Result panel',
+          },
+          locator: {
+            by: 'test-id',
+            value: 'result-panel',
+          },
+          purpose: 'control',
+        },
+      ])
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('skips invalid test-id names and keeps the README tagline when name is overridden', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-import-'))
+    try {
+      await writeFile(
+        join(directory, 'README.md'),
+        '# Demo Project\n真实的产品定位描述。\n',
+        'utf8',
+      )
+      await mkdir(join(directory, 'src'), { recursive: true })
+      await writeFile(
+        join(directory, 'src', 'App.vue'),
+        '<div data-testid="PlayButton" />\n',
+        'utf8',
+      )
+      const manifest = await draftSourceOwnedProject({
+        canonicalUrl: 'https://demo.example.com/',
+        name: 'Renamed Project',
+        repositoryUrl: 'https://example.invalid/',
+        sourceDirectory: directory,
+      })
+      expect(validateProjectManifest(manifest)).toEqual(manifest)
+      expect(manifest.name).toBe('Renamed Project')
+      expect(manifest.projectId).toBe('renamed-project')
+      expect(manifest.tagline).toEqual({
+        'en': '真实的产品定位描述。',
+        'zh-CN': '真实的产品定位描述。',
+      })
+      expect(manifest.captureTargets).toBeUndefined()
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('bounds, dedupes and skips relative capture flow links', () => {
+    const flows = extractCaptureFlowsFromMarkdown(
+      Array.from({ length: 10 }, (_, index) => `[t${index}](/docs/p${index})`)
+        .join('\n'),
+      8,
+    )
+    expect(flows).toHaveLength(8)
+    expect(extractCaptureFlowsFromMarkdown(
+      '[first](/docs/x)\n[second](/docs/x)\n[relative](docs/x)\n[](/docs/empty)',
+    )).toEqual([
+      {
+        id: 'docs-x',
+        startPath: '/docs/x',
+        steps: [{
+          kind: 'capture',
+          label: 'capture-start',
+        }],
+        title: {
+          'en': 'first',
+          'zh-CN': 'first',
+        },
+      },
+    ])
+  })
+
+  it('dedupes and bounds capture targets', () => {
+    const ids = [
+      'target-0',
+      'target-0',
+      ...Array.from({ length: 13 }, (_, index) => `target-${index + 1}`),
+    ]
+    const targets = extractCaptureTargets(ids, 12)
+    expect(targets).toHaveLength(12)
+    expect(targets[0]?.id).toBe('target-0')
+  })
+
+  it('scans only source files and ignores dependency directories', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-import-'))
+    try {
+      await mkdir(join(directory, 'src'), { recursive: true })
+      await mkdir(join(directory, 'node_modules', 'pkg'), { recursive: true })
+      await mkdir(join(directory, 'dist'), { recursive: true })
+      await writeFile(
+        join(directory, 'src', 'App.vue'),
+        '<div data-testid="keep-target" />\n',
+        'utf8',
+      )
+      await writeFile(
+        join(directory, 'src', 'style.css'),
+        '/* data-testid="skip-css" */\n',
+        'utf8',
+      )
+      await writeFile(
+        join(directory, 'node_modules', 'pkg', 'index.js'),
+        'const x = "data-testid=skip-dep";\n',
+        'utf8',
+      )
+      await writeFile(
+        join(directory, 'dist', 'bundle.js'),
+        'const y = "data-testid=skip-dist";\n',
+        'utf8',
+      )
+      await expect(scanSourceTestIds(directory)).resolves.toEqual(['keep-target'])
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('returns no test ids when the source directory cannot be read', async () => {
+    const missing = join(tmpdir(), `content-studio-missing-${Date.now()}`)
+    await expect(scanSourceTestIds(missing)).resolves.toEqual([])
   })
 })

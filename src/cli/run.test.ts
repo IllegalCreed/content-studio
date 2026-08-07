@@ -91,6 +91,17 @@ describe('content-studio CLI', () => {
         }),
         'utf8',
       )
+      await writeFile(
+        join(sourceDirectory, 'README.md'),
+        '# Demo\n- [演示指南](/docs/guide)\n',
+        'utf8',
+      )
+      await mkdir(join(sourceDirectory, 'src'), { recursive: true })
+      await writeFile(
+        join(sourceDirectory, 'src', 'App.vue'),
+        '<button data-testid="animation-play">Play</button>\n',
+        'utf8',
+      )
       const outputPath = join(temporaryDirectory, 'project.json')
       await runCli(
         [
@@ -113,6 +124,12 @@ describe('content-studio CLI', () => {
       expect(manifest.sourceAccess).toBe('source-owned')
       expect(manifest.captureMode).toBe('deterministic')
       expect(manifest.repositoryUrl).toBe('https://github.com/acme/demo-project.git')
+      expect(manifest.captureFlows).toMatchObject([
+        { id: 'docs-guide', startPath: '/docs/guide' },
+      ])
+      expect(manifest.captureTargets).toMatchObject([
+        { id: 'animation-play', locator: { by: 'test-id', value: 'animation-play' } },
+      ])
     }
     finally {
       await rm(temporaryDirectory, {
