@@ -32,6 +32,7 @@ import {
 import { validateCampaign, validateProjectManifest } from '../validation'
 import { compileVideoPlan } from '../video/compile'
 import { runDoctor } from './doctor'
+import { runProjectCommand } from './project'
 
 export interface CliRuntime {
   cwd: string
@@ -76,8 +77,36 @@ export async function runCli(
     && command !== 'mcp'
     && command !== 'doctor'
     && command !== 'validate'
+    && command !== 'project'
   ) {
     throw new Error(`Unknown command: ${command}`)
+  }
+
+  if (command === 'project') {
+    const subcommand = arguments_[1]
+    if (subcommand !== 'import' && subcommand !== 'init')
+      throw new Error('project requires a subcommand: import | init')
+    const options = parseOptions(
+      arguments_.slice(2),
+      subcommand === 'import'
+        ? new Set([
+            'canonical-url',
+            'locale',
+            'name',
+            'out',
+            'repository-url',
+            'source',
+          ])
+        : new Set([
+            'locale',
+            'name',
+            'out',
+            'project-id',
+            'repository-url',
+            'url',
+          ]),
+    )
+    return runProjectCommand(subcommand, options, runtime)
   }
 
   const isMcp = command === 'mcp'
@@ -276,6 +305,8 @@ function renderHelp(): string {
     'content-studio mcp --http --project <project.json> [--campaign <campaign.json>] [--db <path>] [--port <11002>]',
     'content-studio doctor --project <project.json> [--db <path>]',
     'content-studio validate --project <project.json> --campaign <campaign.json>',
+    'content-studio project import --source <directory> --out <project.json> [--repository-url <url>] [--canonical-url <url>] [--name <name>]',
+    'content-studio project init --name <name> --url <site-url> --out <project.json> [--repository-url <url>] [--project-id <id>]',
   ].join('\n')
 }
 

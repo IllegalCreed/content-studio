@@ -31,6 +31,26 @@ Content Studio 不假设所有项目都能用同一种方式录制。项目在�
 AI 负责“拍什么、怎么讲、镜头如何组织”；项目接入层负责“页面如何进入、哪些
 元素代表目标状态”；录制运行时负责安全执行和保留证据。
 
+## 项目导入与登记
+
+导入是“起草 → 确认 → 登记”的显式流程，不是目录扫描：
+
+```text
+有源：content-studio project import --source <目录> --out project.json
+无源：content-studio project init --name <名称> --url <站点> --out project.json
+  → 工作台“导入项目”或安装器确认清单
+    → POST /api/v1/registry/projects 登记
+      → GET /api/v1/projects 可见
+```
+
+- `project import` 读取仓库的 `package.json`/README 推断名称、仓库地址和定位草稿，
+  只生成语义定位建议，不扫描任意目录、不注入代码；
+- `project init` 生成 `web-assisted` 草稿，`captureMode: assisted`、
+  `repeatability: low`；
+- 两种模式都可以在工作台粘贴/上传 `project.json`，或通过引导表单重建草稿；
+- 登记端点复用项目清单校验，不接收任意脚本、命令或选择器；登记只收录用户明确
+  确认的项目。
+
 ## 有源项目
 
 有源项目是首选模式，Algorithm Visualizer 属于这一类。

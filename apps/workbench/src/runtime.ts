@@ -16,6 +16,8 @@ import type {
   OwnerTakeoverRecord,
   ProjectAsset,
   ProjectChannelBinding,
+  ProjectManifest,
+  ProjectRecord,
   PromoteActivityArtifactInput,
   PublicationPlan,
   PublishingActivity,
@@ -73,6 +75,7 @@ export interface WorkbenchRuntime {
   project: (projectId: string) => Promise<ContentStudioProjectView>
   projects: () => Promise<ContentStudioProjectIndex>
   promoteActivityArtifact: (input: PromoteActivityArtifactInput) => Promise<ProjectAsset>
+  registerProject: (manifest: ProjectManifest) => Promise<ProjectRecord>
   reviseActivity: (input: ActivityRevisionInput) => Promise<PublishingActivity>
   recordTask: (
     projectId: string,
@@ -180,6 +183,13 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
       `/projects/${encodeURIComponent(input.projectId)}/activity-artifacts/${encodeURIComponent(input.artifactId)}/promote`,
       {
         body: JSON.stringify(input),
+        method: 'POST',
+      },
+    ),
+    registerProject: manifest => request<ProjectRecord>(
+      '/registry/projects',
+      {
+        body: JSON.stringify(manifest),
         method: 'POST',
       },
     ),

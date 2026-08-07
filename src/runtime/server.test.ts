@@ -2084,6 +2084,88 @@ describe('content studio local application server', () => {
     }
   })
 
+  it('registers an explicit project through the runtime registry endpoint', async () => {
+    const { project, snapshot } = createProject()
+    const repository = new InMemoryContentStudioRepository()
+    const handle = createContentStudioServer({
+      project,
+      repository,
+      snapshot,
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const manifest = {
+        canonicalUrl: 'https://imported.example.com/',
+        captureFlows: [],
+        facts: [],
+        locales: ['en'],
+        name: 'Imported Project',
+        projectId: 'imported-project',
+        repositoryUrl: 'https://github.com/example/imported-project',
+        schemaVersion: 1,
+        sourceAccess: 'web-assisted',
+        captureMode: 'assisted',
+        repeatability: 'low',
+        tagline: {
+          'en': 'Imported Project',
+          'zh-CN': 'Imported Project',
+        },
+      }
+      const response = await fetch(
+        `${running.baseUrl}/api/v1/registry/projects`,
+        {
+          body: JSON.stringify(manifest),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        captureMode: 'assisted',
+        projectId: 'imported-project',
+        repeatability: 'low',
+        sourceAccess: 'web-assisted',
+      })
+
+      const indexResponse = await fetch(`${running.baseUrl}/api/v1/projects`)
+      const index = await indexResponse.json() as {
+        projects: Array<{ project: { projectId: string } }>
+      }
+      expect(index.projects.map(entry => entry.project.projectId))
+        .toContain('imported-project')
+    }
+    finally {
+      await handle.close()
+    }
+  })
+
+  it('rejects a registry registration with an invalid manifest', async () => {
+    const { project, snapshot } = createProject()
+    const repository = new InMemoryContentStudioRepository()
+    const handle = createContentStudioServer({
+      project,
+      repository,
+      snapshot,
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const response = await fetch(
+        `${running.baseUrl}/api/v1/registry/projects`,
+        {
+          body: JSON.stringify({ projectId: 'missing-fields' }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(response.status).toBe(400)
+    }
+    finally {
+      await handle.close()
+    }
+  })
+
   it('serves a sanitized cross-project execution view', async () => {
     const { project, snapshot } = createProject()
     const secondProject = createProject('project-b')

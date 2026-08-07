@@ -70,6 +70,7 @@ import {
   TaskStateError,
 } from '../jobs/task'
 import { ProductionWorker } from '../jobs/worker'
+import { createProjectRecord } from '../project/record'
 import {
   ProjectPreviewAdapterRegistry,
 } from '../recording/adapter-registry'
@@ -84,7 +85,10 @@ import {
   classifyStorageRetention,
   evaluateStorageRetention,
 } from '../storage/retention'
-import { assertNoSensitiveKeys } from '../validation'
+import {
+  assertNoSensitiveKeys,
+  validateProjectManifest,
+} from '../validation'
 import { validateVideoRecordingProfile } from '../video/recording-config'
 import { productionForProject } from './production-options'
 
@@ -227,6 +231,7 @@ export function createContentStudioServer(
       request,
       response,
       application.service,
+      application.repository,
       options.project.projectId,
       {
         dependencies: production,
@@ -279,6 +284,7 @@ async function handleRequest(
   request: IncomingMessage,
   response: ServerResponse,
   service: ContentStudioApplicationService,
+  repository: ContentStudioRepository,
   projectId: string,
   production: RuntimeProductionOptions,
 ): Promise<void> {
@@ -511,6 +517,27 @@ async function handleRequest(
         projects: service.listProjects(),
       }
       sendJson(response, 200, payload)
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 4
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'registry'
+      && segments[3] === 'projects'
+    ) {
+      const manifest = validateProjectManifest(await readJsonBody(request))
+      const snapshot: ProjectSnapshot = {
+        manifest,
+        projectId: manifest.projectId,
+        snapshotId: `${manifest.projectId}-snapshot-1`,
+        version: 1,
+      }
+      const record = createProjectRecord(manifest, snapshot.snapshotId)
+      registerProjectIfMissing(service, repository, record, snapshot)
+      sendJson(response, 200, record)
       return
     }
 

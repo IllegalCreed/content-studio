@@ -24,6 +24,10 @@ plugin/
 因此安装器负责在插件实例的 `${PLUGIN_DATA}` 目录写入用户确认过的项目清单
 `project.json`（对应本地安装流程里的“第一次使用时确认项目目录”）。
 
+草稿清单由导入流程生成：有源项目用 `content-studio project import --source <目录>`,
+无源项目用 `content-studio project init --name <名称> --url <站点>`；安装器写入
+`${PLUGIN_DATA}/project.json` 前应让用户在工作台“导入项目”页或对话中确认。
+
 前提：
 
 - `content-studio` 可执行文件在 PATH 上（Node.js 22+，pnpm 安装）；

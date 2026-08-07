@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -41,6 +41,97 @@ const campaign = {
 }
 
 describe('content-studio CLI', () => {
+  it('drafts a web-assisted project manifest through project init', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
+    try {
+      const outputPath = join(temporaryDirectory, 'project.json')
+      await runCli(
+        [
+          'project',
+          'init',
+          '--name',
+          'My Landing',
+          '--url',
+          'https://landing.example.com/',
+          '--out',
+          outputPath,
+        ],
+        {
+          cwd: temporaryDirectory,
+          write: () => undefined,
+        },
+      )
+      const manifest = JSON.parse(
+        await readFile(outputPath, 'utf8'),
+      ) as Record<string, unknown>
+      expect(manifest.projectId).toBe('my-landing')
+      expect(manifest.sourceAccess).toBe('web-assisted')
+      expect(manifest.captureMode).toBe('assisted')
+    }
+    finally {
+      await rm(temporaryDirectory, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
+
+  it('drafts a source-owned project manifest through project import', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
+    try {
+      const sourceDirectory = join(temporaryDirectory, 'repo')
+      await mkdir(sourceDirectory, { recursive: true })
+      await writeFile(
+        join(sourceDirectory, 'package.json'),
+        JSON.stringify({
+          name: 'demo-project',
+          description: 'Demo project',
+          homepage: 'https://demo.example.com/',
+          repository: 'https://github.com/acme/demo-project.git',
+        }),
+        'utf8',
+      )
+      const outputPath = join(temporaryDirectory, 'project.json')
+      await runCli(
+        [
+          'project',
+          'import',
+          '--source',
+          sourceDirectory,
+          '--out',
+          outputPath,
+        ],
+        {
+          cwd: temporaryDirectory,
+          write: () => undefined,
+        },
+      )
+      const manifest = JSON.parse(
+        await readFile(outputPath, 'utf8'),
+      ) as Record<string, unknown>
+      expect(manifest.projectId).toBe('demo-project')
+      expect(manifest.sourceAccess).toBe('source-owned')
+      expect(manifest.captureMode).toBe('deterministic')
+      expect(manifest.repositoryUrl).toBe('https://github.com/acme/demo-project.git')
+    }
+    finally {
+      await rm(temporaryDirectory, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
+
+  it('requires a source directory when importing a project', async () => {
+    await expect(runCli(
+      ['project', 'import', '--out', 'project.json'],
+      {
+        cwd: '/tmp',
+        write: () => undefined,
+      },
+    )).rejects.toThrow(/Missing required option: --source/)
+  })
+
   it('validates and generates a bundle through a fixed argument grammar', async () => {
     const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
     const projectPath = join(temporaryDirectory, 'project.json')

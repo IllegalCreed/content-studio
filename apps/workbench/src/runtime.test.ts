@@ -2,6 +2,43 @@ import { describe, expect, it, vi } from 'vitest'
 import { createWorkbenchRuntime } from './runtime'
 
 describe('workbench runtime client', () => {
+  it('registers a project through the runtime registry endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      captureMode: 'assisted',
+      currentSnapshotId: 'imported-snapshot-1',
+      name: 'Imported',
+      projectId: 'imported',
+      repeatability: 'low',
+      sourceAccess: 'web-assisted',
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(createWorkbenchRuntime('/api/v1').registerProject({
+      canonicalUrl: 'https://imported.example.com/',
+      captureFlows: [],
+      facts: [],
+      locales: ['en'],
+      name: 'Imported',
+      projectId: 'imported',
+      repositoryUrl: 'https://github.com/example/imported',
+      schemaVersion: 1,
+      sourceAccess: 'web-assisted',
+      captureMode: 'assisted',
+      repeatability: 'low',
+      tagline: {
+        'en': 'Imported',
+        'zh-CN': 'Imported',
+      },
+    })).resolves.toMatchObject({
+      projectId: 'imported',
+      sourceAccess: 'web-assisted',
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/registry/projects',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
   it('reads the sanitized cross-project execution view', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       projectViews: [],

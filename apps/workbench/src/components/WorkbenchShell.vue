@@ -121,6 +121,14 @@ function toggleProjectPicker(): void {
           <span>{{ String(index + 1).padStart(2, '0') }}</span>
           {{ module.label }}
         </RouterLink>
+        <RouterLink
+          class="import-project-link"
+          data-testid="import-project-link"
+          to="/import-project"
+        >
+          <span>＋</span>
+          导入项目
+        </RouterLink>
       </nav>
 
       <nav class="project-nav" aria-label="当前项目">

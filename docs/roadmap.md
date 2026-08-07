@@ -379,6 +379,23 @@ Runtime 同一套接管控制器与可见窗口约束；通过 MCP 取消任务�
 账号或接口验证码，可通过确定性语义动作直接自动化登录，不经过人工接管；人工接管
 面向自动化走不通的场景。
 
+### V0.3.3b 项目导入与显式登记
+
+- [x] `content-studio project import` 从有源目录起草项目清单（`package.json`/README
+      推断名称、仓库地址和定位草稿），只生成语义定位建议，不扫描任意目录。
+- [x] `content-studio project init` 生成 `web-assisted` 草稿，默认
+      `captureMode: assisted`、`repeatability: low`。
+- [x] Runtime 提供显式确认的 `POST /api/v1/registry/projects` 登记端点，复用项目
+      清单校验，不接收任意脚本、命令或选择器；重复登记同一快照幂等。
+- [x] 工作台“导入项目”页支持引导表单和粘贴/上传 `project.json` 两种方式，登记前
+      展示清单摘要并要求确认。
+- [x] 插件安装契约把用户确认后的清单写入 `${PLUGIN_DATA}/project.json`，接上
+      `mcp.json` 的 stdio `--project` 绑定。
+
+2026-08-07 项目导入与登记切片已完成：CLI 起草、Runtime 登记端点和工作台导入页共用
+同一条“草稿 → 确认 → 登记”链；`GET /api/v1/projects` 索引在登记后立即可见。导入
+流程不改变“项目注册必须用户明确确认”的边界，登记端点只接收合法项目清单。
+
 ### V0.3.4 真实 Vue 工作台
 
 - [x] 建立最小 Vue 3 + TypeScript 控制面。

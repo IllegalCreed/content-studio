@@ -1,5 +1,6 @@
 import { createMemoryHistory, createRouter, createWebHistory } from 'vue-router'
 import ActivityDetailPage from './pages/ActivityDetailPage.vue'
+import ProjectImportPage from './pages/ProjectImportPage.vue'
 import WorkbenchApp from './WorkbenchApp.vue'
 
 const routes = [
@@ -10,6 +11,10 @@ const routes = [
   {
     component: ActivityDetailPage,
     path: '/project/:projectId/activities/:activityId',
+  },
+  {
+    component: ProjectImportPage,
+    path: '/import-project',
   },
   {
     component: ActivityDetailPage,
