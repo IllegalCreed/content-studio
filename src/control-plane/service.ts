@@ -1148,6 +1148,7 @@ export class ContentStudioApplicationService {
     this.requireActivity(input.projectId, input.activityId)
     return this.repository.saveActivityArtifact({
       ...input,
+      relativePath: toPortableRelativePath(input.relativePath),
       version: 1,
     })
   }
@@ -1580,4 +1581,8 @@ function clone<T>(value: T): T {
 
 function cloneOrUndefined<T>(value: T | undefined): T | undefined {
   return value === undefined ? undefined : clone(value)
+}
+
+function toPortableRelativePath(relativePath: string): string {
+  return relativePath.replace(/\\/g, '/')
 }

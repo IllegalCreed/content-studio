@@ -1322,6 +1322,29 @@ describe('content studio application service', () => {
     })])
   })
 
+  it('normalizes stored artifact relative paths to portable forward slashes', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'project-a')
+    enableYouTube(service, 'project-a')
+    const activity = createActivity(service)
+
+    service.createActivityArtifact({
+      activityId: activity.activityId,
+      artifactId: 'artifact-windows',
+      kind: 'video',
+      projectId: 'project-a',
+      relativePath: 'composed\\final.webm',
+      sha256: 'a'.repeat(64),
+    })
+
+    expect(
+      repository.listActivityArtifacts('project-a', activity.activityId),
+    ).toEqual([expect.objectContaining({
+      relativePath: 'composed/final.webm',
+    })])
+  })
+
   it('saves an activity content pack after preflighting all channel versions', () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)
