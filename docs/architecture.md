@@ -117,7 +117,9 @@ Content Studio Agent Plugin 是 AI 宿主入口，遵循 Agent Plugins 1.0 包�
 （有源）和 `content-studio project init`（无源）只负责起草项目清单，用户确认后才
 登记。应用启动时可以通过显式的 `additionalProjects` 清单登记多个项目；运行中的
 Runtime 提供显式确认的 `POST /api/v1/registry/projects` 登记端点，工作台“导入项目”
-页面和安装器都走同一条登记链。`GET /api/v1/projects` 返回轻量的跨项目索引（项目
+页面和安装器都走同一条登记链。登记端点对同一项目采用快照版本语义：清单内容不变
+时幂等返回，内容变化时递增快照版本并更新项目记录，因此重导入不会静默丢弃更新。
+`GET /api/v1/projects` 返回轻量的跨项目索引（项目
 记录、快照版本、预览就绪、活动/任务数量和已启用渠道），工作台用它做总览和项目切换；
 读取索引不会扫描项目目录，也不会把不透明账号引用或凭据暴露给全局页面。全局总览和
 全局任务面板另读 `GET /api/v1/global`，它只返回显式项目的

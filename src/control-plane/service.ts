@@ -75,6 +75,7 @@ export interface ContentStudioRepository {
   saveChannelContent: (content: ChannelContent) => ChannelContent
   saveContentGroup: (group: ContentGroup) => ContentGroup
   saveProject: (project: ProjectRecord) => ProjectRecord
+  updateProject: (project: ProjectRecord) => ProjectRecord
   saveProjectAsset: (asset: ProjectAsset) => ProjectAsset
   saveProjectChannelBinding: (
     binding: ProjectChannelBinding,
@@ -183,6 +184,13 @@ implements ContentStudioRepository {
   saveProject(project: ProjectRecord): ProjectRecord {
     if (this.projects.has(project.projectId))
       throw new RecordConflictError(project.projectId, 1)
+    this.projects.set(project.projectId, clone(project))
+    return clone(project)
+  }
+
+  updateProject(project: ProjectRecord): ProjectRecord {
+    if (!this.projects.has(project.projectId))
+      throw new RecordNotFoundError('Project', project.projectId)
     this.projects.set(project.projectId, clone(project))
     return clone(project)
   }
@@ -725,6 +733,20 @@ export class ContentStudioApplicationService {
     }
     this.repository.saveProjectSnapshot(snapshot)
     return this.repository.saveProject(project)
+  }
+
+  updateProjectRegistration(
+    project: ProjectRecord,
+    snapshot: ProjectSnapshot,
+  ): ProjectRecord {
+    if (
+      project.projectId !== snapshot.projectId
+      || project.currentSnapshotId !== snapshot.snapshotId
+    ) {
+      throw new Error('Project and snapshot ownership must match')
+    }
+    this.repository.saveProjectSnapshot(snapshot)
+    return this.repository.updateProject(project)
   }
 
   bindProjectChannel(

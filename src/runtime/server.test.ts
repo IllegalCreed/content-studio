@@ -2166,6 +2166,79 @@ describe('content studio local application server', () => {
     }
   })
 
+  it('updates an existing registration with a new snapshot version', async () => {
+    const { project, snapshot } = createProject()
+    const repository = new InMemoryContentStudioRepository()
+    const handle = createContentStudioServer({
+      project,
+      repository,
+      snapshot,
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const identicalResponse = await fetch(
+        `${running.baseUrl}/api/v1/registry/projects`,
+        {
+          body: JSON.stringify(snapshot.manifest),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(identicalResponse.status).toBe(200)
+      expect(await identicalResponse.json()).toMatchObject({
+        currentSnapshotId: 'project-a-snapshot-1',
+      })
+
+      const updatedManifest = {
+        ...snapshot.manifest,
+        facts: [{
+          id: 'demo-fact',
+          text: {
+            'en': 'Demo fact',
+            'zh-CN': '演示事实',
+          },
+        }],
+      }
+      const updateResponse = await fetch(
+        `${running.baseUrl}/api/v1/registry/projects`,
+        {
+          body: JSON.stringify(updatedManifest),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(updateResponse.status).toBe(200)
+      expect(await updateResponse.json()).toMatchObject({
+        currentSnapshotId: 'project-a-snapshot-2',
+      })
+
+      const indexResponse = await fetch(`${running.baseUrl}/api/v1/projects`)
+      const index = await indexResponse.json() as {
+        projects: Array<{
+          project: { projectId: string }
+          snapshotId: string
+          snapshotVersion: number
+        }>
+      }
+      expect(index.projects[0]).toMatchObject({
+        snapshotId: 'project-a-snapshot-2',
+        snapshotVersion: 2,
+      })
+
+      const viewResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a`,
+      )
+      const view = await viewResponse.json() as {
+        project: { currentSnapshotId: string }
+      }
+      expect(view.project.currentSnapshotId).toBe('project-a-snapshot-2')
+    }
+    finally {
+      await handle.close()
+    }
+  })
+
   it('serves a sanitized cross-project execution view', async () => {
     const { project, snapshot } = createProject()
     const secondProject = createProject('project-b')

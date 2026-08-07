@@ -35,6 +35,8 @@ const SOURCE_EXTENSIONS = new Set([
 const TEST_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
 const MARKDOWN_LINK_PATTERN = /\[([^\]]+)\]\((\/[^)#\s]+)(?:#[^)]*)?\)/g
 const TEST_ID_PATTERN_SOURCE = /data-testid=(?:"([^"]+)"|'([^']+)')/g
+const ROUTE_PATH_PATTERN = /path\s*[:=]\s*['"`](\/[^'"`?#]+)['"`]/g
+const LOCALE_SEGMENT_PATTERN = /^[a-z]{2}(?:-[a-z0-9]{2,})?$/i
 
 export interface SourceInspection {
   canonicalUrl: string
@@ -103,12 +105,17 @@ export async function draftSourceOwnedProject(
   const inspection = await inspectSourceDirectory(options.sourceDirectory)
   const locales = options.locales ?? DEFAULT_LOCALES
   const name = options.name ?? inspection.name
-  const [readme, testIds] = await Promise.all([
+  const [readme, sourceFiles] = await Promise.all([
     readReadme(options.sourceDirectory),
-    scanSourceTestIds(options.sourceDirectory),
+    scanSourceFiles(options.sourceDirectory),
   ])
-  const captureFlows = extractCaptureFlowsFromMarkdown(readme)
-  const captureTargets = extractCaptureTargets(testIds)
+  const captureFlows = mergeCaptureFlows([
+    ...extractCaptureFlowsFromMarkdown(readme),
+    ...extractCaptureFlowsFromSourceFiles(sourceFiles),
+  ])
+  const captureTargets = extractCaptureTargets(
+    extractTestIds(sourceFiles),
+  )
   return {
     schemaVersion: 1,
     projectId: toProjectId(name),
@@ -208,7 +215,72 @@ export function extractCaptureTargets(
   return targets
 }
 
+export function extractCaptureFlowsFromSourceFiles(
+  files: string[],
+  max = MAX_CAPTURE_FLOWS,
+): CaptureFlow[] {
+  const seen = new Set<string>()
+  const paths: string[] = []
+  for (const file of files) {
+    for (const match of file.matchAll(ROUTE_PATH_PATTERN)) {
+      const path = match[1] ?? ''
+      const id = toProjectId(path)
+      const segments = path.split('/').filter(Boolean)
+      const localeRoot = segments.length === 1
+        && LOCALE_SEGMENT_PATTERN.test(segments[0] ?? '')
+      if (
+        path === ''
+        || id === 'project'
+        || path.includes(':')
+        || path.includes('$')
+        || path === '/'
+        || localeRoot
+        || seen.has(id)
+      ) {
+        continue
+      }
+      seen.add(id)
+      paths.push(path)
+    }
+  }
+  paths.sort((left, right) => {
+    const leftSegments = left.split('/').filter(Boolean).length
+    const rightSegments = right.split('/').filter(Boolean).length
+    return leftSegments - rightSegments || left.localeCompare(right)
+  })
+  return paths.slice(0, max).map(path => ({
+    id: toProjectId(path),
+    title: localized(humanizePath(path)),
+    startPath: path,
+    steps: [{
+      kind: 'capture',
+      label: 'capture-start',
+    }],
+  }))
+}
+
+export function extractTestIds(files: string[]): string[] {
+  const testIds: string[] = []
+  const idSet = new Set<string>()
+  for (const file of files) {
+    for (const match of file.matchAll(TEST_ID_PATTERN_SOURCE)) {
+      const id = (match[1] ?? match[2] ?? '').trim()
+      if (id !== '' && !idSet.has(id)) {
+        idSet.add(id)
+        testIds.push(id)
+      }
+    }
+  }
+  return testIds
+}
+
 export async function scanSourceTestIds(
+  sourceDirectory: string,
+): Promise<string[]> {
+  return extractTestIds(await scanSourceFiles(sourceDirectory))
+}
+
+export async function scanSourceFiles(
   sourceDirectory: string,
 ): Promise<string[]> {
   let entries: Dirent[]
@@ -223,8 +295,7 @@ export async function scanSourceTestIds(
   }
   const sorted = [...entries].sort((left, right) =>
     left.name.localeCompare(right.name))
-  const testIds: string[] = []
-  const idSet = new Set<string>()
+  const files: string[] = []
   let scannedFiles = 0
   for (const entry of sorted) {
     if (!entry.isFile() || scannedFiles >= MAX_SCANNED_FILES)
@@ -244,15 +315,9 @@ export async function scanSourceTestIds(
     catch {
       continue
     }
-    for (const match of content.matchAll(TEST_ID_PATTERN_SOURCE)) {
-      const id = (match[1] ?? match[2] ?? '').trim()
-      if (id !== '' && !idSet.has(id)) {
-        idSet.add(id)
-        testIds.push(id)
-      }
-    }
+    files.push(content)
   }
-  return testIds
+  return files
 }
 
 function localized(text: string): LocalizedText {
@@ -308,6 +373,25 @@ function humanizeTestId(testId: string): string {
       ? word.charAt(0).toUpperCase() + word.slice(1)
       : word)
     .join(' ')
+}
+
+function humanizePath(path: string): string {
+  const last = path.split('/').filter(Boolean).at(-1) ?? path
+  return humanizeTestId(toProjectId(last))
+}
+
+function mergeCaptureFlows(flows: CaptureFlow[]): CaptureFlow[] {
+  const seen = new Set<string>()
+  const merged: CaptureFlow[] = []
+  for (const flow of flows) {
+    if (seen.has(flow.id))
+      continue
+    seen.add(flow.id)
+    merged.push(flow)
+    if (merged.length >= MAX_CAPTURE_FLOWS)
+      break
+  }
+  return merged
 }
 
 function resolveRepositoryUrl(

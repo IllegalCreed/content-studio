@@ -150,6 +150,32 @@ export class SqliteContentStudioRepository
     )
   }
 
+  override updateProject(project: ProjectRecord): ProjectRecord {
+    const saved = super.updateProject(project)
+    const recordType = CONTENT_STUDIO_RECORD_TYPES.project
+    const recordIdValue = recordId(recordType, saved)
+    this.database
+      .prepare(`
+        DELETE FROM content_studio_records
+        WHERE record_type = ? AND record_id = ?
+      `)
+      .run(recordType, recordIdValue)
+    this.database
+      .prepare(`
+        INSERT INTO content_studio_records
+          (record_type, record_id, version, project_id, payload)
+        VALUES (?, ?, ?, ?, ?)
+      `)
+      .run(
+        recordType,
+        recordIdValue,
+        recordVersion(saved),
+        saved.projectId,
+        JSON.stringify(saved),
+      )
+    return saved
+  }
+
   override saveProjectAsset(asset: ProjectAsset): ProjectAsset {
     return this.persist(
       CONTENT_STUDIO_RECORD_TYPES.projectAsset,

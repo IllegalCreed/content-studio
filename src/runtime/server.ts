@@ -529,15 +529,39 @@ async function handleRequest(
       && segments[3] === 'projects'
     ) {
       const manifest = validateProjectManifest(await readJsonBody(request))
+      const existing = repository.getProject(manifest.projectId)
+      if (existing !== undefined) {
+        const current = repository.getProjectSnapshot(
+          existing.projectId,
+          existing.currentSnapshotId,
+        )
+        if (
+          current !== undefined
+          && canonicalJson(current.manifest) === canonicalJson(manifest)
+        ) {
+          sendJson(response, 200, existing)
+          return
+        }
+      }
+      const version = existing === undefined
+        ? 1
+        : (
+            repository.getProjectSnapshot(
+              existing.projectId,
+              existing.currentSnapshotId,
+            )?.version ?? 0
+          ) + 1
       const snapshot: ProjectSnapshot = {
         manifest,
         projectId: manifest.projectId,
-        snapshotId: `${manifest.projectId}-snapshot-1`,
-        version: 1,
+        snapshotId: `${manifest.projectId}-snapshot-${version}`,
+        version,
       }
       const record = createProjectRecord(manifest, snapshot.snapshotId)
-      registerProjectIfMissing(service, repository, record, snapshot)
-      sendJson(response, 200, record)
+      const saved = existing === undefined
+        ? service.registerProject(record, snapshot)
+        : service.updateProjectRegistration(record, snapshot)
+      sendJson(response, 200, saved)
       return
     }
 
@@ -1916,6 +1940,17 @@ function sendJson(
     'content-length': Buffer.byteLength(body),
   })
   response.end(body)
+}
+
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item) => {
+    if (item === null || typeof item !== 'object' || Array.isArray(item))
+      return item
+    return Object.fromEntries(
+      Object.entries(item as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right)),
+    )
+  })
 }
 
 function recordingArtifactContentType(path: string): string {

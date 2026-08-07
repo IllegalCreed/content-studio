@@ -80,6 +80,58 @@ function records(projectId: string): {
 }
 
 describe('sQLite control-plane repository', () => {
+  it('persists a project record update and keeps the latest snapshot after reopen', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-sqlite-project-'))
+    const databasePath = join(temporaryDirectory, 'state.sqlite')
+
+    try {
+      const firstRepository = new SqliteContentStudioRepository(databasePath)
+      const first = records('project-a')
+      firstRepository.saveProjectSnapshot(first.snapshot)
+      firstRepository.saveProject(first.project)
+      const updatedSnapshot: ProjectSnapshot = {
+        ...first.snapshot,
+        manifest: {
+          ...first.snapshot.manifest,
+          facts: [{
+            id: 'demo-fact',
+            text: {
+              'en': 'Demo fact',
+              'zh-CN': '演示事实',
+            },
+          }],
+        },
+        snapshotId: 'project-a-snapshot-2',
+        version: 2,
+      }
+      firstRepository.saveProjectSnapshot(updatedSnapshot)
+      firstRepository.updateProject({
+        ...first.project,
+        currentSnapshotId: updatedSnapshot.snapshotId,
+      })
+      firstRepository.close()
+
+      const reopenedRepository = new SqliteContentStudioRepository(databasePath)
+      expect(reopenedRepository.getProject('project-a')).toMatchObject({
+        currentSnapshotId: 'project-a-snapshot-2',
+      })
+      expect(reopenedRepository.getProjectSnapshot(
+        'project-a',
+        'project-a-snapshot-2',
+      )?.manifest.facts).toEqual([{
+        id: 'demo-fact',
+        text: {
+          'en': 'Demo fact',
+          'zh-CN': '演示事实',
+        },
+      }])
+      reopenedRepository.close()
+    }
+    finally {
+      await rm(temporaryDirectory, { recursive: true, force: true })
+    }
+  })
+
   it('replaces a project channel binding and persists the new account after reopen', async () => {
     const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-sqlite-binding-'))
     const databasePath = join(temporaryDirectory, 'state.sqlite')

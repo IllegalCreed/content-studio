@@ -7,6 +7,7 @@ import {
   draftSourceOwnedProject,
   draftWebAssistedProject,
   extractCaptureFlowsFromMarkdown,
+  extractCaptureFlowsFromSourceFiles,
   extractCaptureTargets,
   inspectSourceDirectory,
   scanSourceTestIds,
@@ -291,5 +292,54 @@ describe('project import drafts', () => {
   it('returns no test ids when the source directory cannot be read', async () => {
     const missing = join(tmpdir(), `content-studio-missing-${Date.now()}`)
     await expect(scanSourceTestIds(missing)).resolves.toEqual([])
+  })
+
+  it('extracts capture flows from route definitions and prefers shallow paths', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-import-'))
+    try {
+      await mkdir(join(directory, 'src', 'router'), { recursive: true })
+      await writeFile(
+        join(directory, 'src', 'router', 'index.ts'),
+        [
+          `const routes = [`,
+          `  { path: '/', component: Home },`,
+          `  { path: '/en' },`,
+          `  { path: '/docs/quick-sort', name: 'quick-sort' },`,
+          `  { path: '/en/docs/quick-sort' },`,
+          `  { path: '/docs/:id', component: Detail },`,
+          `  { path: \`/docs/\${definition.key}\` },`,
+          `  { path: '/playground', component: Playground },`,
+          `]`,
+        ].join('\n'),
+        'utf8',
+      )
+      const manifest = await draftSourceOwnedProject({
+        canonicalUrl: 'https://demo.example.com/',
+        repositoryUrl: 'https://example.invalid/',
+        sourceDirectory: directory,
+      })
+      expect(validateProjectManifest(manifest)).toEqual(manifest)
+      expect(manifest.captureFlows.map(flow => flow.startPath)).toEqual([
+        '/playground',
+        '/docs/quick-sort',
+        '/en/docs/quick-sort',
+      ])
+      expect(manifest.captureFlows[1]?.title).toEqual({
+        'en': 'Quick sort',
+        'zh-CN': 'Quick sort',
+      })
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('bounds route-derived capture flows', () => {
+    const files = [Array.from(
+      { length: 10 },
+      (_, index) => `{ path: '/docs/page-${index}' }`,
+    ).join('\n')]
+    const flows = extractCaptureFlowsFromSourceFiles(files)
+    expect(flows).toHaveLength(8)
   })
 })

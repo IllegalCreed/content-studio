@@ -16,6 +16,7 @@ import {
   ContentStudioApplicationService,
   InMemoryContentStudioRepository,
   ProjectScopeError,
+  RecordNotFoundError,
 } from './service'
 
 function registerProject(
@@ -168,6 +169,85 @@ function createProductionContent(
 }
 
 describe('content studio application service', () => {
+  it('updates a project registration with a bumped snapshot version', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const taskStore = new InMemoryExecutionTaskStore()
+    const service = new ContentStudioApplicationService(repository, taskStore)
+    const first = registerProject(service, 'project-a')
+    const updatedSnapshot: ProjectSnapshot = {
+      ...first.snapshot,
+      manifest: {
+        ...first.snapshot.manifest,
+        facts: [{
+          id: 'demo-fact',
+          text: {
+            'en': 'Demo fact',
+            'zh-CN': '演示事实',
+          },
+        }],
+      },
+      snapshotId: 'project-a-snapshot-2',
+      version: 2,
+    }
+    const updatedProject: ProjectRecord = {
+      ...first.project,
+      currentSnapshotId: updatedSnapshot.snapshotId,
+    }
+
+    expect(service.updateProjectRegistration(updatedProject, updatedSnapshot))
+      .toMatchObject({ currentSnapshotId: 'project-a-snapshot-2' })
+    expect(service.getProjectView('project-a').project.currentSnapshotId)
+      .toBe('project-a-snapshot-2')
+  })
+
+  it('rejects a project registration update with mismatched ownership', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const taskStore = new InMemoryExecutionTaskStore()
+    const service = new ContentStudioApplicationService(repository, taskStore)
+    const first = registerProject(service, 'project-a')
+    const otherSnapshot: ProjectSnapshot = {
+      ...first.snapshot,
+      snapshotId: 'other-snapshot',
+    }
+    expect(() => service.updateProjectRegistration(
+      first.project,
+      otherSnapshot,
+    )).toThrow(/ownership must match/)
+  })
+
+  it('rejects updating a missing project record', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const taskStore = new InMemoryExecutionTaskStore()
+    const service = new ContentStudioApplicationService(repository, taskStore)
+    const record: ProjectRecord = {
+      captureMode: 'deterministic',
+      currentSnapshotId: 'missing-snapshot',
+      name: 'missing',
+      projectId: 'missing',
+      repeatability: 'high',
+      sourceAccess: 'source-owned',
+    }
+    expect(() => service.updateProjectRegistration(record, {
+      manifest: {
+        canonicalUrl: 'https://missing.example.com/',
+        captureFlows: [],
+        facts: [],
+        locales: ['en'],
+        name: 'missing',
+        projectId: 'missing',
+        repositoryUrl: 'https://github.com/example/missing',
+        schemaVersion: 1,
+        tagline: {
+          'en': 'missing',
+          'zh-CN': 'missing',
+        },
+      },
+      projectId: 'missing',
+      snapshotId: 'missing-snapshot',
+      version: 1,
+    })).toThrow(RecordNotFoundError)
+  })
+
   it('lists only explicitly registered projects with cross-project summaries', () => {
     const repository = new InMemoryContentStudioRepository()
     const taskStore = new InMemoryExecutionTaskStore()
