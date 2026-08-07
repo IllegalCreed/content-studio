@@ -1,0 +1,15 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "content-studio",
+  "version": "0.1.0",
+  "description": "本地优先的跨项目 AI 内容生产控制平面：围绕发布活动编排文章、图片、视频方案，跟踪制作任务、人工接管和发布回执。使用 Skills 和本地 MCP Server 让 AI 宿主在用户确认后推进内容生产。",
+  "license": "MIT",
+  "keywords": [
+    "content-production",
+    "mcp",
+    "local-first",
+    "video-recording",
+    "publishing",
+    "content-studio"
+  ]
+}
