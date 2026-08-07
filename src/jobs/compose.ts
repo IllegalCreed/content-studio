@@ -14,9 +14,10 @@ import { dirname } from 'node:path'
 import { composeVideoClips } from '../media/compose'
 
 /**
- * Default composition for a production task: concatenates the scene clips of
- * a successful recording into one final channel variant and returns its
- * checksum and size for artifact registration.
+ * Default composition for a production task: crossfades the scene clips of a
+ * successful recording into one final channel variant with a short transition
+ * (400 ms by default, disabled when 0) and returns its checksum and size for
+ * artifact registration.
  */
 export async function composeProductionVideoClips(
   input: ComposeProductionInput,
@@ -34,6 +35,7 @@ export async function composeProductionVideoClips(
       : { normalizeLoudness: input.normalizeLoudness }),
     ...(input.outputSize === undefined ? {} : { outputSize: input.outputSize }),
     outputPath: input.outputPath,
+    transitionDurationMs: input.transitionDurationMs ?? 400,
   })
   const info = await stat(input.outputPath)
   const sha256 = await hashFile(input.outputPath)

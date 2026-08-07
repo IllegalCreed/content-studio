@@ -988,6 +988,7 @@ export interface ComposeProductionInput {
   normalizeLoudness?: boolean
   outputPath: string
   outputSize?: VideoViewport
+  transitionDurationMs?: number
 }
 
 export interface ComposeProductionResult {

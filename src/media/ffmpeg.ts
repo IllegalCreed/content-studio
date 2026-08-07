@@ -83,3 +83,24 @@ export async function probeVideoSize(
     width: Number(match[1]),
   }
 }
+
+export async function probeMediaHasAudio(
+  filePath: string,
+  ffmpegPath = resolveFfmpegPath(),
+): Promise<boolean> {
+  let stderr = ''
+  try {
+    const result = await execFile(
+      ffmpegPath,
+      ['-i', filePath, '-f', 'null', '-'],
+      { maxBuffer: 4 * 1024 * 1024 },
+    )
+    stderr = String(result.stderr)
+  }
+  catch (error: unknown) {
+    stderr = error instanceof Error && 'stderr' in error
+      ? String((error as { stderr: string | Buffer }).stderr)
+      : ''
+  }
+  return /Stream #.*: Audio:/u.test(stderr)
+}

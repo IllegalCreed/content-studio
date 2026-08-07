@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest'
 import { composeVideoClips } from './compose'
 import {
   probeMediaDuration,
+  probeMediaHasAudio,
   probeVideoSize,
   resolveFfmpegPath,
 } from './ffmpeg'
@@ -267,6 +268,175 @@ describe.skipIf(!ffmpegIsAvailable)('ffmpeg composition engine', () => {
       await expect(probeMediaDuration(notMedia))
         .rejects
         .toThrow(/could not probe media duration/i)
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('crossfades ordered clips with a short transition', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
+    try {
+      const first = await makeWebmClip(directory, 'first.webm', 0.5)
+      const second = await makeWebmClip(directory, 'second.webm', 0.5)
+      const outputPath = join(directory, 'crossfaded.webm')
+
+      const result = await composeVideoClips({
+        clips: [first, second],
+        outputPath,
+        transitionDurationMs: 400,
+      })
+
+      expect(result.reencoded).toBe(true)
+      expect(result.durationSeconds).toBeGreaterThan(0.5)
+      expect(result.durationSeconds).toBeLessThan(0.7)
+      await expect(access(outputPath)).resolves.toBeUndefined()
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('crossfades clips that carry audio with acrossfade', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
+    try {
+      const first = await makeAudioWebmClip(directory, 'first.webm', 0.5)
+      const second = await makeAudioWebmClip(directory, 'second.webm', 0.5)
+      const outputPath = join(directory, 'crossfaded-audio.webm')
+
+      const result = await composeVideoClips({
+        clips: [first, second],
+        outputPath,
+        transitionDurationMs: 400,
+      })
+
+      expect(result.reencoded).toBe(true)
+      expect(result.durationSeconds).toBeGreaterThan(0.5)
+      expect(result.durationSeconds).toBeLessThan(0.7)
+      await expect(probeMediaHasAudio(outputPath)).resolves.toBe(true)
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('rejects a transition that is not shorter than every clip', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
+    try {
+      const first = await makeWebmClip(directory, 'first.webm', 0.5)
+      const second = await makeWebmClip(directory, 'second.webm', 0.5)
+      const outputPath = join(directory, 'crossfaded.webm')
+
+      await expect(composeVideoClips({
+        clips: [first, second],
+        outputPath,
+        transitionDurationMs: 600,
+      })).rejects.toThrow(/shorter than every clip/i)
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('rejects a negative transition duration', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
+    try {
+      const first = await makeWebmClip(directory, 'first.webm', 0.5)
+      const outputPath = join(directory, 'crossfaded.webm')
+
+      await expect(composeVideoClips({
+        clips: [first],
+        outputPath,
+        transitionDurationMs: -1,
+      })).rejects.toThrow(/must not be negative/i)
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('keeps the fast copy path for a single clip even with a transition', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
+    try {
+      const first = await makeWebmClip(directory, 'first.webm', 0.5)
+      const outputPath = join(directory, 'single.webm')
+
+      const result = await composeVideoClips({
+        clips: [first],
+        outputPath,
+        transitionDurationMs: 400,
+      })
+
+      expect(result.reencoded).toBe(false)
+      expect(result.durationSeconds).toBeGreaterThan(0.4)
+      expect(result.durationSeconds).toBeLessThan(0.6)
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('combines transition with target size scaling', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
+    try {
+      const first = await makeWebmClip(directory, 'first.webm', 0.5)
+      const second = await makeWebmClip(directory, 'second.webm', 0.5)
+      const outputPath = join(directory, 'crossfaded-sized.webm')
+
+      const result = await composeVideoClips({
+        clips: [first, second],
+        outputPath,
+        outputSize: { height: 480, width: 640 },
+        transitionDurationMs: 400,
+      })
+
+      expect(result.reencoded).toBe(true)
+      expect(result.durationSeconds).toBeGreaterThan(0.5)
+      expect(result.durationSeconds).toBeLessThan(0.7)
+      await expect(probeVideoSize(outputPath)).resolves.toEqual({
+        height: 480,
+        width: 640,
+      })
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('normalizes loudness while crossfading audio clips', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
+    try {
+      const first = await makeAudioWebmClip(directory, 'first.webm', 0.5)
+      const second = await makeAudioWebmClip(directory, 'second.webm', 0.5)
+      const outputPath = join(directory, 'crossfaded-loud.webm')
+
+      const result = await composeVideoClips({
+        clips: [first, second],
+        normalizeLoudness: true,
+        outputPath,
+        transitionDurationMs: 400,
+      })
+
+      expect(result.reencoded).toBe(true)
+      expect(result.durationSeconds).toBeGreaterThan(0.5)
+      expect(result.durationSeconds).toBeLessThan(0.7)
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('probes whether media files carry audio', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
+    try {
+      const silent = await makeWebmClip(directory, 'silent.webm', 0.5)
+      const withAudio = await makeAudioWebmClip(directory, 'audio.webm', 0.5)
+      const notMedia = join(directory, 'notes.txt')
+      await writeFile(notMedia, 'plain text')
+
+      await expect(probeMediaHasAudio(silent)).resolves.toBe(false)
+      await expect(probeMediaHasAudio(withAudio)).resolves.toBe(true)
+      await expect(probeMediaHasAudio(notMedia)).resolves.toBe(false)
     }
     finally {
       await rm(directory, { force: true, recursive: true })

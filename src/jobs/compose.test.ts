@@ -54,6 +54,13 @@ async function makeClip(
 }
 
 describe.skipIf(!ffmpegIsAvailable)('production video composition', () => {
+  it('rejects an empty clip list', async () => {
+    await expect(composeProductionVideoClips({
+      clipPaths: [],
+      outputPath: join('/tmp', 'content-studio-compose-prod', 'final.webm'),
+    })).rejects.toThrow(/at least one clip/i)
+  })
+
   it('composes recording clips into a final variant with a checksum', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-prod-'))
     try {
@@ -69,6 +76,30 @@ describe.skipIf(!ffmpegIsAvailable)('production video composition', () => {
       expect(result.artifactPath).toBe(outputPath)
       expect(result.sha256).toMatch(/^[a-f0-9]{64}$/)
       expect(result.sizeBytes).toBeGreaterThan(0)
+      expect(result.reencoded).toBe(true)
+      expect(result.durationSeconds).toBeGreaterThan(0.5)
+      expect(result.durationSeconds).toBeLessThan(0.7)
+      await expect(access(outputPath)).resolves.toBeUndefined()
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('composes without a transition when explicitly disabled', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-prod-'))
+    try {
+      const first = await makeClip(directory, 'first.webm', 0.5)
+      const second = await makeClip(directory, 'second.webm', 0.5)
+      const outputPath = join(directory, 'composed', 'final.webm')
+
+      const result = await composeProductionVideoClips({
+        clipPaths: [first, second],
+        outputPath,
+        transitionDurationMs: 0,
+      })
+
+      expect(result.reencoded).toBe(false)
       expect(result.durationSeconds).toBeGreaterThan(0.8)
       expect(result.durationSeconds).toBeLessThan(1.2)
       await expect(access(outputPath)).resolves.toBeUndefined()
