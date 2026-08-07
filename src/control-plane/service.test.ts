@@ -9,7 +9,7 @@ import type {
   ProjectSnapshot,
   RecorderAttemptReceipt,
 } from '../types'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { InMemoryExecutionTaskStore } from '../jobs/task'
 import {
@@ -1306,7 +1306,7 @@ describe('content studio application service', () => {
     expect(result.task.status).toBe('composing')
     expect(composeInputs).toEqual([{
       clipPaths: [
-        join('/tmp/content-studio-compose-register/attempt-1', 'clips/scene-001.webm'),
+        resolve('/tmp/content-studio-compose-register/attempt-1', 'clips/scene-001.webm'),
       ],
       normalizeLoudness: true,
       outputPath: join('/tmp/content-studio-compose-register', 'composed', 'final.webm'),
