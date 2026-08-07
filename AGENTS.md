@@ -60,6 +60,9 @@ project data, browser execution, and media production remain local by default.
 - Prefer small single-purpose modules and explicit return types.
 - Test files use `*.test.ts`, `describe`, and `it`.
 - Use `pnpm lint` for formatting/fixes; do not add a separate formatter.
+- Commit directly on `main` in small, focused steps. Do not keep long-lived
+  feature branches; merge milestones into `main` promptly and delete the
+  branch afterwards so the baseline stays current.
 
 ## Gates
 
