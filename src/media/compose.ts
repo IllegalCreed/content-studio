@@ -10,6 +10,10 @@ import {
 import { dirname } from 'node:path'
 import { promisify } from 'node:util'
 import {
+  COMPOSITION_AUDIO_CHANNEL_LAYOUT,
+  COMPOSITION_AUDIO_SAMPLE_RATE,
+} from '../constants'
+import {
   probeMediaDuration,
   probeMediaHasAudio,
   resolveFfmpegPath,
@@ -157,7 +161,7 @@ async function transitionCompositionArgs(
   const hasAudio = await Promise.all(
     clips.map(clip => probeMediaHasAudio(clip, ffmpegPath)),
   )
-  const allAudio = hasAudio.every(Boolean)
+  const anyAudio = hasAudio.some(Boolean)
   const parts: string[] = []
 
   let videoLabel = '0:v'
@@ -182,14 +186,36 @@ async function transitionCompositionArgs(
   }
 
   let audioLabel: string | undefined
-  if (allAudio) {
-    audioLabel = '0:a'
+  if (anyAudio) {
+    const audioLabels = hasAudio.map((clipHasAudio, index) => {
+      const duration = durations[index]!.toFixed(3)
+      const label = `a${index}`
+      if (clipHasAudio) {
+        parts.push(
+          `[${index}:a]aresample=${COMPOSITION_AUDIO_SAMPLE_RATE},`
+          + `aformat=sample_rates=${COMPOSITION_AUDIO_SAMPLE_RATE}:`
+          + `channel_layouts=${COMPOSITION_AUDIO_CHANNEL_LAYOUT},`
+          + `apad=whole_dur=${duration},atrim=duration=${duration},`
+          + `asetpts=PTS-STARTPTS[${label}]`,
+        )
+      }
+      else {
+        parts.push(
+          `anullsrc=channel_layout=${COMPOSITION_AUDIO_CHANNEL_LAYOUT}:`
+          + `sample_rate=${COMPOSITION_AUDIO_SAMPLE_RATE},`
+          + `atrim=duration=${duration},asetpts=PTS-STARTPTS[${label}]`,
+        )
+      }
+      return label
+    })
+    audioLabel = audioLabels[0]!
     for (let index = 1; index < clips.length; index++) {
       const nextLabel = index === clips.length - 1
         ? 'achained'
         : `ax${index}`
       parts.push(
-        `[${audioLabel}][${index}:a]acrossfade=d=${transitionSeconds.toFixed(3)}`
+        `[${audioLabel}][${audioLabels[index]}]`
+        + `acrossfade=d=${transitionSeconds.toFixed(3)}`
         + `[${nextLabel}]`,
       )
       audioLabel = nextLabel

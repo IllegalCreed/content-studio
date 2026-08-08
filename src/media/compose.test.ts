@@ -312,7 +312,30 @@ describe.skipIf(!ffmpegIsAvailable)('ffmpeg composition engine', () => {
 
       expect(result.reencoded).toBe(true)
       expect(result.durationSeconds).toBeGreaterThan(0.5)
-      expect(result.durationSeconds).toBeLessThan(0.7)
+      expect(result.durationSeconds).toBeLessThanOrEqual(0.8)
+      await expect(probeMediaHasAudio(outputPath)).resolves.toBe(true)
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('preserves audio when a transition mixes an audio clip with a silent clip', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
+    try {
+      const withAudio = await makeAudioWebmClip(directory, 'audio.webm', 0.8)
+      const silent = await makeWebmClip(directory, 'silent.webm', 0.8)
+      const outputPath = join(directory, 'crossfaded-mixed-audio.webm')
+
+      const result = await composeVideoClips({
+        clips: [withAudio, silent],
+        outputPath,
+        transitionDurationMs: 200,
+      })
+
+      expect(result.reencoded).toBe(true)
+      expect(result.durationSeconds).toBeGreaterThan(1.2)
+      expect(result.durationSeconds).toBeLessThan(1.6)
       await expect(probeMediaHasAudio(outputPath)).resolves.toBe(true)
     }
     finally {

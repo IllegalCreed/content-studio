@@ -79,6 +79,8 @@ export const MAX_RECORDING_ATTEMPTS = 3
 
 export const MCP_LIST_TTL_MS = 60_000
 export const MCP_RESOURCE_TTL_MS = 0
+export const COMPOSITION_AUDIO_CHANNEL_LAYOUT = 'stereo'
+export const COMPOSITION_AUDIO_SAMPLE_RATE = 48_000
 
 export const DEFAULT_STORAGE_RETENTION_POLICY = {
   activityArtifactDays: 30,
