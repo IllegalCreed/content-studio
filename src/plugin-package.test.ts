@@ -1,12 +1,10 @@
-import { readdir, readFile } from 'node:fs/promises'
+import { access, readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const pluginRoot = fileURLToPath(new URL('../plugin/', import.meta.url))
 
-const pluginSchema = 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json'
-const mcpSchema = 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json'
 const pluginNamePattern = /^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/
 const skillNamePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
@@ -43,45 +41,53 @@ function parseFrontmatter(markdown: string): {
 }
 
 describe('content studio agent plugin package', () => {
-  it('exposes a valid Agent Plugins 1.0.0 manifest', async () => {
-    const manifest = await readJson('plugin.json')
+  it('exposes the required Codex plugin manifest and companion paths', async () => {
+    const manifest = await readJson('.codex-plugin/plugin.json')
     const allowedFields = new Set([
-      '$schema',
       'author',
       'description',
-      'extensions',
       'homepage',
+      'interface',
       'keywords',
       'license',
+      'mcpServers',
       'name',
       'repository',
+      'skills',
       'version',
     ])
     for (const key of Object.keys(manifest))
       expect(allowedFields.has(key), `unknown manifest field: ${key}`).toBe(true)
-    expect(manifest.$schema).toBe(pluginSchema)
     expect(manifest.name).toMatch(pluginNamePattern)
     expect(String(manifest.name).length).toBeLessThanOrEqual(64)
     expect(manifest.description).toEqual(expect.any(String))
     expect(String(manifest.description).length).toBeGreaterThan(0)
     expect(manifest.version).toEqual(expect.any(String))
+    expect(manifest.author).toMatchObject({ name: expect.any(String) })
+    expect(manifest.skills).toBe('./skills/')
+    expect(manifest.mcpServers).toBe('./.mcp.json')
+    expect(manifest.interface).toMatchObject({
+      capabilities: expect.any(Array),
+      category: expect.any(String),
+      defaultPrompt: expect.any(Array),
+      developerName: expect.any(String),
+      displayName: expect.any(String),
+      longDescription: expect.any(String),
+      shortDescription: expect.any(String),
+    })
+    await expect(access(join(pluginRoot, 'plugin.json'))).rejects.toThrow()
+    await expect(access(join(pluginRoot, 'mcp.json'))).rejects.toThrow()
   })
 
-  it('declares the local runtime as a stdio MCP server with a documented project binding', async () => {
-    const config = await readJson('mcp.json')
-    expect(Object.keys(config).sort()).toEqual(['$schema', 'mcpServers'])
-    expect(config.$schema).toBe(mcpSchema)
+  it('declares the local runtime as a bundled stdio MCP server', async () => {
+    const config = await readJson('.mcp.json')
+    expect(Object.keys(config)).toEqual(['mcpServers'])
     const servers = config.mcpServers as Record<string, Record<string, unknown>>
     expect(servers['content-studio']).toBeDefined()
     const server = servers['content-studio']
-    expect(server.type).toBe('stdio')
     expect(server.command).toBe('content-studio')
-    expect(server.args).toEqual(expect.any(Array))
-    const args = server.args as string[]
-    expect(args).toContain('--stdio')
-    expect(args).toContain('--project')
-    const projectArg = args[args.indexOf('--project') + 1]
-    expect(projectArg).toMatch(/^\$\{PLUGIN_DATA\}\//)
+    expect(server.args).toEqual(['mcp', '--stdio'])
+    expect(server.env_vars).toEqual(['CONTENT_STUDIO_PROJECT'])
   })
 
   it('ships the planned usage skills as immediate skill directories', async () => {

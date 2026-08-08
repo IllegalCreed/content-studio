@@ -24,9 +24,10 @@ Vue 工作台是同一套能力的可视化控制面，用于浏览、编辑、�
 Content Studio 以进入 ChatGPT 与 Codex 共用的公共 Plugins Directory 为明确
 发布目标，并按首批上架应用的标准准备产品、协议、部署、审核用例和公共材料。
 
-面向 OpenAI 生态时，分发包遵循 Agent Plugins 1.0：`plugin.json` + `skills/` +
-`mcp.json` 组成可移植内核，可跨 ChatGPT/Codex、Cursor、GitHub Copilot、Kiro、
-VS Code 等兼容客户端发现和加载。MCP App UI 不在可移植契约内，作为客户端
+面向 OpenAI 生态时，分发包遵循 OpenAI Plugin 目录约定：
+`.codex-plugin/plugin.json` + `skills/` + `.mcp.json` 组成 ChatGPT/Codex
+内核。其他 MCP 客户端是否能复用 Skills 或 MCP 配置取决于各自实现，不能由本包
+结构保证。MCP App UI 不在可移植契约内，作为客户端
 命名空间扩展（如 `com.openai.*`）交付；Skills 和无状态 MCP Server 才是可移植
 组件。Content Studio 将以 Agent Plugin 包形式分发，而不是把一个独立后台简单
 嵌入聊天窗口。

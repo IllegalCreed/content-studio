@@ -22,8 +22,8 @@ The installer should deliver `marketing-ops` as a pinned, compatible managed
 runtime dependency, but publishing still belongs to that independently
 versioned trust boundary, not this repository.
 
-The public distribution target is an Agent Plugins 1.0 package for the shared
-ChatGPT/Codex directory: `plugin.json` + `skills/` + `mcp.json`, combining
+The public distribution target is an OpenAI Plugin package for the shared
+ChatGPT/Codex directory: `.codex-plugin/plugin.json` + `skills/` + `.mcp.json`, combining
 Skills and a stateless MCP server. Optional UI is a client-namespaced extension,
 not a portable component. Prefer MCP `2026-07-28`, explicit project-scoped state
 handles, and the Tasks extension for long-running calls. Core tools must remain

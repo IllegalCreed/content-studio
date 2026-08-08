@@ -457,6 +457,43 @@ describe('content-studio CLI', () => {
     }
   })
 
+  it('binds the bundled MCP runtime through CONTENT_STUDIO_PROJECT', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
+    const projectPath = join(temporaryDirectory, 'project.json')
+    const output: string[] = []
+    const outputStream = new Writable({
+      write(chunk, _encoding, callback) {
+        output.push(String(chunk))
+        callback()
+      },
+    })
+
+    try {
+      await writeFile(projectPath, JSON.stringify(project), 'utf8')
+      await expect(runCli(
+        ['mcp', '--stdio'],
+        {
+          cwd: temporaryDirectory,
+          env: { CONTENT_STUDIO_PROJECT: projectPath },
+          input: Readable.from([
+            `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'server/discover' })}\n`,
+          ]),
+          output: outputStream,
+          write: () => undefined,
+        },
+      )).resolves.toBe(0)
+      expect(JSON.parse(output[0]!)).toMatchObject({
+        result: { projectId: 'algorithm-visualizer' },
+      })
+    }
+    finally {
+      await rm(temporaryDirectory, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
+
   it('starts the local MCP Streamable HTTP runtime on the dedicated MCP port', async () => {
     const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
     const projectPath = join(temporaryDirectory, 'project.json')

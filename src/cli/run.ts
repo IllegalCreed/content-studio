@@ -36,6 +36,7 @@ import { runProjectCommand } from './project'
 
 export interface CliRuntime {
   cwd: string
+  env?: NodeJS.ProcessEnv
   input?: NodeJS.ReadableStream
   output?: NodeJS.WritableStream
   signal?: AbortSignal
@@ -51,6 +52,7 @@ export interface CliServices {
 
 const DEFAULT_RUNTIME: CliRuntime = {
   cwd: process.cwd(),
+  env: process.env,
   write: message => process.stdout.write(`${message}\n`),
 }
 
@@ -125,7 +127,15 @@ export async function runCli(
   )
   if (isMcp && options.has('stdio') === options.has('http'))
     throw new Error('content-studio mcp requires exactly one of --stdio or --http')
-  const projectPath = requireOption(options, 'project')
+  const projectPath = options.get('project')
+    ?? (isMcp ? runtime.env?.CONTENT_STUDIO_PROJECT : undefined)
+  if (projectPath === undefined) {
+    throw new Error(
+      isMcp
+        ? 'Missing project scope: pass --project or set CONTENT_STUDIO_PROJECT'
+        : 'Missing required option: --project',
+    )
+  }
   const serveCampaignPath = command === 'serve' || isMcp || command === 'doctor'
     ? options.get('campaign')
     : requireOption(options, 'campaign')

@@ -110,8 +110,8 @@ AI 创作是目标产品的核心能力，目前的确定性编译器是安全�
 
 ## MCP App 与公开上架目标
 
-Content Studio 将以 Skills、无状态 MCP Server 组成可公开提交的 Agent Plugin 包
-（`plugin.json` + `skills/` + `mcp.json`，遵循 Agent Plugins 1.0），MCP App UI
+Content Studio 将以 Skills、无状态 MCP Server 组成可公开提交的 OpenAI Plugin 包
+（`.codex-plugin/plugin.json` + `skills/` + `.mcp.json`），MCP App UI
 作为客户端命名空间扩展存在，目标进入 ChatGPT 与 Codex 共用的 Plugins Directory。
 
 远程服务首选 MCP `2026-07-28`，业务状态通过 `projectId`、`activityId`、

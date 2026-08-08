@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "content-studio": {
+      "command": "content-studio",
+      "args": [
+        "mcp",
+        "--stdio"
+      ],
+      "env_vars": [
+        "CONTENT_STUDIO_PROJECT"
+      ]
+    }
+  }
+}

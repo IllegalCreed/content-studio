@@ -13,6 +13,7 @@ runCli(
   process.argv.slice(2),
   {
     cwd: process.cwd(),
+    env: process.env,
     signal: controller.signal,
     write: message => process.stdout.write(`${message}\n`),
   },

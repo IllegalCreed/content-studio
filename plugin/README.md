@@ -1,43 +1,58 @@
-# Content Studio Agent Plugin
+# Content Studio Plugin
 
-Content Studio 的 Agent Plugins 1.0.0 分发包，包含可移植的 Skills 和本地
-MCP Server 配置。用户只需要安装这一个包，即可在支持 Agent Plugins 的客户端
-（ChatGPT/Codex、Cursor、GitHub Copilot、Kiro、VS Code 等）中使用 Content
-Studio 的内容生产工作流。
+这是 Content Studio 面向 ChatGPT/Codex 的本地开发包。它按 OpenAI Plugin
+目录约定组合 3 个 Skills 与一个本地 stdio MCP Server；Vue 工作台不是可移植
+插件组件，核心 MCP 工具在不渲染 UI 时仍可使用。
 
 ## 包结构
 
 ```text
 plugin/
-├── plugin.json    # Agent Plugins 清单
-├── mcp.json       # 本地 Content Studio MCP Server（stdio）
+├── .codex-plugin/
+│   └── plugin.json   # 必需的 Plugin 清单
+├── .mcp.json         # 随包分发的本地 MCP Server 配置
 └── skills/
-    ├── onboard-project/      # 接入项目、确认 projectId 与工具边界
-    ├── produce-activity/     # 端到端内容制作流程
-    └── review-and-handoff/   # 发布计划、人工接管与产物晋升
+    ├── onboard-project/
+    ├── produce-activity/
+    └── review-and-handoff/
 ```
 
-## 安装契约（本地 stdio 运行时）
+## 当前本地开发契约
 
-`mcp.json` 通过 stdio 启动 `content-studio mcp --stdio`。当前本地运行时要求
-显式 `--project <project.json>`，而项目清单属于用户数据，不能打进可移植包。
-因此安装器负责在插件实例的 `${PLUGIN_DATA}` 目录写入用户确认过的项目清单
-`project.json`（对应本地安装流程里的“第一次使用时确认项目目录”）。
+这个目录目前不是“一装即用”的公开发行物。使用前必须先从源码构建并让
+`content-studio` 可执行文件位于宿主的 `PATH`，再由项目所有者把
+`CONTENT_STUDIO_PROJECT` 设置为已确认的 `project.json` 绝对路径：
 
-草稿清单由导入流程生成：有源项目用 `content-studio project import --source <目录>`,
-无源项目用 `content-studio project init --name <名称> --url <站点>`；安装器写入
-`${PLUGIN_DATA}/project.json` 前应让用户在工作台“导入项目”页或对话中确认。
+```bash
+corepack enable
+pnpm install
+pnpm build
+pnpm link --global
+export CONTENT_STUDIO_PROJECT=/absolute/path/to/project.json
+content-studio doctor --project "$CONTENT_STUDIO_PROJECT"
+```
 
-前提：
+MCP 宿主只转发变量名，不把项目清单、凭据或渠道授权写进插件包。也可以绕过插件
+配置，显式运行：
 
-- `content-studio` 可执行文件在 PATH 上（Node.js 22+，pnpm 安装）；
-- `${PLUGIN_DATA}/project.json` 是合法项目清单；
-- 可选 `--campaign` / `--db` 参数由安装器按用户配置追加。
+```bash
+content-studio mcp --stdio --project /absolute/path/to/project.json
+```
 
-公开发布目录时，`mcp.json` 应改为指向公网轻量入口的
-`streamable-http`，Skills 与 `plugin.json` 不变。
+项目清单可由下面两条命令起草；登记或使用前仍须由项目所有者确认：
 
-## UI 定位
+```bash
+content-studio project import --source /absolute/source/dir --out project.json
+content-studio project init --name "My Site" --project-id my-site \
+  --url https://example.com --out project.json
+```
 
-Agent Plugins v1 的可移植契约只有 Skills 和 MCP Server。Vue 工作台属于客户端
-命名空间扩展（不在本包内），核心 MCP 工具在不渲染 UI 时仍完整可用。
+公开 Plugins Directory 版本还需要版本化安装器或已注册的生产 MCP 连接；在这些
+交付物完成前，本仓库不会声称安装插件会自动创建项目清单或安装本地运行时。
+
+## 安全边界
+
+- 插件安装不会授予渠道发布权限。
+- Content Studio 不读取或传递 token、cookie、密码、浏览器配置或支付数据。
+- 外部写入仍由独立、匹配授权的 `marketing-ops` 运行时负责。
+- `${CONTENT_STUDIO_PROJECT}` 只指向项目所有者明确确认的本地清单。

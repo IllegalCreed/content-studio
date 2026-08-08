@@ -1,0 +1,40 @@
+{
+  "name": "content-studio",
+  "version": "0.1.0",
+  "description": "Local-first content production workflows with an owner-controlled MCP runtime.",
+  "author": {
+    "name": "IllegalCreed",
+    "url": "https://github.com/IllegalCreed"
+  },
+  "homepage": "https://github.com/IllegalCreed/content-studio",
+  "repository": "https://github.com/IllegalCreed/content-studio",
+  "license": "MIT",
+  "keywords": [
+    "content-production",
+    "mcp",
+    "local-first",
+    "video-recording",
+    "content-studio"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Content Studio",
+    "shortDescription": "Run local, owner-controlled content production",
+    "longDescription": "Create and review project-scoped articles, images, video plans, production tasks, and publishing handoffs through a local-first Content Studio runtime.",
+    "developerName": "IllegalCreed",
+    "category": "Productivity",
+    "capabilities": [
+      "Local MCP",
+      "Content production",
+      "Human handoff"
+    ],
+    "websiteURL": "https://github.com/IllegalCreed/content-studio",
+    "defaultPrompt": [
+      "Onboard a project into Content Studio.",
+      "Prepare a channel-specific content activity.",
+      "Review production tasks and owner handoffs."
+    ],
+    "brandColor": "#D79A62"
+  }
+}

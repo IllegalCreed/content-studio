@@ -108,8 +108,8 @@ Content Studio installer
 变化时必须重新确认。V0.3.0 的内存 Repository 仍用于纯内存测试；
 `SqliteContentStudioRepository` 已提供第一版本地控制数据持久化。
 
-Content Studio Agent Plugin 是 AI 宿主入口，遵循 Agent Plugins 1.0 包格式
-（`plugin.json` + `skills/` + `mcp.json`），只包含 Skills 和 MCP 连接声明，不
+Content Studio Plugin 是 AI 宿主入口，遵循 OpenAI Plugin 包格式
+（`.codex-plugin/plugin.json` + `skills/` + `.mcp.json`），只包含 Skills 和 MCP 连接声明，不
 复制 core 或发布逻辑。MCP App UI 属于客户端命名空间扩展，不作为可移植组件；
 用户只安装这一个 Plugin。
 

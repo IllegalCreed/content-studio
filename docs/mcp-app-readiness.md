@@ -12,19 +12,19 @@ Content Studio 的发布目标不是“提供一个带 MCP 接口的独立后台
 项目、素材、浏览器和媒体制作的默认执行环境；用户不需要购买托管服务才能运行
 完整个人工作流。
 
-面向 OpenAI 生态时，正式可发现、安装和发布的分发单位遵循 **Agent Plugins
-1.0**（`plugin.json` + `skills/` + `mcp.json`）。**MCP Apps UI** 是客户端命名
+面向 OpenAI 生态时，正式可发现、安装和发布的分发单位遵循 **OpenAI Plugin**
+目录约定（`.codex-plugin/plugin.json` + `skills/` + `.mcp.json`）。**MCP Apps UI** 是客户端命名
 空间扩展：开放标准负责让 MCP Server 返回交互式 UI，但 UI 不在 Agent Plugins
 可移植契约内。Content Studio 的目标包形态为：
 
 ```text
-Content Studio Agent Plugin（Agent Plugins 1.0）
-├─ plugin.json
+Content Studio Plugin
+├─ .codex-plugin/plugin.json
 ├─ skills/
 │  ├─ 接入项目（onboard-project）
 │  ├─ 制作发布活动（produce-activity）
 │  └─ 发布协作与人工接管（review-and-handoff）
-├─ mcp.json（本地 stdio 运行时）
+├─ .mcp.json（本地 stdio 运行时）
 └─ com.openai.*（可选）MCP App UI 客户端命名空间扩展
    ├─ 行内活动与任务卡片
    ├─ 内容审核和资源对比
