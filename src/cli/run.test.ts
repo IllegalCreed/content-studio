@@ -444,8 +444,12 @@ describe('content-studio CLI', () => {
       ).resolves.toBe(0)
       expect(JSON.parse(output[0]!)).toMatchObject({
         result: {
-          projectId: 'algorithm-visualizer',
-          protocolVersion: '2026-07-28',
+          supportedVersions: ['2026-07-28'],
+          _meta: {
+            'io.content-studio/project': {
+              projectId: 'algorithm-visualizer',
+            },
+          },
         },
       })
     }
@@ -483,7 +487,13 @@ describe('content-studio CLI', () => {
         },
       )).resolves.toBe(0)
       expect(JSON.parse(output[0]!)).toMatchObject({
-        result: { projectId: 'algorithm-visualizer' },
+        result: {
+          _meta: {
+            'io.content-studio/project': {
+              projectId: 'algorithm-visualizer',
+            },
+          },
+        },
       })
     }
     finally {

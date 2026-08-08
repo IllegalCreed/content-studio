@@ -684,7 +684,10 @@ const globalTaskCounts = computed(() => ({
 }))
 
 const globalPendingTaskCount = computed(() =>
-  globalTaskProjections.value.filter(task => task.status !== 'published').length,
+  globalTaskProjections.value.filter(task =>
+    task.status !== 'cancelled'
+    && task.status !== 'completed'
+    && task.status !== 'published').length,
 )
 
 function activityTaskSummary(activityId: string, projectId?: string): string {

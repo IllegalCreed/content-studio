@@ -485,7 +485,7 @@ export function activityBusinessProgressProjection({
       label: '制作执行',
       status: productionTasks.length === 0
         ? 'pending'
-        : productionTasks.every(task => task.status === 'composing') ? 'done' : 'active',
+        : productionTasks.every(task => task.status === 'completed') ? 'done' : 'active',
     },
     {
       detail: publicationScheduled

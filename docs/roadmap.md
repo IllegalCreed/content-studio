@@ -155,8 +155,8 @@ V0.3.0 的第一条领域切片已落地：应用服务现在能注册项目快�
 
 把当前录制任务扩展为通用执行记录：
 
-- [x] 将状态统一为
-      `queued → generating → recording → composing → awaiting-owner → published → monitoring`。
+- [x] 统一状态集合，同时按任务类型约束路径：制作任务以 `completed` 结束，发布任务
+      由 `awaiting-owner` 进入 `published`，监测任务进入 `monitoring`。
 - [x] 支持文章跳过 `recording`，导入素材跳过 `generating`，但每次跳过都追加事件。
 - [x] 实现追加式事件、尝试编号、取消请求和安全重试。
 - [x] 让取消只终止当前尝试，重试创建新的尝试并保留旧证据。
@@ -187,7 +187,8 @@ V0.3.1 的第一条内存任务切片已落地：视频、文章和导入素材�
 - [x] 提供 `content-studio serve` 的本地应用服务边界，默认使用 11001。
 - [x] 本地应用服务 HTTP 只绑定 `127.0.0.1`；提供 `content-studio mcp --stdio` 的本地
       MCP 边界。
-- [x] 支持进程重启后恢复任务、追加事件和尝试历史；MCP Tasks 事件游标已在 V0.3.3 接入。
+- [x] 支持进程重启后恢复任务、追加事件和尝试历史；领域工具负责事件读取，MCP Tasks
+      保持标准单任务状态与输入协议。
 - [x] 提供项目范围的发布回执和监测观测导入接口；它们只接收已由授权边界产生的
       结果，不触发真实渠道发布。
 - [x] 提供 `content-studio doctor` 的最小版本、目录和 Worker 检查。
@@ -240,10 +241,10 @@ MCP 不启动浏览器、不执行渠道写入，不接收凭据、任意路径�
 普通请求返回 JSON，旧式 GET/DELETE 和不匹配的请求头会被拒绝。这个适配器可以作为未来
 公网入口的传输基础，但公网鉴权、TLS、限流和审计仍未开放。
 
-2026-08-02 MCP Tasks 第一条切片已验证：内部 `queued`、制作中和监测状态映射为
+2026-08-09 MCP Tasks 适配已校正：内部 `queued`、制作中和监测状态映射为
 `working`，`awaiting-owner` 映射为 `input_required`，取消、失败和已完成状态分别映射
-为 `cancelled`、`failed`、`completed`。`tasks/update` 可以按事件序号游标轮询新增事件；
-它不会接受任意状态值，也不会绕过发布回执把任务标成已发布。
+为 `cancelled`、`failed`、`completed`。`tasks/update` 只接受待处理请求对应的
+`inputResponses`；追加事件改由领域工具读取，不能借 Tasks 接口写入任意状态或伪造发布回执。
 
 同日内容创作切片已验证：AI 宿主可以先创建发布活动，再用
 `save_activity_content_pack` 一次提交文章或视频渠道版本；应用服务会预检项目、活动、
@@ -276,7 +277,7 @@ MCP 不启动浏览器、不执行渠道写入，不接收凭据、任意路径�
 
 同日制作执行器切片已验证：`runProductionTask` 会先检查任务类型、任务状态、项目 origin、
 输出目录和重试次数，再把任务推进到 `recording`，调用受控录制器，并根据真实录制回执推进到
-`composing`、`cancelled` 或 `failed`。录制器通过依赖注入传入，因此测试不需要启动浏览器；
+`composing`、`cancelled` 或 `failed`；成功合成并登记最终产物后再进入 `completed`。录制器通过依赖注入传入，因此测试不需要启动浏览器；
 应用服务是这条执行器的唯一控制面入口。
 
 内置绑定已补齐：`runProductionTaskWithPlaywright` 会把同一条任务执行器接到已有的

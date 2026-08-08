@@ -2287,11 +2287,13 @@ describe('content studio local application server', () => {
         activityId: 'project-b-activity',
         attempt: 1,
         channel: 'youtube',
+        createdAt: expect.any(String),
         kind: 'publication',
         projectId: 'project-b',
         skipStages: [],
         status: 'queued',
         taskId: 'project-b-publication',
+        updatedAt: expect.any(String),
       }])
       expect(payload.projectViews[1]?.projectChannelBindings[0]).toEqual({
         accountAlias: 'Project B video account',

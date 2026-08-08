@@ -198,7 +198,7 @@ Content Studio 不应在任务运行中悄悄把有源模式降级为无源模�
 
 ```text
 queued → generating → recording → composing
-       → awaiting-owner → published → monitoring
+       → completed
 ```
 
 无源模式仍使用相同任务和回执模型，但可能在录制前或录制中进入

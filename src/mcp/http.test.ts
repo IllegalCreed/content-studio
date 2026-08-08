@@ -94,7 +94,7 @@ describe('content studio Streamable HTTP MCP adapter', () => {
       expect(messages[0]).toMatchObject({
         id: 1,
         method: 'server/discover',
-        params: {},
+        params: { _meta: metadata() },
       })
     }
     finally {
@@ -131,6 +131,7 @@ describe('content studio Streamable HTTP MCP adapter', () => {
       })
       expect(response.status).toBe(200)
       expect(messages[0]?.params).toEqual({
+        _meta: metadata(),
         arguments: {},
         name: 'get_project_view',
       })

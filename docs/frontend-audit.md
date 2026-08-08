@@ -73,8 +73,8 @@
 
 - 活动是业务对象，状态来自 `PublishingActivity.status`：`draft`、`planned`、
   `active`、`completed`、`archived`。
-- 任务是执行记录，类型为制作、发布、监测，状态来自任务生命周期：
-  `queued → generating → recording → composing → awaiting-owner → published → monitoring`，
+- 任务是执行记录，类型为制作、发布、监测；制作任务从 `queued` 经过生成、录制和
+  合成后进入 `completed`，发布任务以 `published` 结束，监测任务进入 `monitoring`，
   另有 `failed`、`cancelled` 终态/分支。
 - `taskLifecycleProjection()` 已经根据任务和事件生成任务阶段；静态演示任务也通过
   `demoTaskProjection()` 使用同一套生命周期计算，因此演示和运行时不会再出现两套阶段名。

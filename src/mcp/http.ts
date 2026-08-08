@@ -139,8 +139,7 @@ async function handleRequest(
   }
 
   const requestWithMetadata = body as McpJsonRpcRequest
-  const sanitizedRequest = stripTransportMetadata(requestWithMetadata)
-  const result = await server.handleMessage(sanitizedRequest)
+  const result = await server.handleMessage(requestWithMetadata)
   if (requestWithMetadata.id === undefined || result === undefined) {
     response.writeHead(202)
     response.end()
@@ -209,13 +208,6 @@ function requiresName(method: string): boolean {
   return method === 'tools/call'
     || method === 'prompts/get'
     || method === 'resources/read'
-}
-
-function stripTransportMetadata(request: McpJsonRpcRequest): McpJsonRpcRequest {
-  if (!isRecord(request.params) || !Object.hasOwn(request.params, '_meta'))
-    return request
-  const { _meta: _ignored, ...params } = request.params
-  return { ...request, params }
 }
 
 function requestIdOf(input: unknown): string | number | null {

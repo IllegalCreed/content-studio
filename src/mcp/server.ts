@@ -10,6 +10,7 @@ import type {
   ExecutionTaskStatus,
 } from '../types'
 import { createInterface } from 'node:readline'
+import { MCP_LIST_TTL_MS, MCP_RESOURCE_TTL_MS } from '../constants'
 import {
   ProjectScopeError,
   RecordConflictError,
@@ -32,6 +33,7 @@ import {
 import { assertNoSensitiveKeys } from '../validation'
 
 const PROTOCOL_VERSION = '2026-07-28'
+const TASKS_EXTENSION = 'io.modelcontextprotocol/tasks'
 const IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const PROJECT_URI_PATTERN = /^content-studio:\/\/projects\/([^/]+)\/(view|activities|content|tasks|assets|receipts|reports)$/
 
@@ -143,31 +145,53 @@ async function dispatchRequest(
 ): Promise<McpJsonRpcResponse> {
   switch (request.method) {
     case 'server/discover':
+      assertMetadataParams(request.params, 'server/discover params')
       return success(request.id!, {
+        cacheScope: 'private',
+        resultType: 'complete',
+        supportedVersions: [PROTOCOL_VERSION],
         capabilities: {
+          extensions: {
+            [TASKS_EXTENSION]: {},
+          },
           resources: {},
-          tasks: {},
           tools: {},
         },
-        projectId: options.projectId,
-        protocolVersion: PROTOCOL_VERSION,
-        serverInfo: {
-          name: 'content-studio',
-          version: '0.1.0',
+        _meta: {
+          'io.content-studio/project': {
+            mode: 'local',
+            projectId: options.projectId,
+            scope: 'project',
+          },
+          'io.modelcontextprotocol/serverInfo': {
+            name: 'content-studio',
+            version: '0.1.0',
+          },
         },
-        state: {
-          mode: 'local',
-          scope: 'project',
-        },
+        instructions: 'Use explicit project-scoped handles. Content Studio prepares local content and handoffs but never grants channel publishing authority.',
+        ttlMs: MCP_LIST_TTL_MS,
       })
     case 'resources/list':
       return success(request.id!, {
+        cacheScope: 'private',
         resources: projectResources(options.projectId),
+        resultType: 'complete',
+        ttlMs: MCP_LIST_TTL_MS,
       })
     case 'resources/read':
-      return success(request.id!, readResource(request.params, options))
+      return success(request.id!, {
+        ...readResource(request.params, options),
+        cacheScope: 'private',
+        resultType: 'complete',
+        ttlMs: MCP_RESOURCE_TTL_MS,
+      })
     case 'tools/list':
-      return success(request.id!, { tools: toolDefinitions() })
+      return success(request.id!, {
+        cacheScope: 'private',
+        resultType: 'complete',
+        tools: toolDefinitions(),
+        ttlMs: MCP_LIST_TTL_MS,
+      })
     case 'tools/call':
       return toolCall(request.id!, request.params, options)
     case 'tasks/get':
@@ -239,7 +263,7 @@ function readResource(
   options: ContentStudioMcpServerOptions,
 ): { contents: Array<Record<string, string>> } {
   const value = asRecord(params, 'resources/read params')
-  assertKeys(value, ['uri'], 'resources/read params')
+  assertKeys(value, ['_meta', 'uri'], 'resources/read params')
   const uri = stringField(value.uri, 'uri')
   const match = PROJECT_URI_PATTERN.exec(uri)
   if (match === null || decodeURIComponent(match[1]!) !== options.projectId)
@@ -575,11 +599,16 @@ function localizedTextSchema(): Record<string, unknown> {
   }
 }
 
-function videoRecordingConfigOverridesSchema(): Record<string, unknown> {
+function videoRecordingConfigOverridesSchema(
+  includeFormat = false,
+): Record<string, unknown> {
   return {
     properties: {
       colorScheme: { enum: ['dark', 'light', 'no-preference'], type: 'string' },
       deviceScaleFactor: { enum: [1, 2], type: 'number' },
+      ...(includeFormat
+        ? { format: { enum: ['landscape', 'portrait', 'square'], type: 'string' } }
+        : {}),
       locale: { enum: ['en', 'zh-CN'], type: 'string' },
       outputSize: {
         properties: {
@@ -606,7 +635,7 @@ function videoRecordingProfileSchema(): Record<string, unknown> {
   return {
     properties: {
       channelVariants: {
-        additionalProperties: videoRecordingConfigOverridesSchema(),
+        additionalProperties: videoRecordingConfigOverridesSchema(true),
         type: 'object',
       },
       defaults: videoRecordingConfigOverridesSchema(),
@@ -800,11 +829,17 @@ function toolCall(
 ): McpJsonRpcResponse {
   try {
     const value = asRecord(params, 'tools/call params')
-    assertKeys(value, ['arguments', 'name'], 'tools/call params')
+    assertKeys(value, ['_meta', 'arguments', 'name'], 'tools/call params')
     const name = stringField(value.name, 'name')
     const input = value.arguments ?? {}
     assertNoSensitiveKeys(input)
     const result = executeTool(name, input, options)
+    if (name === 'start_production_task' && supportsTasks(value._meta)) {
+      return success(id, {
+        ...asRecord(result, 'task result'),
+        resultType: 'task',
+      })
+    }
     return success(id, toolResult(result))
   }
   catch (error: unknown) {
@@ -814,6 +849,7 @@ function toolCall(
         type: 'text',
       }],
       isError: true,
+      resultType: 'complete',
     })
   }
 }
@@ -1064,7 +1100,7 @@ function startMcpProductionTask(
   input: unknown,
   options: ContentStudioMcpServerOptions,
 ): Record<string, unknown> {
-  const handle = parseTaskHandle(input, options, false)
+  const handle = parseTaskHandle(input, options)
   const task = options.service.startProductionTask(handle.projectId, handle.taskId)
   enqueueMcpProductionTask(options, task)
   const events = options.service.listTaskEvents(handle.projectId, handle.taskId)
@@ -1104,6 +1140,7 @@ function toolResult(value: unknown): Record<string, unknown> {
       type: 'text',
     }],
     isError: false,
+    resultType: 'complete',
     structuredContent: value,
   }
 }
@@ -1111,71 +1148,88 @@ function toolResult(value: unknown): Record<string, unknown> {
 function getMcpTask(
   input: unknown,
   options: ContentStudioMcpServerOptions,
-): { events: ExecutionTaskEvent[], task: Record<string, unknown> } {
-  const handle = parseTaskHandle(input, options, false)
+): Record<string, unknown> {
+  const handle = parseTaskHandle(input, options)
   const view = options.service.getProjectView(handle.projectId)
   const task = requireTask(view.tasks, handle.taskId)
   const events = options.service.listTaskEvents(handle.projectId, handle.taskId)
   return {
-    events,
-    task: toMcpTask(task, events),
+    ...toMcpTask(task, events),
+    resultType: 'complete',
   }
 }
 
 function updateMcpTask(
   input: unknown,
   options: ContentStudioMcpServerOptions,
-): { events: ExecutionTaskEvent[], task: Record<string, unknown> } {
-  const handle = parseTaskHandle(input, options, true)
+): Record<string, unknown> {
+  const value = asRecord(input, 'tasks/update params')
+  assertKeys(
+    value,
+    ['_meta', 'inputResponses', 'projectId', 'taskId'],
+    'tasks/update params',
+  )
+  const handle = parseTaskHandle(value, options, ['inputResponses'])
   const view = options.service.getProjectView(handle.projectId)
   const task = requireTask(view.tasks, handle.taskId)
-  const events = options.service
-    .listTaskEvents(handle.projectId, handle.taskId)
-    .filter(event => handle.cursor === undefined || event.sequence > handle.cursor)
-  const allEvents = options.service.listTaskEvents(handle.projectId, handle.taskId)
-  return {
-    events,
-    task: toMcpTask(task, allEvents),
+  const inputResponses = asRecord(value.inputResponses, 'inputResponses')
+  assertNoSensitiveKeys(inputResponses)
+  if (task.status === 'awaiting-owner') {
+    const response = inputResponses['owner-confirmation']
+    if (isAcceptedOwnerConfirmation(response)) {
+      if (options.ownerTakeovers === undefined) {
+        throw new McpToolError(
+          'Owner takeover confirmation is not wired into this runtime',
+        )
+      }
+      options.ownerTakeovers.confirm(handle.projectId, handle.taskId)
+    }
   }
+  return { resultType: 'complete' }
 }
 
 function cancelMcpTask(
   input: unknown,
   options: ContentStudioMcpServerOptions,
-): { task: Record<string, unknown> } {
-  const handle = parseTaskHandle(input, options, false)
+): Record<string, unknown> {
+  const handle = parseTaskHandle(input, options)
+  const task = requireTask(
+    options.service.getProjectView(handle.projectId).tasks,
+    handle.taskId,
+  )
+  if (mapTaskStatus(task.status) === 'completed'
+    || task.status === 'cancelled'
+    || task.status === 'failed') {
+    return { resultType: 'complete' }
+  }
   options.ownerTakeovers?.dismiss(handle.projectId, handle.taskId)
   options.productionWorker?.cancel(handle.projectId, handle.taskId)
-  const task = options.service.cancelTask(handle.projectId, handle.taskId)
-  const events = options.service.listTaskEvents(handle.projectId, handle.taskId)
-  return { task: toMcpTask(task, events) }
+  try {
+    options.service.cancelTask(handle.projectId, handle.taskId)
+  }
+  catch (error: unknown) {
+    if (!(error instanceof TaskStateError))
+      throw error
+  }
+  return { resultType: 'complete' }
 }
 
 function parseTaskHandle(
   input: unknown,
   options: ContentStudioMcpServerOptions,
-  allowCursor: boolean,
-): { cursor?: number, projectId: string, taskId: string } {
+  additionalKeys: readonly string[] = [],
+): { projectId: string, taskId: string } {
   const value = asRecord(input, 'task params')
   assertKeys(
     value,
-    allowCursor ? ['cursor', 'projectId', 'taskId'] : ['projectId', 'taskId'],
+    ['_meta', 'projectId', 'taskId', ...additionalKeys],
     'task params',
   )
-  const projectId = scopedId(value.projectId, options.projectId, 'projectId')
+  const projectId = value.projectId === undefined
+    ? options.projectId
+    : scopedId(value.projectId, options.projectId, 'projectId')
   const taskId = identifierField(value.taskId, 'taskId')
-  if (value.cursor === undefined)
-    return { projectId, taskId }
-  if (
-    (typeof value.cursor !== 'string' && typeof value.cursor !== 'number')
-    || (typeof value.cursor === 'string' && value.cursor.trim() === '')
-  ) {
-    throw new McpToolError('cursor must be a non-negative integer')
-  }
-  const cursor = Number(value.cursor)
-  if (!Number.isInteger(cursor) || cursor < 0)
-    throw new McpToolError('cursor must be a non-negative integer')
-  return { cursor, projectId, taskId }
+  return { projectId, taskId }
 }
 
 function requireTask(
@@ -1193,16 +1247,43 @@ function toMcpTask(
   events: ExecutionTaskEvent[],
 ): Record<string, unknown> {
   const lastEvent = events.at(-1)
-  return {
+  const status = mapTaskStatus(task.status)
+  const base = {
     attempt: task.attempt,
-    eventCursor: String(lastEvent?.sequence ?? 0),
+    createdAt: task.createdAt ?? task.updatedAt ?? new Date(0).toISOString(),
     internalStatus: task.status,
-    ...(lastEvent === undefined ? {} : { lastEvent }),
+    lastUpdatedAt: task.updatedAt ?? task.createdAt ?? new Date(0).toISOString(),
     pollIntervalMs: 1000,
     projectId: task.projectId,
-    status: mapTaskStatus(task.status),
+    status,
+    ...(lastEvent === undefined ? {} : { statusMessage: lastEvent.message }),
     taskId: task.taskId,
+    ttlMs: null,
   }
+  if (status === 'input_required') {
+    return {
+      ...base,
+      inputRequests: {
+        'owner-confirmation': ownerConfirmationRequest(task),
+      },
+    }
+  }
+  if (status === 'completed') {
+    return {
+      ...base,
+      result: toolResult({ task }),
+    }
+  }
+  if (status === 'failed') {
+    return {
+      ...base,
+      error: {
+        code: -32000,
+        message: lastEvent?.message ?? `Task ${task.taskId} failed`,
+      },
+    }
+  }
+  return base
 }
 
 function mapTaskStatus(status: ExecutionTaskStatus): McpTaskStatus {
@@ -1212,9 +1293,57 @@ function mapTaskStatus(status: ExecutionTaskStatus): McpTaskStatus {
     return 'cancelled'
   if (status === 'failed')
     return 'failed'
-  if (status === 'published')
+  if (status === 'completed' || status === 'published')
     return 'completed'
   return 'working'
+}
+
+function ownerConfirmationRequest(task: ExecutionTask): Record<string, unknown> {
+  return {
+    method: 'elicitation/create',
+    params: {
+      message: `Confirm owner takeover for task ${task.taskId} after the owner has completed authentication.`,
+      requestedSchema: {
+        properties: {
+          confirmed: {
+            description: 'The owner confirms authentication is complete and recording may resume.',
+            title: 'Resume recording',
+            type: 'boolean',
+          },
+        },
+        required: ['confirmed'],
+        type: 'object',
+      },
+    },
+  }
+}
+
+function isAcceptedOwnerConfirmation(input: unknown): boolean {
+  if (!isRecord(input) || input.action !== 'accept' || !isRecord(input.content))
+    return false
+  return input.content.confirmed === true
+}
+
+function supportsTasks(input: unknown): boolean {
+  if (!isRecord(input))
+    return false
+  const capabilities = input['io.modelcontextprotocol/clientCapabilities']
+  if (!isRecord(capabilities) || !isRecord(capabilities.extensions))
+    return false
+  return isRecord(capabilities.extensions[TASKS_EXTENSION])
+}
+
+function assertMetadataParams(input: unknown, name: string): void {
+  if (input === undefined)
+    return
+  const value = asRecord(input, name)
+  assertKeys(value, ['_meta'], name)
+  if (value._meta !== undefined)
+    asRecord(value._meta, `${name} _meta`)
+}
+
+function isRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === 'object' && input !== null && !Array.isArray(input)
 }
 
 function scopedRecord(

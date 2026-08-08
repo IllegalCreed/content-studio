@@ -100,8 +100,10 @@ V0.2 通用 Playwright 录制器已经完成：
 本地 MCP 的第一条切片已经接入。它使用 `stdio` 逐行传输 JSON-RPC，只加载命令行明确
 指定的一个项目，不监听端口，也不接收凭据、任意脚本、选择器或文件路径。AI 宿主可以
 读取项目事实、活动、内容和任务，并通过高层工具创建发布活动、保存内容组与渠道内容、
-读取任务以及取消/重试本地任务。长任务还提供 `tasks/get`、`tasks/update` 和
-`tasks/cancel` 的单任务轮询接口。AI 宿主还可以用 `save_activity_content_pack` 一次
+读取任务以及取消/重试本地任务。宿主声明 Tasks 扩展能力后，长调用返回
+`resultType: "task"`；`tasks/get` 读取状态和终态结果，`tasks/update` 提交
+`inputResponses`，`tasks/cancel` 协作式请求取消。追加事件继续由领域工具 `get_task`
+读取。AI 宿主还可以用 `save_activity_content_pack` 一次
 保存内容组和多个渠道版本，再用 `start_production_task` 启动本地制作的生成阶段；这些
 工具不会执行真实渠道发布。
 

@@ -61,8 +61,10 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
     this.events.clear()
     this.recordingReceipts.clear()
     this.tasks.clear()
-    for (const task of state.tasks)
-      this.tasks.set(taskKey(task.projectId, task.taskId), clone(task))
+    for (const task of state.tasks) {
+      const restored = normalizeTask(task)
+      this.tasks.set(taskKey(restored.projectId, restored.taskId), restored)
+    }
     for (const event of state.events) {
       const key = taskKey(event.projectId, event.taskId)
       this.events.set(key, [
@@ -89,9 +91,11 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
       throw new TaskStateError('Only generating and recording can be skipped')
     }
 
+    const createdAt = new Date().toISOString()
     const task: ExecutionTask = {
       activityId: input.activityId,
       attempt: 1,
+      createdAt,
       ...(input.channel === undefined ? {} : { channel: input.channel }),
       ...(input.contentId === undefined ? {} : { contentId: input.contentId }),
       kind: input.kind,
@@ -102,6 +106,7 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
       skipStages,
       status: 'queued',
       taskId: input.taskId,
+      updatedAt: createdAt,
     }
     this.tasks.set(key, clone(task))
     this.appendEvent(task, {
@@ -229,6 +234,7 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
     const updatedTask = {
       ...task,
       status: nextStatus,
+      updatedAt: new Date().toISOString(),
     } satisfies ExecutionTask
     this.tasks.set(taskKey(projectId, taskId), updatedTask)
     this.appendEvent(updatedTask, {
@@ -270,6 +276,7 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
       ...task,
       attempt: task.attempt + 1,
       status: 'queued',
+      updatedAt: new Date().toISOString(),
     } satisfies ExecutionTask
     this.tasks.set(taskKey(projectId, taskId), retriedTask)
     this.appendEvent(retriedTask, {
@@ -323,6 +330,7 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
     const updatedTask = {
       ...task,
       status,
+      updatedAt: new Date().toISOString(),
     } satisfies ExecutionTask
     this.tasks.set(taskKey(task.projectId, task.taskId), updatedTask)
     this.appendEvent(updatedTask, {
@@ -341,6 +349,17 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
 
 function clone<T>(value: T): T {
   return structuredClone(value)
+}
+
+function normalizeTask(task: ExecutionTask): ExecutionTask {
+  if (task.createdAt !== undefined && task.updatedAt !== undefined)
+    return clone(task)
+  const restoredAt = new Date().toISOString()
+  return {
+    ...clone(task),
+    createdAt: task.createdAt ?? restoredAt,
+    updatedAt: task.updatedAt ?? task.createdAt ?? restoredAt,
+  }
 }
 
 function isSkippableStage(stage: ExecutionTaskSkipStage): boolean {

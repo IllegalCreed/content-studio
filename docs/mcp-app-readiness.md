@@ -150,17 +150,20 @@ Content Studio 保留更细的内部流水线状态，同时通过适配器映�
 | Content Studio 内部状态                                    | MCP Task 状态    |
 | ---------------------------------------------------------- | ---------------- |
 | `queued`、`generating`、`recording`、`composing`、监测执行 | `working`        |
-| 等待内容审核或渠道授权人                                   | `input_required` |
-| 当前工具调用完成                                           | `completed`      |
+| `awaiting-owner`                                           | `input_required` |
+| `completed` 或已有成功发布回执                             | `completed`      |
 | 当前尝试失败                                               | `failed`         |
 | 当前尝试取消                                               | `cancelled`      |
 
 任务适配器应实现 `tasks/get`、`tasks/update` 和 `tasks/cancel`，并在宿主支持时通过
 任务通知推送完整状态；默认始终支持轮询回退。
 
-本地第一版已实现这三个单任务方法：`tasks/get` 返回当前映射状态和事件，`tasks/update`
-按事件序号游标返回新增事件，`tasks/cancel` 只请求取消当前本地尝试。MCP Task 句柄仍
-必须同时携带匹配的 `projectId`，重试继续使用 Content Studio 的领域工具并保留旧尝试。
+本地实现遵循扩展的标准形状：只有逐请求声明
+`io.modelcontextprotocol/tasks` 的宿主才会收到 `resultType: "task"`；`tasks/get`
+使用单个 `taskId` 返回完整 Task、待输入请求或终态结果，`tasks/update` 只提交与
+`inputRequests` 对应的 `inputResponses`，`tasks/cancel` 返回空确认并协作式取消。
+MCP Server 已由启动配置绑定项目，领域事件和重试历史继续通过 `get_task`、
+`retry_task` 读取和推进，不复用 `tasks/update` 做事件游标轮询。
 
 内容创作第一版使用 `save_activity_content_pack`：模型由 MCP 宿主调用和托管，Content
 Studio 只接收结构化的文章/视频版本，做项目范围、活动渠道、语言、重复版本和敏感字段
@@ -169,8 +172,8 @@ Studio 只接收结构化的文章/视频版本，做项目范围、活动渠道
 `start_production_task` 会先推进本地制作任务的 `queued → generating`，作为 Worker 消费
 任务的明确入口。当前本地 HTTP Runtime 和 `content-studio mcp --stdio` 都接入同一个单并发
 Worker：视频任务会自动消费该状态，调用
-应用服务的 `runProductionTask`，并根据真实录制回执推进 `recording → composing` 或结束
-当前尝试；文章任务仍等待独立的 AI/文本执行器。外部渠道操作仍保持在独立的
+应用服务的 `runProductionTask`，并根据真实录制与合成回执推进
+`recording → composing → completed` 或结束当前尝试；文章任务仍等待独立的 AI/文本执行器。外部渠道操作仍保持在独立的
 `marketing-ops` 信任边界内。
 
 核心层现在提供 `runProductionTaskWithPlaywright` 这个明确绑定：调用方给出项目预览

@@ -217,7 +217,8 @@ JavaScript、选择器、本地路径、浏览器配置、cookie、token 或密�
 - 使用不可猜测的 `projectId`、`activityId`、`taskId` 等业务句柄表达跨调用
   状态；
 - 在每次工具调用时重新校验用户、项目和句柄归属；
-- 工具与资源列表使用确定性顺序、明确 `ttlMs` 和正确 `cacheScope`。
+- `server/discover`、工具与资源列表/读取都返回 `resultType: "complete"`、明确
+  `ttlMs` 和项目私有的 `cacheScope`；服务身份位于标准 `_meta` 命名空间。
 
 MCP Tasks 只承担单个长工具调用的通用异步生命周期。Content Studio 内部继续
 保存生成、录制、合成、等待人工、发布和监测等细粒度状态，再映射为

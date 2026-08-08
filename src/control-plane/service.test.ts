@@ -1303,7 +1303,7 @@ describe('content studio application service', () => {
     )
 
     expect(result.receipt.outcome).toBe('succeeded')
-    expect(result.task.status).toBe('composing')
+    expect(result.task.status).toBe('completed')
     expect(composeInputs).toEqual([{
       clipPaths: [
         resolve('/tmp/content-studio-compose-register/attempt-1', 'clips/scene-001.webm'),

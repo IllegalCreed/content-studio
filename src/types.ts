@@ -671,6 +671,7 @@ export type CampaignJobStatus
   = | 'awaiting-owner'
     | 'cancelled'
     | 'composing'
+    | 'completed'
     | 'failed'
     | 'generating'
     | 'monitoring'
@@ -703,9 +704,11 @@ export interface ExecutionTask {
   kind: ExecutionTaskKind
   productionType?: ProductionTaskType
   projectId: string
+  createdAt?: string
   skipStages: ExecutionTaskSkipStage[]
   status: ExecutionTaskStatus
   taskId: string
+  updatedAt?: string
 }
 
 export interface CreateExecutionTaskInput {

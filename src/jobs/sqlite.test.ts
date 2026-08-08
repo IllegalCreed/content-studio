@@ -29,12 +29,15 @@ describe('sqlite execution task store', () => {
       taskId: 'task-a',
     })
     first.transitionTask('project-a', 'task-a', 'generating')
+    const persistedTask = first.getTask('project-a', 'task-a')
     first.close()
 
     const second = new SqliteExecutionTaskStore(databasePath)
     expect(second.getTask('project-a', 'task-a')).toMatchObject({
       attempt: 1,
+      createdAt: persistedTask?.createdAt,
       status: 'generating',
+      updatedAt: persistedTask?.updatedAt,
     })
     expect(second.listEvents('project-a', 'task-a').map(event => event.kind))
       .toEqual(['task-created', 'status-changed'])

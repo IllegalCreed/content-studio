@@ -236,6 +236,7 @@ const taskLifecycleLabels: Record<CampaignJobStatus, string> = {
   'awaiting-owner': '等待人工',
   'cancelled': '已取消',
   'composing': '合成中',
+  'completed': '已完成',
   'failed': '失败',
   'generating': '生成中',
   'monitoring': '监测中',
@@ -377,7 +378,7 @@ function taskLifecycleFor(task: ExecutionTask): CampaignJobStatus[] {
     return ['queued', 'awaiting-owner', 'published']
   if (task.kind === 'monitoring')
     return ['queued', 'monitoring']
-  return ['queued', 'generating', 'recording', 'composing']
+  return ['queued', 'generating', 'recording', 'composing', 'completed']
 }
 
 function isTaskStageSkipped(
@@ -407,11 +408,12 @@ function latestLifecycleIndex(
 }
 
 function terminalTask(status: CampaignJobStatus): boolean {
-  return status === 'cancelled' || status === 'failed'
+  return status === 'cancelled' || status === 'completed' || status === 'failed'
 }
 
 function completedTask(task: ExecutionTask): boolean {
-  return task.kind === 'publication' && task.status === 'published'
+  return task.status === 'completed'
+    || (task.kind === 'publication' && task.status === 'published')
 }
 
 export interface ChannelContentProjection {
@@ -1410,6 +1412,7 @@ export const lifecycleStages: CampaignJobStatus[] = [
   'generating',
   'recording',
   'composing',
+  'completed',
   'awaiting-owner',
   'published',
   'monitoring',
@@ -1420,6 +1423,7 @@ export function humanizeStatus(status: CampaignJobStatus): string {
     'awaiting-owner': '等待人工',
     'cancelled': '已取消',
     'composing': '合成中',
+    'completed': '已完成',
     'failed': '失败',
     'generating': '生成中',
     'monitoring': '监测中',

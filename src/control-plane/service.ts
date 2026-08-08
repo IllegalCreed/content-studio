@@ -946,9 +946,14 @@ export class ContentStudioApplicationService {
       relativePath,
       sha256: composed.sha256,
     })
+    const completed = this.taskStore.transitionTask(
+      projectId,
+      taskId,
+      'completed',
+    )
     return {
       ...result,
-      task: this.taskStore.getTask(projectId, taskId) ?? result.task,
+      task: completed,
     }
   }
 

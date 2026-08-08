@@ -19,6 +19,23 @@ import {
 
 const projectId = 'algorithm-visualizer'
 
+function requestMeta(tasks = false): Record<string, unknown> {
+  return {
+    'io.modelcontextprotocol/clientCapabilities': tasks
+      ? {
+          extensions: {
+            'io.modelcontextprotocol/tasks': {},
+          },
+        }
+      : {},
+    'io.modelcontextprotocol/clientInfo': {
+      name: 'content-studio-test',
+      version: '1.0.0',
+    },
+    'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+  }
+}
+
 const manifest: ProjectManifest = {
   schemaVersion: 1 as const,
   projectId,
@@ -89,16 +106,31 @@ describe('content Studio local MCP server', () => {
       jsonrpc: '2.0',
       id: 1,
       method: 'server/discover',
+      params: { _meta: requestMeta() },
     })).resolves.toMatchObject({
       jsonrpc: '2.0',
       id: 1,
       result: {
+        cacheScope: 'private',
         capabilities: {
+          extensions: {
+            'io.modelcontextprotocol/tasks': {},
+          },
           resources: {},
           tools: {},
         },
-        projectId,
-        protocolVersion: '2026-07-28',
+        resultType: 'complete',
+        supportedVersions: ['2026-07-28'],
+        ttlMs: 60_000,
+        _meta: {
+          'io.content-studio/project': {
+            projectId,
+          },
+          'io.modelcontextprotocol/serverInfo': {
+            name: 'content-studio',
+            version: '0.1.0',
+          },
+        },
       },
     })
   })
@@ -113,6 +145,9 @@ describe('content Studio local MCP server', () => {
     })
     expect(list).toMatchObject({
       result: {
+        cacheScope: 'private',
+        resultType: 'complete',
+        ttlMs: 60_000,
         resources: expect.arrayContaining([
           expect.objectContaining({
             uri: `content-studio://projects/${projectId}/view`,
@@ -139,6 +174,9 @@ describe('content Studio local MCP server', () => {
       },
     })).resolves.toMatchObject({
       result: {
+        cacheScope: 'private',
+        resultType: 'complete',
+        ttlMs: 0,
         contents: [
           expect.objectContaining({
             mimeType: 'application/json',
@@ -226,6 +264,32 @@ describe('content Studio local MCP server', () => {
         },
       },
     })
+    const recordingProfile = (createActivityTool?.inputSchema as {
+      properties: {
+        video: {
+          properties: {
+            recordingProfile: {
+              properties: {
+                channelVariants: {
+                  additionalProperties: {
+                    properties: Record<string, unknown>
+                  }
+                }
+                defaults: { properties: Record<string, unknown> }
+              }
+            }
+          }
+        }
+      }
+    }).properties.video.properties.recordingProfile.properties
+    expect(recordingProfile.defaults.properties).not.toHaveProperty('format')
+    expect(recordingProfile.channelVariants.additionalProperties.properties)
+      .toMatchObject({
+        format: {
+          enum: ['landscape', 'portrait', 'square'],
+          type: 'string',
+        },
+      })
     await expect(server.handleMessage({
       jsonrpc: '2.0',
       id: 13,
@@ -246,7 +310,7 @@ describe('content Studio local MCP server', () => {
       method: 'server/discover',
       params: 'invalid',
     })).resolves.toMatchObject({
-      result: { protocolVersion: '2026-07-28' },
+      error: { code: -32602 },
     })
     await expect(server.handleMessage({
       jsonrpc: '2.0',
@@ -277,6 +341,27 @@ describe('content Studio local MCP server', () => {
       params: { uri: 42 },
     })).resolves.toMatchObject({
       error: { code: -32602 },
+    })
+  })
+
+  it('accepts per-request metadata on compliant tool calls', async () => {
+    const server = createFixture()
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 26,
+      method: 'tools/call',
+      params: {
+        _meta: requestMeta(),
+        arguments: { projectId },
+        name: 'get_project_view',
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: false,
+        resultType: 'complete',
+        structuredContent: { project: { projectId } },
+      },
     })
   })
 
@@ -625,7 +710,7 @@ describe('content Studio local MCP server', () => {
     })
   })
 
-  it('maps domain task state to MCP Tasks and supports cursor-based polling', async () => {
+  it('maps domain tasks to the standard Tasks get, update, and cancel shapes', async () => {
     const server = createFixture()
     await server.handleMessage({
       jsonrpc: '2.0',
@@ -675,16 +760,17 @@ describe('content Studio local MCP server', () => {
       jsonrpc: '2.0',
       id: 29,
       method: 'tasks/get',
-      params: { projectId, taskId },
+      params: { _meta: requestMeta(true), taskId },
     })).resolves.toMatchObject({
       result: {
-        task: {
-          attempt: 1,
-          eventCursor: '1',
-          internalStatus: 'queued',
-          status: 'working',
-          taskId,
-        },
+        createdAt: expect.any(String),
+        internalStatus: 'queued',
+        lastUpdatedAt: expect.any(String),
+        pollIntervalMs: 1000,
+        resultType: 'complete',
+        status: 'working',
+        taskId,
+        ttlMs: null,
       },
     })
 
@@ -692,40 +778,34 @@ describe('content Studio local MCP server', () => {
       jsonrpc: '2.0',
       id: 30,
       method: 'tasks/update',
-      params: { cursor: '1', projectId, taskId },
-    })).resolves.toMatchObject({
-      result: {
-        events: [],
-        task: { eventCursor: '1', status: 'working' },
+      params: {
+        _meta: requestMeta(true),
+        inputResponses: {},
+        taskId,
       },
+    })).resolves.toMatchObject({
+      result: { resultType: 'complete' },
     })
 
     await expect(server.handleMessage({
       jsonrpc: '2.0',
       id: 31,
       method: 'tasks/cancel',
-      params: { projectId, taskId },
+      params: { _meta: requestMeta(true), taskId },
     })).resolves.toMatchObject({
-      result: {
-        task: {
-          internalStatus: 'cancelled',
-          status: 'cancelled',
-        },
-      },
+      result: { resultType: 'complete' },
     })
 
     await expect(server.handleMessage({
       jsonrpc: '2.0',
       id: 32,
-      method: 'tasks/update',
-      params: { cursor: '1', projectId, taskId },
+      method: 'tasks/get',
+      params: { _meta: requestMeta(true), taskId },
     })).resolves.toMatchObject({
       result: {
-        events: [expect.objectContaining({
-          kind: 'attempt-cancelled',
-          sequence: 2,
-        })],
-        task: { status: 'cancelled' },
+        internalStatus: 'cancelled',
+        resultType: 'complete',
+        status: 'cancelled',
       },
     })
   })
@@ -808,12 +888,19 @@ describe('content Studio local MCP server', () => {
       id: 43,
       method: 'tools/call',
       params: {
+        _meta: requestMeta(true),
         name: 'start_production_task',
         arguments: { projectId, taskId },
       },
     })).resolves.toMatchObject({
       result: {
-        structuredContent: { internalStatus: 'generating', status: 'working' },
+        createdAt: expect.any(String),
+        internalStatus: 'generating',
+        lastUpdatedAt: expect.any(String),
+        resultType: 'task',
+        status: 'working',
+        taskId,
+        ttlMs: null,
       },
     })
     expect(jobs).toEqual([expect.objectContaining({ projectId, taskId })])
@@ -869,11 +956,17 @@ describe('content Studio local MCP server', () => {
       method: 'tasks/cancel',
       params: { projectId, taskId },
     })).resolves.toMatchObject({
-      result: {
-        task: { internalStatus: 'cancelled', status: 'cancelled' },
-      },
+      result: { resultType: 'complete' },
     })
     expect(cancelled).toHaveLength(2)
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 48,
+      method: 'tasks/get',
+      params: { taskId },
+    })).resolves.toMatchObject({
+      result: { internalStatus: 'cancelled', status: 'cancelled' },
+    })
   })
 
   it('saves an AI-produced activity content pack in one project-scoped call', async () => {
@@ -1110,21 +1203,36 @@ describe('content Studio local MCP server', () => {
       jsonrpc: '2.0',
       id: 33,
       method: 'tasks/get',
-      params: { projectId, taskId },
+      params: { taskId },
     })).resolves.toMatchObject({
-      result: { task: { status: 'input_required', internalStatus: 'awaiting-owner' } },
+      result: {
+        inputRequests: {
+          'owner-confirmation': {
+            method: 'elicitation/create',
+          },
+        },
+        internalStatus: 'awaiting-owner',
+        status: 'input_required',
+      },
     })
 
-    taskStore.transitionTask(projectId, taskId, 'published', {
-      hasMatchingPublicationReceipt: true,
-    })
+    taskStore.transitionTask(projectId, taskId, 'recording')
+    taskStore.transitionTask(projectId, taskId, 'composing')
+    taskStore.transitionTask(projectId, taskId, 'completed')
     await expect(server.handleMessage({
       jsonrpc: '2.0',
       id: 34,
       method: 'tasks/get',
-      params: { projectId, taskId },
+      params: { taskId },
     })).resolves.toMatchObject({
-      result: { task: { status: 'completed', internalStatus: 'published' } },
+      result: {
+        internalStatus: 'completed',
+        result: {
+          isError: false,
+          resultType: 'complete',
+        },
+        status: 'completed',
+      },
     })
 
     service.createActivity({
@@ -1164,16 +1272,20 @@ describe('content Studio local MCP server', () => {
       jsonrpc: '2.0',
       id: 35,
       method: 'tasks/get',
-      params: { projectId, taskId: failedTaskId },
+      params: { taskId: failedTaskId },
     })).resolves.toMatchObject({
-      result: { task: { status: 'failed', internalStatus: 'failed' } },
+      result: {
+        error: { code: expect.any(Number), message: expect.any(String) },
+        internalStatus: 'failed',
+        status: 'failed',
+      },
     })
 
     await expect(server.handleMessage({
       jsonrpc: '2.0',
       id: 36,
       method: 'tasks/get',
-      params: { projectId, taskId: 'Invalid_Task' },
+      params: { taskId: 'Invalid_Task' },
     })).resolves.toMatchObject({
       error: { code: -32602 },
     })
@@ -1181,10 +1293,28 @@ describe('content Studio local MCP server', () => {
       jsonrpc: '2.0',
       id: 37,
       method: 'tasks/update',
-      params: { cursor: '', projectId, taskId },
+      params: { inputResponses: [], taskId },
     })).resolves.toMatchObject({
       error: { code: -32602 },
     })
+
+    taskStore.createTask({
+      activityId: 'state-demo',
+      kind: 'monitoring',
+      projectId,
+      taskId: 'monitoring-task',
+    })
+    taskStore.transitionTask(projectId, 'monitoring-task', 'monitoring')
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 38,
+      method: 'tasks/cancel',
+      params: { taskId: 'monitoring-task' },
+    })).resolves.toMatchObject({
+      result: { resultType: 'complete' },
+    })
+    expect(taskStore.getTask(projectId, 'monitoring-task')?.status)
+      .toBe('monitoring')
   })
 
   it('serves newline-delimited JSON-RPC over stdio without writing diagnostics to stdout', async () => {
@@ -1210,8 +1340,49 @@ describe('content Studio local MCP server', () => {
     expect(lines).toHaveLength(2)
     expect(JSON.parse(lines[1]!)).toMatchObject({
       id: 11,
-      result: { protocolVersion: '2026-07-28' },
+      result: { supportedVersions: ['2026-07-28'] },
     })
+  })
+
+  it('accepts owner confirmation through Tasks inputResponses', async () => {
+    const taskStore = new InMemoryExecutionTaskStore()
+    const ownerTakeovers = new OwnerTakeoverRegistry(taskStore)
+    taskStore.createTask({
+      activityId: 'activity-a',
+      kind: 'production',
+      projectId,
+      taskId: 'task-input-demo',
+    })
+    taskStore.transitionTask(projectId, 'task-input-demo', 'generating')
+    taskStore.transitionTask(projectId, 'task-input-demo', 'recording')
+    const pending = ownerTakeovers.request({
+      jobId: 'task-input-demo',
+      pageUrl: 'https://example.com/login',
+      projectId,
+    })
+    const server = createFixture({ ownerTakeovers, taskStore })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 89,
+      method: 'tasks/update',
+      params: {
+        inputResponses: {
+          'owner-confirmation': {
+            action: 'accept',
+            content: { confirmed: true },
+          },
+        },
+        taskId: 'task-input-demo',
+      },
+    })).resolves.toMatchObject({
+      result: { resultType: 'complete' },
+    })
+    await expect(pending).resolves.toMatchObject({
+      confirmedAt: expect.any(String),
+    })
+    expect(taskStore.getTask(projectId, 'task-input-demo')?.status)
+      .toBe('recording')
   })
 
   it('confirms a pending owner takeover through the confirm_owner_takeover tool', async () => {

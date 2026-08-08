@@ -64,7 +64,8 @@ export const VIDEO_VIEWPORT_LIMITS = {
 export const CAMPAIGN_JOB_TRANSITIONS = {
   'awaiting-owner': ['cancelled', 'published', 'recording'],
   'cancelled': ['queued'],
-  'composing': ['awaiting-owner', 'cancelled', 'failed'],
+  'composing': ['awaiting-owner', 'cancelled', 'completed', 'failed'],
+  'completed': [],
   'failed': ['queued'],
   'generating': ['cancelled', 'failed', 'recording'],
   'monitoring': [],
@@ -75,6 +76,9 @@ export const CAMPAIGN_JOB_TRANSITIONS = {
 
 export const DEFAULT_RECORDING_MAX_ATTEMPTS = 1
 export const MAX_RECORDING_ATTEMPTS = 3
+
+export const MCP_LIST_TTL_MS = 60_000
+export const MCP_RESOURCE_TTL_MS = 0
 
 export const DEFAULT_STORAGE_RETENTION_POLICY = {
   activityArtifactDays: 30,

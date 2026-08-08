@@ -351,8 +351,9 @@ describe('demo task projection', () => {
       '生成中',
       '录制中',
       '合成中',
+      '已完成',
     ])
-    expect(recording?.progress).toBe(67)
+    expect(recording?.progress).toBe(50)
     expect(publication?.steps.map(step => step.label)).toEqual([
       '排队中',
       '等待人工',
@@ -449,17 +450,41 @@ describe('execution task projection', () => {
 
     const projection = taskLifecycleProjection(task, events)
 
-    expect(projection.progress).toBe(100)
+    expect(projection.progress).toBe(75)
     expect(projection.detail).toContain('已跳过录制阶段')
     expect(projection.steps).toEqual([
       { detail: '已完成', label: '排队中', status: 'done' },
       { detail: '已完成', label: '生成中', status: 'done' },
       { detail: '该任务已配置跳过此阶段', label: '录制中', status: 'skipped' },
       { detail: '当前阶段：合成中', label: '合成中', status: 'active' },
+      { detail: '等待前一阶段完成', label: '已完成', status: 'pending' },
     ])
     expect(projection.attempts).toEqual([
       { attempt: 1, eventCount: 2, lastEvent: '任务从排队中进入失败', status: '失败' },
       { attempt: 2, eventCount: 3, lastEvent: '已跳过录制阶段', status: '合成中' },
     ])
+
+    const completed = taskLifecycleProjection(
+      { ...task, status: 'completed' },
+      [...events, {
+        attempt: 2,
+        eventId: 'task-a:6',
+        fromStatus: 'composing',
+        kind: 'status-changed',
+        message: 'Task changed from composing to completed',
+        projectId: 'project-a',
+        sequence: 6,
+        status: 'completed',
+        taskId: 'task-a',
+        toStatus: 'completed',
+        schemaVersion: 1,
+      }],
+    )
+    expect(completed.progress).toBe(100)
+    expect(completed.steps.at(-1)).toEqual({
+      detail: '已完成',
+      label: '已完成',
+      status: 'done',
+    })
   })
 })

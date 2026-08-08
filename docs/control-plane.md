@@ -254,28 +254,24 @@ AI 执行器承接，但它必须调用相同的应用服务、写入相同的�
 
 ## 生命周期状态机
 
-统一发布流水线继续使用以下外部状态：
-
-`queued → generating → recording → composing → awaiting-owner → published → monitoring`
-
-产品界面对应显示：
-
-`排队中 → 生成中 → 录制中 → 合成中 → 等待渠道授权人 → 已发布 → 监测中`
-
-并非所有内容都执行每个阶段：
+状态集合由制作、发布、监测三类执行任务共享，但每条任务只走自己的生命周期：
 
 ```text
 视频：
-queued → generating → recording → composing
-       → awaiting-owner → published → monitoring
+queued → generating → recording → composing → completed
 
 文章：
-queued → generating → composing
-       → awaiting-owner → published → monitoring
+queued → generating → composing → completed
+
+发布：
+queued → awaiting-owner → published
+
+监测：
+queued → monitoring
 ```
 
-导入的完成素材可以跳过生成阶段；不需要人工处理且具有匹配授权的发布可以跳过
-`awaiting-owner`。跳过必须记录显式事件，不能伪造已执行阶段。
+导入的完成素材可以跳过生成或录制阶段。发布与制作保持独立任务，制作完成不会授予
+发布权限；跳过必须记录显式事件，不能伪造已执行阶段。
 
 ```mermaid
 stateDiagram-v2
@@ -284,10 +280,12 @@ stateDiagram-v2
   generating --> recording
   generating --> composing: article or skipped recording
   recording --> composing
-  composing --> awaiting_owner
-  composing --> published: authorized automatic delivery
+  composing --> completed
+  queued --> awaiting_owner: publication with owner handoff
   awaiting_owner --> published
-  published --> monitoring
+  queued --> monitoring: monitoring task
+  completed --> [*]
+  published --> [*]
   monitoring --> [*]
 
   queued --> cancelled
