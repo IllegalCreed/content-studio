@@ -304,6 +304,15 @@ export function validateProjectNavigation(
   }
 }
 
+export function sanitizeOwnerTakeoverPageUrl(pageUrl: string): string {
+  const url = new URL(pageUrl)
+  url.username = ''
+  url.password = ''
+  url.search = ''
+  url.hash = ''
+  return url.toString()
+}
+
 function assertOwnerLeftAuthenticationPage(
   pageUrl: string,
   projectOrigin: string,
@@ -364,6 +373,7 @@ class PlaywrightRecordingSession implements RecordingSession {
   private ownerTakeoverRecord: OwnerTakeoverRecord | undefined
   private page: Page | undefined
   private policyViolation: RecorderError | undefined
+  private activeScreencastSegment: string | undefined
   private screencastActive = false
   private readonly screencastSegments: string[] = []
   private screencastSegmentIndex = 0
@@ -441,8 +451,8 @@ class PlaywrightRecordingSession implements RecordingSession {
       this.video = null
       this.screencastSegments.length = 0
       this.screencastSegmentIndex = 0
+      this.activeScreencastSegment = undefined
       this.screencastActive = false
-      await this.startScreencastSegment(sceneContext.sceneIndex)
     }
     else {
       this.video = page.video()
@@ -475,6 +485,8 @@ class PlaywrightRecordingSession implements RecordingSession {
       sceneContext.signal,
     )
     await this.assertPolicy()
+    if (this.useSegmentedVideo && !this.screencastActive)
+      await this.startScreencastSegment(sceneContext.sceneIndex)
   }
 
   async runAction(
@@ -687,12 +699,12 @@ class PlaywrightRecordingSession implements RecordingSession {
   private async pauseForOwnerTakeover(): Promise<void> {
     const page = this.requirePage()
     const requestedAt = new Date().toISOString()
-    await this.stopScreencastSegment()
+    await this.stopScreencastSegment(true)
     this.addLogEntry('owner-takeover:requested')
     await withAbort(
       this.ownerTakeover!.request({
         jobId: this.context.jobId,
-        pageUrl: page.url(),
+        pageUrl: sanitizeOwnerTakeoverPageUrl(page.url()),
         projectId: this.context.projectId,
       }),
       this.context.signal,
@@ -719,22 +731,60 @@ class PlaywrightRecordingSession implements RecordingSession {
       `clips/scene-${formatIndex(sceneIndex)}.segment-${this.screencastSegmentIndex}.webm`,
     )
     this.screencastSegments.push(segmentPath)
+    let resolveFirstFrame: (() => void) | undefined
+    const firstFrame = new Promise<void>((resolve) => {
+      resolveFirstFrame = resolve
+    })
     await page.screencast.start({
+      onFrame: () => resolveFirstFrame?.(),
       path: segmentPath,
       size: {
         height: this.context.plan.recordingConfig.viewport.height,
         width: this.context.plan.recordingConfig.viewport.width,
       },
     })
+    this.activeScreencastSegment = segmentPath
     this.screencastActive = true
+    const repaint = await page.screencast.showOverlay(
+      '<div aria-hidden="true" style="position:fixed;inset:0;pointer-events:none;opacity:0"></div>',
+    )
+    try {
+      await Promise.race([
+        firstFrame,
+        wait(this.actionTimeoutMs, undefined, { ref: false }).then(() => {
+          throw new RecorderError(
+            'runtime-error',
+            'The recorder could not capture a safe page frame.',
+            true,
+          )
+        }),
+      ])
+    }
+    finally {
+      await repaint.dispose()
+    }
   }
 
-  private async stopScreencastSegment(): Promise<void> {
+  private async stopScreencastSegment(discard = false): Promise<void> {
     const page = this.page
     if (!this.screencastActive || page === undefined)
       return
     await page.screencast.stop()
     this.screencastActive = false
+    const segmentPath = this.activeScreencastSegment
+    this.activeScreencastSegment = undefined
+    if (!discard || segmentPath === undefined)
+      return
+    const segmentIndex = this.screencastSegments.lastIndexOf(segmentPath)
+    if (segmentIndex !== -1)
+      this.screencastSegments.splice(segmentIndex, 1)
+    try {
+      await unlink(segmentPath)
+    }
+    catch (error: unknown) {
+      if (!isMissingFileError(error))
+        throw error
+    }
   }
 
   private async finalizeScreencastScene(
@@ -780,23 +830,27 @@ class PlaywrightRecordingSession implements RecordingSession {
     const sceneIndex = this.currentSceneIndex
     const video = this.video
 
-    this.browserContext = undefined
-    this.currentScene = undefined
-    this.currentSceneIndex = undefined
-    this.page = undefined
-    this.video = undefined
-
     if (
       browserContext === undefined
       || page === undefined
       || scene === undefined
       || sceneIndex === undefined
     ) {
+      this.browserContext = undefined
+      this.currentScene = undefined
+      this.currentSceneIndex = undefined
+      this.page = undefined
+      this.video = undefined
       return
     }
 
     if (this.useSegmentedVideo)
       await this.stopScreencastSegment()
+    this.browserContext = undefined
+    this.currentScene = undefined
+    this.currentSceneIndex = undefined
+    this.page = undefined
+    this.video = undefined
     await page.close()
     await browserContext.close()
     const relativePath = `clips/scene-${formatIndex(sceneIndex)}.webm`
@@ -868,6 +922,12 @@ async function waitForVisibleLocator(
 
 function formatIndex(index: number): string {
   return String(index + 1).padStart(3, '0')
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return error instanceof Error
+    && 'code' in error
+    && error.code === 'ENOENT'
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {

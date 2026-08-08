@@ -54,6 +54,43 @@ async function probeVideoDurationSeconds(filePath: string): Promise<number> {
   return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3])
 }
 
+async function sampleVideoColors(
+  filePath: string,
+  outputDirectory: string,
+): Promise<Array<{ blue: number, green: number, red: number }>> {
+  const samplePath = join(outputDirectory, 'sampled-video.rgb')
+  await execFile(
+    'ffmpeg',
+    [
+      '-y',
+      '-loglevel',
+      'error',
+      '-i',
+      filePath,
+      '-vf',
+      'fps=4,scale=1:1',
+      '-f',
+      'rawvideo',
+      '-pix_fmt',
+      'rgb24',
+      samplePath,
+    ],
+    {
+      maxBuffer: 4 * 1024 * 1024,
+    },
+  )
+  const samples = await readFile(samplePath)
+  const colors: Array<{ blue: number, green: number, red: number }> = []
+  for (let index = 0; index + 2 < samples.length; index += 3) {
+    colors.push({
+      blue: samples[index + 2]!,
+      green: samples[index + 1]!,
+      red: samples[index]!,
+    })
+  }
+  return colors
+}
+
 const temporaryDirectories: string[] = []
 const servers: Array<ReturnType<typeof createServer>> = []
 
@@ -341,7 +378,7 @@ describe.skipIf(!browserIsInstalled)('playwright recorder integration', () => {
         response.setHeader('content-type', 'text/html; charset=utf-8')
         response.end(`<!doctype html>
           <html lang="en">
-            <body>
+            <body style="background: rgb(255, 0, 0); margin: 0; min-height: 100vh">
               <form data-testid="owner-login">
                 <input type="password" placeholder="mock password" />
               </form>
@@ -361,7 +398,7 @@ describe.skipIf(!browserIsInstalled)('playwright recorder integration', () => {
         response.setHeader('content-type', 'text/html; charset=utf-8')
         response.end(`<!doctype html>
           <html lang="en">
-            <body>
+            <body style="background: rgb(0, 255, 0); margin: 0; min-height: 100vh">
               <output data-testid="authenticated">Ready</output>
             </body>
           </html>`)
@@ -369,7 +406,7 @@ describe.skipIf(!browserIsInstalled)('playwright recorder integration', () => {
       }
       if (pathname === '/') {
         response.writeHead(302, {
-          location: '/login',
+          location: '/login?oauth_code=never-persist-this#callback-token',
         })
         response.end()
         return
@@ -467,6 +504,7 @@ describe.skipIf(!browserIsInstalled)('playwright recorder integration', () => {
     expect(requestedUrls).toEqual([
       `http://127.0.0.1:${address.port}/login`,
     ])
+    expect(result.receipt.failure).toBeUndefined()
     expect(result.receipt).toMatchObject({
       completedActions: 3,
       outcome: 'succeeded',
@@ -484,12 +522,23 @@ describe.skipIf(!browserIsInstalled)('playwright recorder integration', () => {
       artifact => artifact.kind === 'video-clip',
     )
     expect(videoClips).toHaveLength(1)
-    const durationSeconds = await probeVideoDurationSeconds(join(
+    const videoPath = join(
       result.receipt.artifactDirectory,
       videoClips[0]!.relativePath,
-    ))
+    )
+    const durationSeconds = await probeVideoDurationSeconds(videoPath)
     expect(durationSeconds).toBeGreaterThanOrEqual(0.6)
-    expect(durationSeconds).toBeLessThan(2.4)
+    expect(durationSeconds).toBeLessThan(3.2)
+    const sampledColors = await sampleVideoColors(
+      videoPath,
+      result.receipt.artifactDirectory,
+    )
+    expect(sampledColors.length).toBeGreaterThanOrEqual(2)
+    for (const color of sampledColors) {
+      expect(color.green).toBeGreaterThan(180)
+      expect(color.red).toBeLessThan(80)
+      expect(color.blue).toBeLessThan(80)
+    }
   }, 15_000)
 
   it.skipIf(!ffmpegIsAvailable)('fails closed when the owner confirms while still on an authentication page', async () => {
