@@ -9,8 +9,10 @@ import {
   extractCaptureFlowsFromMarkdown,
   extractCaptureFlowsFromSourceFiles,
   extractCaptureTargets,
+  extractTestIds,
   inspectSourceDirectory,
   scanSourceTestIds,
+  toProjectId,
 } from './import'
 
 describe('project import drafts', () => {
@@ -43,6 +45,14 @@ describe('project import drafts', () => {
     })
   })
 
+  it('falls back for non-Latin ids and extracts quoted test ids without duplicates', () => {
+    expect(toProjectId('算法可视化器')).toBe('project')
+    expect(extractTestIds([
+      '<div data-testid="double-target" />',
+      '<div data-testid=\'single-target\' /><div data-testid=\'single-target\' />',
+    ])).toEqual(['double-target', 'single-target'])
+  })
+
   it('inspects a source directory and prefers package.json metadata', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'content-studio-import-'))
     try {
@@ -71,6 +81,45 @@ describe('project import drafts', () => {
     }
   })
 
+  it('normalizes SSH repositories and rejects malformed package metadata', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-import-'))
+    try {
+      await writeFile(
+        join(directory, 'package.json'),
+        JSON.stringify({
+          name: 'ssh-project',
+          repository: 'git@github.com:acme/ssh-project.git',
+        }),
+        'utf8',
+      )
+      await expect(inspectSourceDirectory(directory)).resolves.toMatchObject({
+        repositoryUrl: 'https://github.com/acme/ssh-project',
+      })
+
+      await writeFile(
+        join(directory, 'package.json'),
+        JSON.stringify({
+          name: 'invalid-repository',
+          repository: 'not-a-repository',
+        }),
+        'utf8',
+      )
+      await expect(inspectSourceDirectory(directory)).resolves.toMatchObject({
+        repositoryUrl: 'https://example.invalid/',
+      })
+
+      await writeFile(
+        join(directory, 'package.json'),
+        JSON.stringify([]),
+        'utf8',
+      )
+      await expect(inspectSourceDirectory(directory)).rejects.toThrow(/JSON object/i)
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
   it('drafts a valid source-owned manifest from a directory without metadata', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'content-studio-import-'))
     try {
@@ -85,6 +134,30 @@ describe('project import drafts', () => {
       expect(manifest.name).not.toBe('')
       expect(manifest.canonicalUrl).toBe('https://demo.example.com/')
       expect(manifest.repositoryUrl).toBe('https://github.com/acme/demo.git')
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('handles empty bounded source files and README titles', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-import-'))
+    try {
+      await mkdir(join(directory, 'src'), { recursive: true })
+      await writeFile(join(directory, 'README.md'), '', 'utf8')
+      await writeFile(join(directory, 'src', 'empty.ts'), '', 'utf8')
+
+      const emptyDraft = await draftSourceOwnedProject({
+        canonicalUrl: 'https://demo.example.com/',
+        repositoryUrl: 'https://example.invalid/',
+        sourceDirectory: directory,
+      })
+      expect(emptyDraft.captureFlows).toEqual([])
+
+      await writeFile(join(directory, 'README.md'), '###', 'utf8')
+      await expect(inspectSourceDirectory(directory)).resolves.toMatchObject({
+        name: expect.any(String),
+      })
     }
     finally {
       await rm(directory, { force: true, recursive: true })
@@ -297,6 +370,18 @@ describe('project import drafts', () => {
       repositoryUrl: 'https://example.invalid/',
       sourceDirectory: missing,
     })).rejects.toThrow(/source directory/i)
+  })
+
+  it('rejects a regular file as a source directory', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-import-'))
+    try {
+      const filePath = join(directory, 'source.ts')
+      await writeFile(filePath, 'export {}', 'utf8')
+      await expect(inspectSourceDirectory(filePath)).rejects.toThrow(/not a directory/i)
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
   })
 
   it('extracts capture flows from route definitions and prefers shallow paths', async () => {
