@@ -94,6 +94,52 @@ describe('project import page', () => {
     expect(wrapper.find('[data-testid="import-preview"]').exists()).toBe(false)
   })
 
+  it('validates the pasted manifest shape before rendering its summary', async () => {
+    const wrapper = mount(ProjectImportPage, {
+      global: { stubs: { RouterLink: routerStub } },
+      props: { runtime: createRuntimeMock() },
+    })
+
+    await wrapper.get('[data-testid="import-tab-upload"]').trigger('click')
+    await wrapper.get('[data-testid="import-json"]').setValue('{}')
+    await wrapper.get('[data-testid="import-upload"]').trigger('submit')
+
+    expect(wrapper.get('[data-testid="import-error"]').text()).toContain('schemaVersion')
+    expect(wrapper.find('[data-testid="import-preview"]').exists()).toBe(false)
+  })
+
+  it('requires an explicit kebab-case project id when a Chinese name cannot be derived', async () => {
+    const wrapper = mount(ProjectImportPage, {
+      global: { stubs: { RouterLink: routerStub } },
+      props: { runtime: createRuntimeMock() },
+    })
+
+    await wrapper.get('[data-testid="import-name"]').setValue('算法可视化器')
+    await wrapper.get('[data-testid="import-url"]').setValue('https://demo.example.com/')
+
+    expect(wrapper.find('[data-testid="import-preview"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="import-form-error"]').text()).toContain('projectId')
+
+    await wrapper.get('[data-testid="import-project-id"]').setValue('algorithm-visualizer')
+
+    expect(wrapper.get('[data-testid="preview-project-id"]').text()).toBe('algorithm-visualizer')
+  })
+
+  it('does not carry a guided-form preview into the JSON tab', async () => {
+    const wrapper = mount(ProjectImportPage, {
+      global: { stubs: { RouterLink: routerStub } },
+      props: { runtime: createRuntimeMock() },
+    })
+
+    await wrapper.get('[data-testid="import-name"]').setValue('Demo Project')
+    await wrapper.get('[data-testid="import-url"]').setValue('https://demo.example.com/')
+    expect(wrapper.find('[data-testid="import-preview"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="import-tab-upload"]').trigger('click')
+
+    expect(wrapper.find('[data-testid="import-preview"]').exists()).toBe(false)
+  })
+
   it('shows the runtime error when registration fails', async () => {
     const runtime = {
       registerProject: vi.fn().mockRejectedValue(new Error('manifest invalid')),

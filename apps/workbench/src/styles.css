@@ -1955,6 +1955,495 @@ footer {
   }
 }
 
+.import-page {
+  width: min(calc(100% - 3rem), 76rem);
+  margin: 0 auto;
+  padding: 4rem 0 5rem;
+}
+
+.import-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 3rem;
+  align-items: flex-start;
+  margin-bottom: 2.5rem;
+}
+
+.import-heading-copy {
+  max-width: 46rem;
+}
+
+.import-heading-copy h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(2.4rem, 6vw, 4.8rem);
+  font-weight: 560;
+  letter-spacing: -0.055em;
+  line-height: 0.95;
+}
+
+.import-heading-copy > p:last-child {
+  max-width: 39rem;
+  margin: 1.3rem 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.75;
+}
+
+.import-back-link {
+  flex: 0 0 auto;
+  min-height: 2.75rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--stroke);
+  color: var(--ink);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  text-decoration: none;
+}
+
+.import-back-link:hover {
+  border-color: var(--acid);
+  color: var(--acid);
+}
+
+.import-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(20rem, 0.8fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.import-editor,
+.import-preview,
+.import-success {
+  border: 1px solid var(--stroke);
+  background: rgb(25 28 23 / 88%);
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 14%);
+}
+
+.import-editor {
+  min-width: 0;
+}
+
+.import-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: 1px solid var(--stroke);
+}
+
+.import-tabs button {
+  min-height: 3.4rem;
+  padding: 0.85rem 1rem;
+  border: 0;
+  border-right: 1px solid var(--stroke);
+  background: transparent;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  text-align: left;
+}
+
+.import-tabs button:last-child {
+  border-right: 0;
+}
+
+.import-tabs button:hover,
+.import-tabs button.active {
+  background: var(--panel-strong);
+  color: var(--ink);
+}
+
+.import-tabs button.active {
+  box-shadow: inset 0 -2px var(--acid);
+}
+
+.import-form,
+.import-upload {
+  padding: 1.5rem;
+}
+
+.import-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.15rem;
+}
+
+.import-upload {
+  display: grid;
+  gap: 1rem;
+}
+
+.import-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.5rem;
+  color: var(--ink);
+  font-size: 0.72rem;
+}
+
+.import-field-wide {
+  grid-column: 1 / -1;
+}
+
+.import-field > span,
+.import-mode-fieldset legend {
+  font-weight: 600;
+}
+
+.import-field em {
+  margin-left: 0.35rem;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.56rem;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.import-field small {
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.56rem;
+  line-height: 1.5;
+}
+
+.import-field input,
+.import-field textarea {
+  width: 100%;
+  min-height: 2.85rem;
+  padding: 0.72rem 0.8rem;
+  border: 1px solid var(--stroke);
+  border-radius: 0;
+  outline: 0;
+  background: #10120f;
+  color: var(--ink);
+  font: inherit;
+}
+
+.import-field textarea {
+  min-height: 21rem;
+  resize: vertical;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  line-height: 1.55;
+}
+
+.import-field input::placeholder,
+.import-field textarea::placeholder {
+  color: #686e64;
+}
+
+.import-field input:focus-visible,
+.import-field textarea:focus-visible,
+.import-radio:has(input:focus-visible) {
+  border-color: var(--acid);
+  box-shadow: 0 0 0 2px rgb(217 255 67 / 12%);
+}
+
+.import-mode-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.import-mode-fieldset legend {
+  margin-bottom: 0.55rem;
+  color: var(--ink);
+  font-size: 0.72rem;
+}
+
+.import-radio-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.import-radio {
+  display: flex;
+  min-height: 5rem;
+  gap: 0.7rem;
+  align-items: flex-start;
+  padding: 0.8rem;
+  border: 1px solid var(--stroke);
+  background: #141713;
+  cursor: pointer;
+}
+
+.import-radio:has(input:checked) {
+  border-color: rgb(217 255 67 / 65%);
+  background: rgb(217 255 67 / 5%);
+}
+
+.import-radio input {
+  flex: 0 0 auto;
+  margin: 0.18rem 0 0;
+  accent-color: var(--acid);
+}
+
+.import-radio strong,
+.import-radio small {
+  display: block;
+}
+
+.import-radio strong {
+  color: var(--ink);
+  font-size: 0.7rem;
+}
+
+.import-radio small {
+  margin-top: 0.3rem;
+  color: var(--muted);
+  font-size: 0.6rem;
+  line-height: 1.55;
+}
+
+.import-primary-button,
+.import-secondary-button {
+  min-height: 2.85rem;
+  padding: 0.72rem 0.9rem;
+  border: 1px solid var(--acid);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 650;
+}
+
+.import-primary-button {
+  width: 100%;
+  background: var(--acid);
+  color: var(--canvas);
+}
+
+.import-secondary-button {
+  justify-self: start;
+  background: transparent;
+  color: var(--acid);
+}
+
+.import-primary-button:not(:disabled):hover,
+.import-secondary-button:not(:disabled):hover {
+  box-shadow: 0 0 1.5rem rgb(217 255 67 / 16%);
+}
+
+.import-primary-button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.import-error {
+  margin: 0 1.5rem 1.5rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgb(255 116 116 / 42%);
+  background: rgb(255 116 116 / 7%);
+  color: #ffb2b2;
+  font-size: 0.68rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.import-preview {
+  position: sticky;
+  top: 1rem;
+  min-width: 0;
+  padding: 1.4rem;
+}
+
+.import-preview-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--stroke);
+}
+
+.import-preview-heading h2,
+.import-preview-empty h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.15rem;
+  font-weight: 560;
+}
+
+.import-preview-heading > span {
+  padding: 0.3rem 0.45rem;
+  border: 1px solid rgb(217 255 67 / 45%);
+  color: var(--acid);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.55rem;
+}
+
+.import-preview dl {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.import-preview dl > div {
+  display: grid;
+  grid-template-columns: 6.3rem minmax(0, 1fr);
+  gap: 0.8rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--stroke);
+}
+
+.import-preview dt,
+.import-preview dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.import-preview dt {
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.58rem;
+}
+
+.import-preview dd {
+  color: var(--ink);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.import-note {
+  margin: 1rem 0;
+  padding: 0.75rem;
+  border-left: 2px solid var(--acid);
+  background: rgb(217 255 67 / 4%);
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.6;
+}
+
+.import-preview .import-error {
+  margin: 1rem 0 0;
+}
+
+.import-preview-empty {
+  display: grid;
+  min-height: 21rem;
+  align-content: center;
+}
+
+.import-preview-empty > span {
+  margin-bottom: 1rem;
+  color: var(--acid);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+}
+
+.import-preview-empty p {
+  margin: 0.75rem 0 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
+
+.import-success {
+  display: flex;
+  max-width: 42rem;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1.4rem;
+}
+
+.import-success > span {
+  display: grid;
+  flex: 0 0 auto;
+  width: 2.4rem;
+  height: 2.4rem;
+  background: var(--acid);
+  color: var(--canvas);
+  font-weight: 800;
+  place-items: center;
+}
+
+.import-success strong {
+  color: var(--ink);
+}
+
+.import-success p {
+  margin: 0.4rem 0 0.7rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.import-success a {
+  color: var(--acid);
+  font-size: 0.68rem;
+}
+
+@media (max-width: 850px) {
+  .import-page {
+    width: min(calc(100% - 2rem), 46rem);
+    padding-top: 2.5rem;
+  }
+
+  .import-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .import-preview {
+    position: static;
+  }
+}
+
+@media (max-width: 600px) {
+  .import-page {
+    width: min(calc(100% - 1.25rem), 38rem);
+    padding: 1.5rem 0 3rem;
+  }
+
+  .import-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .import-back-link {
+    align-self: flex-start;
+  }
+
+  .import-form {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+  }
+
+  .import-field-wide {
+    grid-column: auto;
+  }
+
+  .import-radio-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .import-upload,
+  .import-preview {
+    padding: 1rem;
+  }
+
+  .import-error {
+    margin-right: 1rem;
+    margin-left: 1rem;
+  }
+
+  .import-preview dl > div {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .skip-link {
+    transition: none;
+  }
+}
+
 /* Functional module shell: navigation and records stay visible, while each
    module owns its own working area instead of becoming one marketing page. */
 .sidebar nav button {
