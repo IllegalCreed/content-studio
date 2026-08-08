@@ -8,7 +8,13 @@ import type {
   ProjectCaptureTarget,
   ProjectManifest,
 } from '../types'
-import { readdir, readFile } from 'node:fs/promises'
+import { Buffer } from 'node:buffer'
+import {
+  open,
+  readdir,
+  realpath,
+  stat,
+} from 'node:fs/promises'
 import { basename, extname, join, relative } from 'node:path'
 
 const DEFAULT_LOCALES: Locale[] = ['zh-CN', 'en']
@@ -73,15 +79,21 @@ export interface WebAssistedDraftOptions {
 export async function inspectSourceDirectory(
   sourceDirectory: string,
 ): Promise<SourceInspection> {
+  return inspectResolvedSourceDirectory(
+    await resolveSourceDirectory(sourceDirectory),
+  )
+}
+
+async function inspectResolvedSourceDirectory(
+  sourceDirectory: string,
+): Promise<SourceInspection> {
   let packageInfo: PackageJsonInfo = {}
-  try {
-    packageInfo = JSON.parse(
-      await readFile(join(sourceDirectory, 'package.json'), 'utf8'),
-    ) as PackageJsonInfo
-  }
-  catch {
-    // package.json is optional; fall back to README and directory name
-  }
+  const packageJson = await readOptionalTextFile(
+    join(sourceDirectory, 'package.json'),
+    MAX_SCANNED_FILE_BYTES,
+  )
+  if (packageJson !== undefined)
+    packageInfo = parsePackageJsonInfo(packageJson)
 
   const readme = await readReadme(sourceDirectory)
   const readmeInfo = parseReadme(readme)
@@ -102,12 +114,13 @@ export async function inspectSourceDirectory(
 export async function draftSourceOwnedProject(
   options: SourceOwnedDraftOptions,
 ): Promise<ProjectManifest> {
-  const inspection = await inspectSourceDirectory(options.sourceDirectory)
+  const sourceDirectory = await resolveSourceDirectory(options.sourceDirectory)
+  const inspection = await inspectResolvedSourceDirectory(sourceDirectory)
   const locales = options.locales ?? DEFAULT_LOCALES
   const name = options.name ?? inspection.name
   const [readme, sourceFiles] = await Promise.all([
-    readReadme(options.sourceDirectory),
-    scanSourceFiles(options.sourceDirectory),
+    readReadme(sourceDirectory),
+    scanResolvedSourceFiles(sourceDirectory),
   ])
   const captureFlows = mergeCaptureFlows([
     ...extractCaptureFlowsFromMarkdown(readme),
@@ -283,39 +296,63 @@ export async function scanSourceTestIds(
 export async function scanSourceFiles(
   sourceDirectory: string,
 ): Promise<string[]> {
-  let entries: Dirent[]
-  try {
-    entries = await readdir(sourceDirectory, {
-      recursive: true,
-      withFileTypes: true,
-    })
-  }
-  catch {
-    return []
-  }
-  const sorted = [...entries].sort((left, right) =>
-    left.name.localeCompare(right.name))
+  return scanResolvedSourceFiles(await resolveSourceDirectory(sourceDirectory))
+}
+
+async function scanResolvedSourceFiles(
+  sourceDirectory: string,
+): Promise<string[]> {
   const files: string[] = []
+  const pendingDirectories = [sourceDirectory]
   let scannedFiles = 0
-  for (const entry of sorted) {
-    if (!entry.isFile() || scannedFiles >= MAX_SCANNED_FILES)
-      continue
-    const absolutePath = join(entry.parentPath, entry.name)
-    const segments = relative(sourceDirectory, absolutePath).split(/[\\/]/)
-    if (segments.some(segment => SKIP_SCAN_DIRECTORIES.has(segment)))
-      continue
-    if (!SOURCE_EXTENSIONS.has(extname(entry.name)))
-      continue
-    scannedFiles += 1
-    let content: string
+  let scannedDirectories = 0
+  while (
+    pendingDirectories.length > 0
+    && scannedFiles < MAX_SCANNED_FILES
+    && scannedDirectories < MAX_SCANNED_FILES
+  ) {
+    const directory = pendingDirectories.shift()!
+    scannedDirectories += 1
+    let entries: Dirent[]
     try {
-      content = (await readFile(absolutePath, 'utf8'))
-        .slice(0, MAX_SCANNED_FILE_BYTES)
+      entries = await readdir(directory, { withFileTypes: true })
     }
     catch {
       continue
     }
-    files.push(content)
+    entries.sort((left, right) => left.name.localeCompare(right.name))
+    for (const entry of entries) {
+      const absolutePath = join(directory, entry.name)
+      const segments = relative(sourceDirectory, absolutePath).split(/[\\/]/)
+      if (segments.some(segment => SKIP_SCAN_DIRECTORIES.has(segment)))
+        continue
+      if (entry.isDirectory()) {
+        if (
+          pendingDirectories.length + scannedDirectories
+          < MAX_SCANNED_FILES
+        ) {
+          pendingDirectories.push(absolutePath)
+        }
+        continue
+      }
+      if (
+        !entry.isFile()
+        || !SOURCE_EXTENSIONS.has(extname(entry.name))
+        || scannedFiles >= MAX_SCANNED_FILES
+      ) {
+        continue
+      }
+      scannedFiles += 1
+      try {
+        files.push(await readTextFilePrefix(
+          absolutePath,
+          MAX_SCANNED_FILE_BYTES,
+        ))
+      }
+      catch {
+        // Files can disappear during inspection; skip only that source file.
+      }
+    }
   }
   return files
 }
@@ -328,12 +365,73 @@ function localized(text: string): LocalizedText {
 }
 
 async function readReadme(sourceDirectory: string): Promise<string | undefined> {
+  return readOptionalTextFile(
+    join(sourceDirectory, 'README.md'),
+    MAX_SCANNED_FILE_BYTES,
+  )
+}
+
+async function resolveSourceDirectory(sourceDirectory: string): Promise<string> {
   try {
-    return await readFile(join(sourceDirectory, 'README.md'), 'utf8')
+    const resolved = await realpath(sourceDirectory)
+    const metadata = await stat(resolved)
+    if (!metadata.isDirectory())
+      throw new Error('path is not a directory')
+    await readdir(resolved)
+    return resolved
   }
-  catch {
-    return undefined
+  catch (error: unknown) {
+    throw new Error(
+      `Source directory is missing, unreadable, or not a directory: ${sourceDirectory}`,
+      { cause: error },
+    )
   }
+}
+
+async function readOptionalTextFile(
+  filePath: string,
+  maxBytes: number,
+): Promise<string | undefined> {
+  try {
+    return await readTextFilePrefix(filePath, maxBytes)
+  }
+  catch (error: unknown) {
+    if (isMissingFileError(error))
+      return undefined
+    throw error
+  }
+}
+
+async function readTextFilePrefix(
+  filePath: string,
+  maxBytes: number,
+): Promise<string> {
+  const file = await open(filePath, 'r')
+  try {
+    const metadata = await file.stat()
+    const length = Math.min(metadata.size, maxBytes)
+    if (length === 0)
+      return ''
+    const buffer = Buffer.alloc(length)
+    const { bytesRead } = await file.read(buffer, 0, length, 0)
+    return buffer.toString('utf8', 0, bytesRead)
+  }
+  finally {
+    await file.close()
+  }
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return error instanceof Error
+    && 'code' in error
+    && error.code === 'ENOENT'
+}
+
+function parsePackageJsonInfo(packageJson: string): PackageJsonInfo {
+  const parsed = JSON.parse(packageJson) as unknown
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+    throw new Error('Source package.json must contain a JSON object')
+  return parsed as PackageJsonInfo
 }
 
 function parseReadme(readme: string | undefined): {

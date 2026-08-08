@@ -289,9 +289,14 @@ describe('project import drafts', () => {
     }
   })
 
-  it('returns no test ids when the source directory cannot be read', async () => {
+  it('fails when the source directory does not exist', async () => {
     const missing = join(tmpdir(), `content-studio-missing-${Date.now()}`)
-    await expect(scanSourceTestIds(missing)).resolves.toEqual([])
+    await expect(scanSourceTestIds(missing)).rejects.toThrow(/source directory/i)
+    await expect(draftSourceOwnedProject({
+      canonicalUrl: 'https://demo.example.com/',
+      repositoryUrl: 'https://example.invalid/',
+      sourceDirectory: missing,
+    })).rejects.toThrow(/source directory/i)
   })
 
   it('extracts capture flows from route definitions and prefers shallow paths', async () => {
