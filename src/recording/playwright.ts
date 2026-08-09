@@ -6,7 +6,6 @@ import type {
   BrowserContextOptions,
   Locator,
   Page,
-  Video,
 } from 'playwright'
 import type {
   CompiledCaptureAction,
@@ -337,22 +336,22 @@ function assertOwnerLeftAuthenticationPage(
 
 export function resolvePlaywrightRecordingContextOptions(
   plan: VideoPlan,
-  rawVideoDirectory: string,
 ): BrowserContextOptions {
   return {
     acceptDownloads: false,
     colorScheme: plan.recordingConfig.colorScheme,
     deviceScaleFactor: plan.recordingConfig.deviceScaleFactor,
     locale: plan.recordingConfig.locale,
-    recordVideo: {
-      dir: rawVideoDirectory,
-      size: plan.recordingConfig.outputSize,
-    },
     reducedMotion: 'reduce',
     viewport: plan.recordingConfig.viewport,
   }
 }
 
+/**
+ * Starts page screencast capture only after a scene reaches a semantic ready
+ * point. Context-level recordVideo starts before navigation and can leave a
+ * blank lead-in that also becomes a blank crossfade source.
+ */
 class PlaywrightRecordingSession implements RecordingSession {
   private readonly actionTimeoutMs: number
   private readonly artifacts: RecorderArtifact[] = []
@@ -377,8 +376,6 @@ class PlaywrightRecordingSession implements RecordingSession {
   private screencastActive = false
   private readonly screencastSegments: string[] = []
   private screencastSegmentIndex = 0
-  private readonly useSegmentedVideo: boolean
-  private video: Video | null | undefined
 
   constructor(
     browser: Browser,
@@ -390,7 +387,6 @@ class PlaywrightRecordingSession implements RecordingSession {
     this.browser = browser
     this.context = context
     this.ownerTakeover = ownerTakeover
-    this.useSegmentedVideo = ownerTakeover !== undefined
   }
 
   async beginScene(
@@ -401,13 +397,6 @@ class PlaywrightRecordingSession implements RecordingSession {
       throw new Error('A recorder scene is already active')
 
     throwIfAborted(sceneContext.signal)
-    const rawVideoDirectory = join(
-      this.context.artifactDirectory,
-      '.playwright-video',
-    )
-    await mkdir(rawVideoDirectory, {
-      recursive: true,
-    })
     await mkdir(
       join(this.context.artifactDirectory, 'clips'),
       {
@@ -423,10 +412,7 @@ class PlaywrightRecordingSession implements RecordingSession {
 
     const contextOptions = resolvePlaywrightRecordingContextOptions(
       this.context.plan,
-      rawVideoDirectory,
     )
-    if (this.useSegmentedVideo)
-      delete contextOptions.recordVideo
     const browserContext = await this.browser.newContext(contextOptions)
     browserContext.setDefaultTimeout(this.actionTimeoutMs)
     this.browserContext = browserContext
@@ -447,16 +433,10 @@ class PlaywrightRecordingSession implements RecordingSession {
 
     const page = await browserContext.newPage()
     this.page = page
-    if (this.useSegmentedVideo) {
-      this.video = null
-      this.screencastSegments.length = 0
-      this.screencastSegmentIndex = 0
-      this.activeScreencastSegment = undefined
-      this.screencastActive = false
-    }
-    else {
-      this.video = page.video()
-    }
+    this.screencastSegments.length = 0
+    this.screencastSegmentIndex = 0
+    this.activeScreencastSegment = undefined
+    this.screencastActive = false
     this.observePage(page)
     await page.emulateMedia({
       colorScheme: this.context.plan.recordingConfig.colorScheme,
@@ -485,8 +465,6 @@ class PlaywrightRecordingSession implements RecordingSession {
       sceneContext.signal,
     )
     await this.assertPolicy()
-    if (this.useSegmentedVideo && !this.screencastActive)
-      await this.startScreencastSegment(sceneContext.sceneIndex)
   }
 
   async runAction(
@@ -498,12 +476,14 @@ class PlaywrightRecordingSession implements RecordingSession {
     await this.assertPolicy()
 
     if (action.kind === 'wait') {
+      await this.ensureScreencastSegment(actionContext.sceneIndex)
       await abortableDelay(action.durationMs, actionContext.signal)
       await this.assertPolicy()
       return {}
     }
 
     if (action.kind === 'capture') {
+      await this.ensureScreencastSegment(actionContext.sceneIndex)
       const relativePath = [
         'previews',
         `scene-${formatIndex(actionContext.sceneIndex)}-action-${formatIndex(actionContext.actionIndex)}.png`,
@@ -536,8 +516,11 @@ class PlaywrightRecordingSession implements RecordingSession {
       )
       await waitForVisibleLocator(locator, action.durationMs, actionContext.signal)
       await this.assertPolicy()
+      await this.ensureScreencastSegment(actionContext.sceneIndex)
       return {}
     }
+
+    await this.ensureScreencastSegment(actionContext.sceneIndex)
 
     if (action.kind === 'press') {
       await withAbort(
@@ -765,6 +748,11 @@ class PlaywrightRecordingSession implements RecordingSession {
     }
   }
 
+  private async ensureScreencastSegment(sceneIndex: number): Promise<void> {
+    if (!this.screencastActive)
+      await this.startScreencastSegment(sceneIndex)
+  }
+
   private async stopScreencastSegment(discard = false): Promise<void> {
     const page = this.page
     if (!this.screencastActive || page === undefined)
@@ -828,8 +816,6 @@ class PlaywrightRecordingSession implements RecordingSession {
     const page = this.page
     const scene = this.currentScene
     const sceneIndex = this.currentSceneIndex
-    const video = this.video
-
     if (
       browserContext === undefined
       || page === undefined
@@ -840,39 +826,17 @@ class PlaywrightRecordingSession implements RecordingSession {
       this.currentScene = undefined
       this.currentSceneIndex = undefined
       this.page = undefined
-      this.video = undefined
       return
     }
 
-    if (this.useSegmentedVideo)
-      await this.stopScreencastSegment()
+    await this.stopScreencastSegment()
     this.browserContext = undefined
     this.currentScene = undefined
     this.currentSceneIndex = undefined
     this.page = undefined
-    this.video = undefined
     await page.close()
     await browserContext.close()
-    const relativePath = `clips/scene-${formatIndex(sceneIndex)}.webm`
-    if (this.useSegmentedVideo) {
-      await this.finalizeScreencastScene(sceneIndex, scene)
-      return
-    }
-    if (video === null || video === undefined)
-      return
-    await video.saveAs(
-      join(this.context.artifactDirectory, relativePath),
-    )
-    await video.delete()
-    this.artifacts.push(
-      await createRecorderArtifact(
-        this.context.artifactDirectory,
-        relativePath,
-        'video-clip',
-        `clip-${formatIndex(sceneIndex)}`,
-        scene.id,
-      ),
-    )
+    await this.finalizeScreencastScene(sceneIndex, scene)
   }
 }
 

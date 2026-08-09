@@ -188,17 +188,12 @@ describe('playwright recording policy', () => {
       scenes: [],
     } satisfies VideoPlan
 
-    expect(resolvePlaywrightRecordingContextOptions(
-      plan,
-      '/tmp/content-studio-recording/attempt-1/.playwright-video',
-    )).toMatchObject({
+    expect(resolvePlaywrightRecordingContextOptions(plan)).toEqual({
+      acceptDownloads: false,
       colorScheme: 'light',
       deviceScaleFactor: 2,
       locale: 'zh-CN',
-      recordVideo: {
-        dir: '/tmp/content-studio-recording/attempt-1/.playwright-video',
-        size: { height: 720, width: 1280 },
-      },
+      reducedMotion: 'reduce',
       viewport: { height: 900, width: 1600 },
     })
   })

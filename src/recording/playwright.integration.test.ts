@@ -128,7 +128,7 @@ describe.skipIf(!browserIsInstalled)('playwright recorder integration', () => {
       response.setHeader('content-type', 'text/html; charset=utf-8')
       response.end(`<!doctype html>
         <html lang="en">
-          <body>
+          <body style="background: rgb(15, 40, 80); color: rgb(230, 240, 255); margin: 0; min-height: 100vh">
             <button type="button">Start</button>
             <label>Values <input /></label>
             <output data-testid="status">Ready</output>
@@ -273,6 +273,110 @@ describe.skipIf(!browserIsInstalled)('playwright recorder integration', () => {
         'utf8',
       ),
     ).resolves.toContain('"outcome": "succeeded"')
+    if (ffmpegIsAvailable) {
+      const videoClip = result.receipt.artifacts.find(
+        artifact => artifact.kind === 'video-clip',
+      )
+      expect(videoClip).toBeDefined()
+      const sampledColors = await sampleVideoColors(
+        join(result.receipt.artifactDirectory, videoClip!.relativePath),
+        result.receipt.artifactDirectory,
+      )
+      expect(sampledColors.length).toBeGreaterThan(0)
+      expect(sampledColors[0]!.red).toBeLessThan(180)
+      expect(sampledColors[0]!.blue).toBeGreaterThan(60)
+    }
+  }, 15_000)
+
+  it.skipIf(!ffmpegIsAvailable)('starts a clip after a semantic page-ready signal', async () => {
+    const server = createServer((request, response) => {
+      if (request.url !== '/delayed') {
+        response.writeHead(404)
+        response.end()
+        return
+      }
+      response.setHeader('content-type', 'text/html; charset=utf-8')
+      response.end(`<!doctype html>
+        <html lang="en">
+          <body style="background: rgb(255, 255, 255); margin: 0; min-height: 100vh">
+            <script>
+              setTimeout(() => {
+                document.body.style.background = 'rgb(15, 40, 80)'
+                document.body.innerHTML = '<button type="button">Ready</button>'
+              }, 300)
+            </script>
+          </body>
+        </html>`)
+    })
+    servers.push(server)
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(0, '127.0.0.1', resolve)
+    })
+    const address = server.address()
+    if (address === null || typeof address === 'string')
+      throw new Error('Test server did not provide a TCP address')
+
+    const temporaryDirectory = await mkdtemp(
+      join(tmpdir(), 'content-studio-playwright-ready-'),
+    )
+    temporaryDirectories.push(temporaryDirectory)
+    const result = await recordWithPlaywright(
+      {
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        jobId: 'semantic-page-ready-job',
+        outputDirectory: join(temporaryDirectory, 'recording-job'),
+        plan: {
+          campaignId: 'local-demo',
+          durationMs: 500,
+          format: 'landscape',
+          scenes: [
+            {
+              actions: [
+                {
+                  durationMs: 400,
+                  kind: 'wait-for',
+                  locator: {
+                    by: 'role',
+                    name: 'Ready',
+                    value: 'button',
+                  },
+                  startMs: 0,
+                },
+              ],
+              id: 'delayed-ready',
+              startMs: 0,
+              startPath: '/delayed',
+              title: 'Delayed ready',
+            },
+          ],
+          recordingConfig: {
+            colorScheme: 'light',
+            deviceScaleFactor: 1,
+            locale: 'en',
+            outputSize: { height: 360, width: 640 },
+            viewport: { height: 360, width: 640 },
+          },
+        },
+        projectId: 'local-project',
+      },
+      { actionTimeoutMs: 2000 },
+    )
+
+    expect(result.receipt.outcome).toBe('succeeded')
+    const videoClip = result.receipt.artifacts.find(
+      artifact => artifact.kind === 'video-clip',
+    )
+    expect(videoClip).toBeDefined()
+    const sampledColors = await sampleVideoColors(
+      join(result.receipt.artifactDirectory, videoClip!.relativePath),
+      result.receipt.artifactDirectory,
+    )
+    expect(sampledColors.length).toBeGreaterThanOrEqual(2)
+    for (const color of sampledColors.slice(0, 2)) {
+      expect(color.red).toBeLessThan(180)
+      expect(color.blue).toBeGreaterThan(60)
+    }
   }, 15_000)
 
   it('returns a retryable locator failure when a wait-for target never appears', async () => {
