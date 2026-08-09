@@ -47,6 +47,9 @@ Vue 3 工作台是同一套 Content Studio core 和应用服务的可视化控�
 - `marketing-ops` 状态只通过有类型的只读客户端读取；当前兼容矩阵为 Content Studio
   `0.1.x` ↔ `marketing-ops 0.1.x / contract v3`。状态快照由本地生成时间并只保留 60 秒，
   未连接、版本不兼容或过期时发布保持阻塞；`adapterReady` 也不等于本次操作获得授权。
+  已初始化的受管 MCP client 只能通过固定 `channels_status` 适配器接入，Content Studio
+  忽略工具文本，只接受 `structuredContent`。Runtime 的项目范围 HTTP/MCP 读取入口和
+  Workbench 共用该快照；HTTP 禁止缓存，Workbench 每 30 秒刷新，失败时只显示“未查询”。
 - 素材归项目所有，活动产物归具体活动；当前不设置全局素材库。
 - 同一发布活动可以为不同平台创作完全不同的内容。
 - 图片是可由 AI 独立生成的素材，通常服务于文章、图文、视频或封面。

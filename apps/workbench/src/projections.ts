@@ -11,6 +11,8 @@ import type {
   ContentStudioProjectView,
   ExecutionTask,
   ExecutionTaskEvent,
+  MarketingOpsChannelHealth,
+  MarketingOpsChannelsStatusSnapshot,
   MonitoringObservation,
   ObservationMetric,
   OwnerHandoff,
@@ -39,6 +41,7 @@ import type {
 import {
   humanizeChannelContentFormat,
   humanizeTaskStatus,
+  isPublishingAssistantChannel,
   mediaRequirementSummary,
   recordingReceiptToVideoJob,
   taskEventSummary,
@@ -89,6 +92,94 @@ export function projectChannels({
       projectAccountId: binding?.accountRef ?? null,
     }
   })
+}
+
+const marketingOpsHealthLabels: Record<MarketingOpsChannelHealth, ChannelProjection['health']> = {
+  'blocked': '已阻塞',
+  'not-configured': '未配置',
+  'ready': '已就绪',
+  'reauth-required': '需重新授权',
+}
+
+const marketingOpsNextStepLabels: Record<MarketingOpsChannelsStatusSnapshot['channels'][number]['nextStep'], string | null> = {
+  blocked: '渠道被阻塞',
+  configure: '需要配置渠道',
+  ready: null,
+  reauthorize: '需要重新授权',
+}
+
+/**
+ * Applies only the finite, sanitized status projection returned by the core
+ * read client. A missing snapshot never upgrades a demo/configuration value
+ * into a live publishing status.
+ */
+export function projectMarketingOpsChannels(
+  channels: readonly ChannelProjection[],
+  status: MarketingOpsChannelsStatusSnapshot | null,
+): ChannelProjection[] {
+  const statusByChannel = new Map(
+    status?.channels.map(channel => [channel.channel, channel]) ?? [],
+  )
+  return channels.map((channel) => {
+    if (!isPublishingAssistantChannel(channel))
+      return channel
+    const liveStatus = statusByChannel.get(channel.channel)
+    if (liveStatus === undefined)
+      return resetMarketingOpsChannel(channel)
+    return applyMarketingOpsChannelStatus(channel, liveStatus)
+  })
+}
+
+function resetMarketingOpsChannel(channel: ChannelProjection): ChannelProjection {
+  return {
+    ...channel,
+    accounts: channel.accounts.map(account => ({
+      ...account,
+      adapterReady: false,
+      health: '未查询',
+      nextAction: '尚未读取该账号的 marketing-ops 状态',
+      statusSource: '项目配置',
+    })),
+    adapterReady: false,
+    health: '未查询',
+    nextAction: '尚未读取该渠道的 marketing-ops 状态',
+    statusSource: '项目配置',
+  }
+}
+
+function applyMarketingOpsChannelStatus(
+  channel: ChannelProjection,
+  status: MarketingOpsChannelsStatusSnapshot['channels'][number],
+): ChannelProjection {
+  const health = marketingOpsHealthLabels[status.health]
+  const nextAction = marketingOpsNextStepLabels[status.nextStep]
+  const accountAlias = status.accountAlias
+  return {
+    ...channel,
+    accounts: channel.accounts.map((account) => {
+      if (accountAlias !== undefined && account.alias === accountAlias) {
+        return {
+          ...account,
+          adapterReady: status.adapterReady,
+          health,
+          nextAction,
+          statusSource: 'marketing-ops',
+        }
+      }
+      return {
+        ...account,
+        adapterReady: false,
+        health: '未查询',
+        nextAction: '尚未读取该账号的 marketing-ops 状态',
+        statusSource: '项目配置',
+      }
+    }),
+    adapterReady: status.adapterReady,
+    alias: accountAlias ?? null,
+    health,
+    nextAction,
+    statusSource: 'marketing-ops',
+  }
 }
 
 export function runtimeActivityArtifacts(

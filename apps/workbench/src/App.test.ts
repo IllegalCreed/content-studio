@@ -196,7 +196,8 @@ describe('content studio workbench', () => {
     })
     expect(wrapper.get('.channel-account-detail').text()).toContain('尚未读取该账号状态')
     await wrapper.get('button[data-channel-id="dev"]').trigger('click')
-    expect(wrapper.get('.channel-detail-card').text()).toContain('需重新授权')
+    expect(wrapper.get('.channel-detail-card').text()).toContain('尚未读取该渠道的 marketing-ops 状态')
+    expect(wrapper.get('.channel-detail-card').text()).not.toContain('marketing-ops setup')
     await wrapper.get('button[data-channel-id="x"]').trigger('click')
     expect(wrapper.get('.channel-detail-card').text()).toContain('尚未读取该渠道的 marketing-ops 状态')
 

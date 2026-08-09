@@ -8,6 +8,7 @@ import type {
   MarketingOpsChannelStatus,
   MarketingOpsCompatibilityAssessment,
   MarketingOpsCompatibilityInput,
+  MarketingOpsMcpStatusClientOptions,
   MarketingOpsPublicationReceipt,
   MarketingOpsPublicationRequest,
   MarketingOpsStatusClient,
@@ -120,6 +121,28 @@ export function createMarketingOpsStatusClient(
   }
 }
 
+/**
+ * Narrows an initialized MCP client to the single read-only status tool.
+ * Text content is deliberately ignored; only structuredContent crosses into
+ * the status parser.
+ */
+export function createMarketingOpsMcpStatusClient(
+  options: MarketingOpsMcpStatusClientOptions,
+): MarketingOpsStatusClient {
+  return createMarketingOpsStatusClient({
+    ...(options.now === undefined ? {} : { now: options.now }),
+    transport: {
+      getChannelsStatus: async input => parseMarketingOpsMcpToolResult(
+        await options.mcp.callTool({
+          arguments: input,
+          name: 'channels_status',
+        }),
+      ),
+      getRuntimeInfo: async () => options.mcp.getServerVersion(),
+    },
+  })
+}
+
 export function isMarketingOpsStatusSnapshotFresh(
   snapshot: MarketingOpsChannelsStatusSnapshot,
   now = new Date(),
@@ -130,6 +153,8 @@ export function isMarketingOpsStatusSnapshotFresh(
   return Number.isFinite(observedAt)
     && Number.isFinite(expiresAt)
     && Number.isFinite(current)
+    && expiresAt > observedAt
+    && expiresAt - observedAt <= MARKETING_OPS_STATUS_TTL_MS
     && current >= observedAt
     && current < expiresAt
 }
@@ -200,6 +225,23 @@ function parseRuntimeInfo(input: unknown): { name: string, version: string } {
     name: stringField(value.name, 'marketing-ops runtime name', 64),
     version: stringField(value.version, 'marketing-ops runtime version', 128),
   }
+}
+
+function parseMarketingOpsMcpToolResult(input: unknown): unknown {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'marketing-ops MCP tool result')
+  assertSupportedKeys(
+    value,
+    ['_meta', 'content', 'isError', 'structuredContent'],
+    'marketing-ops MCP tool result',
+  )
+  if (value.isError !== undefined && typeof value.isError !== 'boolean')
+    throw new Error('Marketing-ops MCP tool isError must be a boolean')
+  if (value.isError === true)
+    throw new Error('Marketing-ops MCP tool failed')
+  if (value.structuredContent === undefined)
+    throw new Error('Marketing-ops MCP tool must return structuredContent')
+  return value.structuredContent
 }
 
 function parseChannelsStatusResponse(

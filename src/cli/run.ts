@@ -367,6 +367,7 @@ async function runMcp(
       return await runMcpHttp(execution, project.projectId, options, runtime)
     await serveMcpStdio(
       createContentStudioMcpServer({
+        marketingOpsStatus: runtime.marketingOpsStatus,
         ownerTakeovers: execution.ownerTakeovers,
         projectId: project.projectId,
         productionWorker: execution.worker,
@@ -464,6 +465,7 @@ async function runMcpHttp(
 ): Promise<number> {
   const http = createContentStudioMcpHttpServer({
     server: createContentStudioMcpServer({
+      marketingOpsStatus: runtime.marketingOpsStatus,
       ownerTakeovers: execution.ownerTakeovers,
       projectId,
       productionWorker: execution.worker,
@@ -527,6 +529,7 @@ function createApplicationOptions(
       ?? environmentDatabasePath
       ?? '.content-studio/content-studio.sqlite',
     ),
+    marketingOpsStatus: runtime.marketingOpsStatus,
     project: projectRecord,
     projectChannelBindings,
     snapshot,

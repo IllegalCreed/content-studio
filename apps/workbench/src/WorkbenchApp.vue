@@ -16,6 +16,7 @@ import {
   activityToCampaign,
   preferRuntimeData,
   projectChannels,
+  projectMarketingOpsChannels,
   runtimeActivityArtifacts,
   runtimeProjectAssets,
   runtimeReports,
@@ -46,6 +47,7 @@ import type {
   ContentStudioGlobalView,
   ProjectAsset,
   ProjectChannelBinding,
+  MarketingOpsChannelsStatusSnapshot,
   PublicationPlan,
   StorageCleanupResult,
   StorageCleanupPreview,
@@ -73,6 +75,7 @@ import {
   type WorkbenchUiRouteState,
 } from './stores/workbench-ui-route'
 import { useWorkbenchStore } from './stores/workbench'
+import { MARKETING_OPS_STATUS_REFRESH_INTERVAL_MS } from '../../../src/constants'
 
 type ModuleId = WorkbenchModuleId
 
@@ -170,6 +173,9 @@ const {
 const selectedTaskProjectId = ref<string | null>(null)
 const {
   loading: runtimeLoading,
+  marketingOpsStatus,
+  marketingOpsStatusError,
+  marketingOpsStatusLoading,
   runtimeConnected,
   runtimeError,
 } = storeToRefs(runtimeStore)
@@ -178,8 +184,10 @@ uiStore.setActiveModule(initialModule)
 syncTaskScopeForModule(initialModule)
 applyRouteUiState(route.query)
 // 子页面暂时仍从快照读取这个兼容字段；连接状态的唯一来源已经是 runtimeStore。
-watch(runtimeConnected, value => {
+watch(runtimeConnected, (value) => {
   snapshot.runtimeConnected = value
+  if (!value)
+    snapshot.channels = projectMarketingOpsChannels(snapshot.channels, null)
 }, { immediate: true })
 const workbenchRuntime = createWorkbenchRuntime()
 const projectIndex = ref<ProjectIndexProjection[]>([])
@@ -258,6 +266,7 @@ const videoPlanActionPending = ref(false)
 const videoPlanRevisionError = ref<string | null>(null)
 const videoPlanRevisionPending = ref(false)
 let runtimeRefreshTimer: ReturnType<typeof setInterval> | undefined
+let marketingOpsRefreshTimer: ReturnType<typeof setInterval> | undefined
 const videoPlanViewportDraft = reactive({
   height: 1080,
   width: 1920,
@@ -542,10 +551,31 @@ watch(
   { immediate: true },
 )
 
+watch(runtimeConnected, (connected) => {
+  if (marketingOpsRefreshTimer !== undefined) {
+    clearInterval(marketingOpsRefreshTimer)
+    marketingOpsRefreshTimer = undefined
+  }
+  if (import.meta.env.MODE === 'test' || !connected)
+    return
+  marketingOpsRefreshTimer = setInterval(() => {
+    void refreshMarketingOpsStatusSnapshot()
+  }, MARKETING_OPS_STATUS_REFRESH_INTERVAL_MS)
+}, { immediate: true })
+
 onBeforeUnmount(() => {
   if (runtimeRefreshTimer !== undefined)
     clearInterval(runtimeRefreshTimer)
+  if (marketingOpsRefreshTimer !== undefined)
+    clearInterval(marketingOpsRefreshTimer)
 })
+
+async function refreshMarketingOpsStatusSnapshot(): Promise<void> {
+  const status = await runtimeStore.refreshMarketingOpsStatus(
+    snapshot.project.projectId,
+  )
+  snapshot.channels = projectMarketingOpsChannels(snapshot.channels, status)
+}
 
 const emptyAsset: AssetProjection = {
   assetId: 'no-project-asset',
@@ -701,10 +731,14 @@ const enabledChannels = computed(() =>
 )
 
 const channelSnapshotCount = computed(() =>
-  snapshot.channels.filter(channel =>
-    isPublishingAssistantChannel(channel)
-    && channel.statusSource === 'marketing-ops',
-  ).length,
+  !runtimeConnected.value || marketingOpsStatus.value === null
+    ? 0
+    : marketingOpsStatus.value.channels.filter(status =>
+        snapshot.channels.some(channel =>
+          channel.channel === status.channel
+          && isPublishingAssistantChannel(channel),
+        ),
+      ).length,
 )
 
 const taskCounts = computed(() => ({
@@ -1612,23 +1646,27 @@ async function connectLocalRuntime(): Promise<void> {
   runtimeStore.beginRuntimeLoad()
   try {
     const health = await workbenchRuntime.health()
-    const [index, globalView, projectView] = await Promise.all([
+    const [index, globalView, projectView, status] = await Promise.all([
       workbenchRuntime.projects(),
       workbenchRuntime.global(),
       workbenchRuntime.project(snapshot.project.projectId),
+      runtimeStore.refreshMarketingOpsStatus(snapshot.project.projectId),
     ])
     if (health.status === 'ready')
       runtimeStore.markRuntimeReady()
     projectIndex.value = projectIndexProjections(index)
     applyGlobalView(globalView)
-    applyProjectView(projectView)
+    applyProjectView(projectView, status)
   }
   catch (error: unknown) {
     runtimeStore.markRuntimeUnavailable(error)
   }
 }
 
-function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntime.project>>): void {
+function applyProjectView(
+  projectView: Awaited<ReturnType<typeof workbenchRuntime.project>>,
+  status: MarketingOpsChannelsStatusSnapshot | null = marketingOpsStatus.value,
+): void {
     currentSnapshotId.value = projectView.snapshot.snapshotId
     projectCaptureFlowIds.value = projectView.snapshot.manifest.captureFlows.map(flow => flow.id)
     snapshot.project = {
@@ -1649,10 +1687,10 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
       version: `v${projectView.snapshot.version}`,
       canonicalUrl: projectView.snapshot.manifest.canonicalUrl,
     }
-    snapshot.channels = projectChannels({
+    snapshot.channels = projectMarketingOpsChannels(projectChannels({
       bindings: projectView.projectChannelBindings,
       channels: snapshot.channels,
-    })
+    }), status)
     const runtimeCampaigns = projectView.activities.map(activity => activityToCampaign({
       accountAliasForChannel: projectAccountAliasForChannel,
       activity,
@@ -1707,22 +1745,26 @@ function applyGlobalView(globalView: ContentStudioGlobalView): void {
 }
 
 async function refreshProjectView(): Promise<void> {
-  const [index, globalView, projectView] = await Promise.all([
+  const [index, globalView, projectView, status] = await Promise.all([
     workbenchRuntime.projects(),
     workbenchRuntime.global(),
     workbenchRuntime.project(snapshot.project.projectId),
+    runtimeStore.refreshMarketingOpsStatus(snapshot.project.projectId),
   ])
   projectIndex.value = projectIndexProjections(index)
   applyGlobalView(globalView)
-  applyProjectView(projectView)
+  applyProjectView(projectView, status)
 }
 
 async function switchProject(projectId: string): Promise<void> {
   if (!runtimeConnected.value || projectId === snapshot.project.projectId)
     return
   try {
-    const projectView = await workbenchRuntime.project(projectId)
-    applyProjectView(projectView)
+    const [projectView, status] = await Promise.all([
+      workbenchRuntime.project(projectId),
+      runtimeStore.refreshMarketingOpsStatus(projectId),
+    ])
+    applyProjectView(projectView, status)
     selectedTaskProjectId.value = projectId
     uiStore.selectCampaign(snapshot.campaigns[0]?.campaignId ?? '')
     uiStore.selectTask(snapshot.tasks[0]?.taskId ?? '')
@@ -1908,6 +1950,9 @@ async function openProjectSpace(projectId: string): Promise<void> {
         <ChannelManagementPage
           :account-reference-count="accountReferenceCount"
           :channel-snapshot-count="channelSnapshotCount"
+          :marketing-ops-status="marketingOpsStatus"
+          :marketing-ops-status-error="marketingOpsStatusError"
+          :marketing-ops-status-loading="marketingOpsStatusLoading"
           :selected-channel="selectedChannel"
           :selected-channel-account="selectedChannelAccount"
           :snapshot="snapshot"

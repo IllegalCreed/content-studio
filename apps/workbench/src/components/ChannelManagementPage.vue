@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ChannelId } from '@content-studio/core-types'
+import type { ChannelId, MarketingOpsChannelsStatusSnapshot } from '@content-studio/core-types'
 import {
   isPublishingAssistantChannel,
   type ChannelProjection,
@@ -12,6 +12,9 @@ type ChannelAccount = ChannelProjection['accounts'][number]
 const props = defineProps<{
   accountReferenceCount: (channel: ChannelProjection) => number
   channelSnapshotCount: number
+  marketingOpsStatus: MarketingOpsChannelsStatusSnapshot | null
+  marketingOpsStatusError: string | null
+  marketingOpsStatusLoading: boolean
   selectedChannel: ChannelProjection
   selectedChannelAccount: ChannelAccount | null
   snapshot: WorkbenchSnapshot
@@ -68,12 +71,25 @@ const globalAccountCount = computed(() =>
 const selectedChannelReferenceCount = computed(() =>
   props.selectedChannelAccount?.assignedProjects.length ?? 0,
 )
+
+const statusSummary = computed(() => {
+  if (props.marketingOpsStatusLoading)
+    return '正在读取 marketing-ops 只读快照…'
+  if (props.marketingOpsStatusError !== null)
+    return props.marketingOpsStatusError
+  if (props.marketingOpsStatus === null)
+    return '尚未读取 marketing-ops 状态；发布保持阻塞'
+  return `runtime ${props.marketingOpsStatus.runtimeVersion} · contract v${props.marketingOpsStatus.contractVersion} · 快照有效至 ${props.marketingOpsStatus.expiresAt}`
+})
 </script>
 
 <template>
   <section id="channels" class="module-section">
     <p class="channel-directory-status" data-testid="channel-directory-status">
       {{ props.snapshot.channelBlueprintCount }} 个全局规格 · {{ props.channelSnapshotCount }} 个发布状态快照
+    </p>
+    <p class="channel-directory-status" data-testid="marketing-ops-status-summary">
+      {{ statusSummary }} · 不授予外部写入权限
     </p>
     <div class="channel-overview-grid">
       <div class="channel-overview-card"><span>全局渠道规格</span><strong>{{ props.snapshot.channelBlueprintCount }}</strong><small>跨项目复用的平台能力</small></div>
@@ -84,7 +100,7 @@ const selectedChannelReferenceCount = computed(() =>
     <div class="channel-directory-note" data-testid="channel-directory-note">
       <strong>项目配置不在全局目录中修改</strong>
       <span>当前项目启用哪些渠道、每个渠道绑定哪个账号，只在项目渠道配置中决定。全局目录只展示账号和被项目引用数量。</span>
-      <span>{{ globalAccountCount }} 个全局账号已登记 · 平台状态来自 marketing-ops 只读快照</span>
+      <span>{{ globalAccountCount }} 个全局账号已登记 · {{ props.marketingOpsStatus === null ? '平台状态尚未读取' : '平台状态来自 marketing-ops 只读快照' }}</span>
     </div>
     <div class="channel-table" role="table" aria-label="渠道目录">
       <div class="channel-row channel-row-heading" role="row"><span>渠道</span><span>交付范围</span><span>全局账号</span><span>账号引用项目数</span><span>内容格式</span><span>发布助手状态</span><span>规格</span></div>

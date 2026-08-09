@@ -49,6 +49,8 @@ content-studio mcp --stdio \
 `CONTENT_STUDIO_PROJECT` 是必需的项目范围；`CONTENT_STUDIO_CAMPAIGN` 只登记该项目
 已启用的渠道，`CONTENT_STUDIO_DB` 固定跨宿主会话复用的本地状态位置。缺少 campaign
 时只读项目事实仍可用，但需要渠道绑定的内容与制作工具会 fail closed。
+`get_marketing_ops_channels_status` 也只在受管 `marketing-ops` MCP client 已由本地
+Runtime 注入时可用；否则它返回阻塞状态，不会自动发现命令、读取凭据或扩大发布权限。
 
 项目清单可由下面两条命令起草；登记或使用前仍须由项目所有者确认：
 

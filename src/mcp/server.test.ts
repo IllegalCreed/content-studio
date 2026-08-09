@@ -1,5 +1,7 @@
 import type { ProductionWorkerJob } from '../jobs/worker'
 import type {
+  MarketingOpsChannelsStatusSnapshot,
+  MarketingOpsStatusClient,
   ProjectManifest,
   ProjectRecord,
   ProjectSnapshot,
@@ -77,6 +79,7 @@ const snapshot: ProjectSnapshot = {
 
 function createFixture(options: {
   includeBilibili?: boolean
+  marketingOpsStatus?: MarketingOpsStatusClient
   ownerTakeovers?: OwnerTakeoverRegistry
   taskStore?: InMemoryExecutionTaskStore
 } = {}) {
@@ -101,6 +104,7 @@ function createFixture(options: {
     })
   }
   return createContentStudioMcpServer({
+    marketingOpsStatus: options.marketingOpsStatus,
     ownerTakeovers: options.ownerTakeovers,
     projectId,
     service,
@@ -355,6 +359,7 @@ describe('content Studio local MCP server', () => {
       'create_publication_plan',
       'create_publishing_activity',
       'get_activity_video_plan',
+      'get_marketing_ops_channels_status',
       'prepare_marketing_ops_package',
       'promote_activity_artifact',
       'register_activity_artifact',
@@ -564,6 +569,120 @@ describe('content Studio local MCP server', () => {
         structuredContent: { project: { projectId } },
       },
     })
+  })
+
+  it('exposes only a fresh, project-scoped marketing-ops status snapshot to MCP', async () => {
+    const observedAtMs = Date.now()
+    const status: MarketingOpsChannelsStatusSnapshot = {
+      authorizesExternalWrite: false,
+      channels: [{
+        accountAlias: '@project-a',
+        adapterReady: true,
+        channel: 'github',
+        health: 'ready',
+        nextStep: 'ready',
+      }],
+      contractVersion: 3,
+      expiresAt: new Date(observedAtMs + 60_000).toISOString(),
+      observedAt: new Date(observedAtMs).toISOString(),
+      projectId,
+      runtimeVersion: '0.1.0',
+    }
+    const server = createFixture({
+      marketingOpsStatus: {
+        getChannelsStatus: async (requestedProjectId) => {
+          expect(requestedProjectId).toBe(projectId)
+          return status
+        },
+      },
+    })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'marketing-status-1',
+      method: 'tools/call',
+      params: {
+        arguments: { projectId },
+        name: 'get_marketing_ops_channels_status',
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: status,
+      },
+    })
+  })
+
+  it('keeps the MCP status tool blocked when the managed runtime is not connected', async () => {
+    const server = createFixture()
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'marketing-status-unavailable',
+      method: 'tools/call',
+      params: {
+        arguments: { projectId },
+        name: 'get_marketing_ops_channels_status',
+      },
+    })).resolves.toMatchObject({
+      result: {
+        content: [{
+          text: 'Marketing Ops status unavailable; publishing remains blocked',
+          type: 'text',
+        }],
+        isError: true,
+      },
+    })
+
+    const failingServer = createFixture({
+      marketingOpsStatus: {
+        getChannelsStatus: async () => {
+          throw new Error('private transport detail')
+        },
+      },
+    })
+    const failed = await failingServer.handleMessage({
+      jsonrpc: '2.0',
+      id: 'marketing-status-failed',
+      method: 'tools/call',
+      params: {
+        arguments: { projectId },
+        name: 'get_marketing_ops_channels_status',
+      },
+    })
+    expect(failed).toMatchObject({
+      result: {
+        content: [{
+          text: 'Marketing Ops status unavailable; publishing remains blocked',
+        }],
+        isError: true,
+      },
+    })
+    expect(JSON.stringify(failed)).not.toContain('private transport detail')
+
+    const malformedServer = createFixture({
+      marketingOpsStatus: {
+        getChannelsStatus: async () => undefined as never,
+      },
+    })
+    const malformed = await malformedServer.handleMessage({
+      jsonrpc: '2.0',
+      id: 'marketing-status-malformed',
+      method: 'tools/call',
+      params: {
+        arguments: { projectId },
+        name: 'get_marketing_ops_channels_status',
+      },
+    })
+    expect(malformed).toMatchObject({
+      result: {
+        content: [{
+          text: 'Marketing Ops status unavailable; publishing remains blocked',
+        }],
+        isError: true,
+      },
+    })
+    expect(JSON.stringify(malformed)).not.toContain('Cannot read properties')
   })
 
   it('lets the AI host create an activity and channel content without publishing', async () => {

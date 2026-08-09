@@ -9,11 +9,13 @@ import type {
   ExecutionTask,
   ExecutionTaskEvent,
   ExecutionTaskStatus,
+  MarketingOpsStatusClient,
 } from '../types'
 import { createInterface } from 'node:readline'
 import {
   MARKETING_OPS_MEDIA_KINDS,
   MARKETING_OPS_PACKAGE_FORMAT_VALUES,
+  MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE,
   MARKETING_OPS_UTM_MEDIUM_VALUES,
   MCP_LIST_TTL_MS,
   MCP_RESOURCE_TTL_MS,
@@ -28,6 +30,7 @@ import {
   TaskScopeError,
   TaskStateError,
 } from '../jobs/task'
+import { isMarketingOpsStatusSnapshotFresh } from '../marketing-ops/client'
 import {
   parseCreateActivityArtifactInput,
   parseCreateActivityInput,
@@ -67,6 +70,7 @@ export interface McpJsonRpcResponse {
 }
 
 export interface ContentStudioMcpServerOptions {
+  marketingOpsStatus?: MarketingOpsStatusClient
   ownerTakeovers?: OwnerTakeoverRegistry
   projectId: string
   productionWorker?: Pick<ProductionWorker, 'cancel' | 'enqueue'>
@@ -386,6 +390,17 @@ function toolDefinitions(): Array<Record<string, unknown>> {
       inputSchema: projectIdSchema(),
       name: 'get_project_view',
       title: '读取项目工作视图',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: true,
+      },
+      description: '读取受管 marketing-ops 的当前渠道健康和适配器状态。快照过期、版本不兼容或 runtime 未连接时保持阻塞，不代表获得外部写入授权。',
+      inputSchema: projectIdSchema(),
+      name: 'get_marketing_ops_channels_status',
+      title: '读取 Marketing Ops 渠道状态',
     },
     {
       annotations: {
@@ -980,18 +995,20 @@ function taskSchema(): Record<string, unknown> {
   }
 }
 
-function toolCall(
+async function toolCall(
   id: string | number,
   params: unknown,
   options: ContentStudioMcpServerOptions,
-): McpJsonRpcResponse {
+): Promise<McpJsonRpcResponse> {
   try {
     const value = asRecord(params, 'tools/call params')
     assertKeys(value, ['_meta', 'arguments', 'name'], 'tools/call params')
     const name = stringField(value.name, 'name')
     const input = value.arguments ?? {}
     assertNoSensitiveKeys(input)
-    const result = executeTool(name, input, options)
+    const result = name === 'get_marketing_ops_channels_status'
+      ? await executeMarketingOpsStatus(input, options)
+      : executeTool(name, input, options)
     if (name === 'start_production_task' && supportsTasks(value._meta)) {
       return success(id, {
         ...asRecord(result, 'task result'),
@@ -1009,6 +1026,29 @@ function toolCall(
       isError: true,
       resultType: 'complete',
     })
+  }
+}
+
+async function executeMarketingOpsStatus(
+  input: unknown,
+  options: ContentStudioMcpServerOptions,
+): Promise<unknown> {
+  const value = scopedRecord(input, options.projectId, ['projectId'])
+  if (options.marketingOpsStatus === undefined)
+    throw new Error(MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE)
+  try {
+    const status = await options.marketingOpsStatus.getChannelsStatus(value.projectId)
+    if (
+      status.projectId !== value.projectId
+      || status.authorizesExternalWrite !== false
+      || !isMarketingOpsStatusSnapshotFresh(status)
+    ) {
+      throw new Error(MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE)
+    }
+    return status
+  }
+  catch {
+    throw new Error(MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE)
   }
 }
 

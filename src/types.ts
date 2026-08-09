@@ -752,6 +752,19 @@ export interface MarketingOpsStatusClientOptions {
   transport: MarketingOpsStatusTransport
 }
 
+export interface MarketingOpsMcpClient {
+  callTool: (input: {
+    arguments: { projectId: string }
+    name: 'channels_status'
+  }) => Promise<unknown>
+  getServerVersion: () => Promise<unknown> | unknown
+}
+
+export interface MarketingOpsMcpStatusClientOptions {
+  mcp: MarketingOpsMcpClient
+  now?: () => Date
+}
+
 export type OwnerHandoffStatus = 'cancelled' | 'completed' | 'expired' | 'pending'
 
 export interface OwnerHandoff {

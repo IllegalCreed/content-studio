@@ -13,6 +13,7 @@ import type {
   CreatePublishingActivityInput,
   ExecutionTask,
   ExecutionTaskEvent,
+  MarketingOpsChannelsStatusSnapshot,
   OwnerHandoff,
   OwnerTakeoverRecord,
   ProjectAsset,
@@ -73,6 +74,7 @@ export interface WorkbenchRuntime {
   createActivityArtifact: (input: CreateActivityArtifactInput) => Promise<ActivityArtifact>
   createPublicationPlan: (input: PublicationPlan) => Promise<PublicationPlan>
   health: () => Promise<RuntimeHealth>
+  marketingOpsStatus: (projectId: string) => Promise<MarketingOpsChannelsStatusSnapshot>
   global: () => Promise<ContentStudioGlobalView>
   project: (projectId: string) => Promise<ContentStudioProjectView>
   projects: () => Promise<ContentStudioProjectIndex>
@@ -183,6 +185,9 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
       },
     ),
     health: () => request<RuntimeHealth>('/health'),
+    marketingOpsStatus: projectId => request<MarketingOpsChannelsStatusSnapshot>(
+      `/projects/${encodeURIComponent(projectId)}/marketing-ops/channels-status`,
+    ),
     global: () => request<ContentStudioGlobalView>('/global'),
     project: projectId => request<ContentStudioProjectView>(
       `/projects/${encodeURIComponent(projectId)}`,

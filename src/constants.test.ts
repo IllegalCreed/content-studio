@@ -3,6 +3,8 @@ import {
   CHANNEL_BLUEPRINTS,
   MARKETING_OPS_PACKAGE_FORMAT_VALUES,
   MARKETING_OPS_PACKAGE_FORMATS,
+  MARKETING_OPS_STATUS_REFRESH_INTERVAL_MS,
+  MARKETING_OPS_STATUS_TTL_MS,
 } from './constants'
 
 describe('channel blueprints', () => {
@@ -52,5 +54,12 @@ describe('channel blueprints', () => {
   it('keeps the marketing-ops renderer format enum aligned with channel mappings', () => {
     expect(new Set(Object.values(MARKETING_OPS_PACKAGE_FORMATS)))
       .toEqual(new Set(MARKETING_OPS_PACKAGE_FORMAT_VALUES))
+  })
+
+  it('refreshes marketing-ops status before its read-only snapshot expires', () => {
+    expect(MARKETING_OPS_STATUS_REFRESH_INTERVAL_MS).toBeGreaterThan(0)
+    expect(MARKETING_OPS_STATUS_REFRESH_INTERVAL_MS).toBeLessThan(
+      MARKETING_OPS_STATUS_TTL_MS,
+    )
   })
 })

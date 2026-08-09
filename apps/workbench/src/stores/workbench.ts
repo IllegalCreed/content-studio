@@ -1,5 +1,6 @@
 import type {
   ContentStudioProjectView,
+  MarketingOpsChannelsStatusSnapshot,
   PublishingActivity,
   VideoViewport,
 } from '@content-studio/core-types'
@@ -14,9 +15,13 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   const projectView = ref<ContentStudioProjectView | null>(null)
   const runtimeConnected = ref(false)
   const runtimeError = ref<string | null>(null)
+  const marketingOpsStatus = ref<MarketingOpsChannelsStatusSnapshot | null>(null)
+  const marketingOpsStatusError = ref<string | null>(null)
+  const marketingOpsStatusLoading = ref(false)
   const loading = ref(false)
   const runtime = createWorkbenchRuntime()
   let refreshRequestId = 0
+  let marketingOpsStatusRequestId = 0
 
   const activities = computed(() => projectView.value?.activities ?? [])
 
@@ -32,9 +37,47 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   }
 
   function markRuntimeUnavailable(error: unknown): void {
+    marketingOpsStatusRequestId += 1
     loading.value = false
     runtimeConnected.value = false
     runtimeError.value = error instanceof Error ? error.message : '本地运行时暂时不可用'
+    marketingOpsStatus.value = null
+    marketingOpsStatusError.value = null
+    marketingOpsStatusLoading.value = false
+  }
+
+  async function refreshMarketingOpsStatus(
+    requestedProjectId = projectId.value,
+  ): Promise<MarketingOpsChannelsStatusSnapshot | null> {
+    const requestId = ++marketingOpsStatusRequestId
+    projectId.value = requestedProjectId
+    marketingOpsStatusLoading.value = true
+    marketingOpsStatusError.value = null
+    try {
+      const status = await runtime.marketingOpsStatus(requestedProjectId)
+      if (
+        requestId !== marketingOpsStatusRequestId
+        || projectId.value !== requestedProjectId
+      ) {
+        return marketingOpsStatus.value
+      }
+      marketingOpsStatus.value = status
+      return status
+    }
+    catch {
+      if (
+        requestId === marketingOpsStatusRequestId
+        && projectId.value === requestedProjectId
+      ) {
+        marketingOpsStatus.value = null
+        marketingOpsStatusError.value = 'marketing-ops 状态未读取；发布保持阻塞'
+      }
+      return null
+    }
+    finally {
+      if (requestId === marketingOpsStatusRequestId)
+        marketingOpsStatusLoading.value = false
+    }
   }
 
   async function refresh(requestedProjectId = projectId.value): Promise<void> {
@@ -95,11 +138,15 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     beginRuntimeLoad,
     confirmActivityVideoPlan,
     loading,
+    marketingOpsStatus,
+    marketingOpsStatusError,
+    marketingOpsStatusLoading,
     markRuntimeReady,
     markRuntimeUnavailable,
     projectId,
     projectView,
     refresh,
+    refreshMarketingOpsStatus,
     reviseActivityViewport,
     runtimeConnected,
     runtimeError,

@@ -10,28 +10,34 @@ description: 发布协作与人工接管：建立发布计划、准备人工确�
 调用 `create_publication_plan` 为活动内渠道成品建立本地发布安排和发布任务。
 此工具不会执行渠道发布。
 
-## 2. 准备 Marketing Ops 发布包
+## 2. 刷新 Marketing Ops 状态
+
+调用 `get_marketing_ops_channels_status` 读取当前项目的 60 秒只读快照。runtime 未连接、
+快照过期或目标渠道不是 `ready` 时停止发布协作并如实报告；`adapterReady` 和快照中的
+`authorizesExternalWrite: false` 都不能替代用户对当前活动的明确授权。
+
+## 3. 准备 Marketing Ops 发布包
 
 renderer 已生成渠道包元数据时，先调用 `prepare_marketing_ops_package` 做本地只读校验。
 只提交项目、发布安排和 renderer 元数据；不要提交账号引用、本地路径或凭据。返回的
 `prepare-only` 结果不代表已授权、已调用渠道或已发布，也不会创建发布回执。
 
-## 3. 准备人工确认包
+## 4. 准备人工确认包
 
 需要人工确认时调用 `create_owner_handoff`，只保存校验和、清单和官方页面地址，
 不保存任何凭据。
 
-## 4. 等待并展示确认
+## 5. 等待并展示确认
 
 任务进入 `input_required` 后，把确认包展示给用户并等待明确确认。等待期间不要
 继续录制或执行后续步骤。
 
-## 5. 确认接管
+## 6. 确认接管
 
 用户明确确认后调用 `confirm_owner_takeover`，任务回到录制并继续同一会话。
 只接受确认动作，不接受任何凭据输入。
 
-## 6. 晋升产物
+## 7. 晋升产物
 
 用户明确选择后调用 `promote_activity_artifact`，把活动产物登记为项目素材；
 不删除原产物。

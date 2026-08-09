@@ -109,6 +109,36 @@ describe('workbench runtime client', () => {
     )
   })
 
+  it('reads a project-scoped marketing-ops status snapshot without adding write inputs', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      authorizesExternalWrite: false,
+      channels: [{
+        accountAlias: '@project-a',
+        adapterReady: true,
+        channel: 'github',
+        health: 'ready',
+        nextStep: 'ready',
+      }],
+      contractVersion: 3,
+      expiresAt: '2026-08-10T00:01:00.000Z',
+      observedAt: '2026-08-10T00:00:00.000Z',
+      projectId: 'project-a',
+      runtimeVersion: '0.1.0',
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(createWorkbenchRuntime('/api/v1').marketingOpsStatus('project-a'))
+      .resolves
+      .toMatchObject({
+        authorizesExternalWrite: false,
+        projectId: 'project-a',
+      })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/project-a/marketing-ops/channels-status',
+      expect.objectContaining({ headers: { accept: 'application/json' } }),
+    )
+  })
+
   it('reads a project-scoped cleanup preview without sending a path', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({

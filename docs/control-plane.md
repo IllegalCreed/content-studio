@@ -168,6 +168,13 @@ MCP 工具为 `prepare_marketing_ops_package`。调用方只提交项目、发�
 绑定解析不透明账号引用。输入不接受账号引用或本地路径，操作不改变任务、不创建授权或
 发布回执，也不调用当前 `marketing-ops` v3 写入接口。
 
+渠道运行状态走独立只读入口：HTTP 为
+`GET /api/v1/projects/:projectId/marketing-ops/channels-status`，Content Studio MCP 工具为
+`get_marketing_ops_channels_status`。二者都调用注入的同一个有类型状态客户端，只返回
+60 秒、`authorizesExternalWrite: false` 的项目快照；HTTP 使用 `private, no-store`。
+未注入受管 MCP client、版本不兼容、响应不合法或快照过期时统一 fail closed，不把底层
+transport 错误、MCP 文本内容或本地 UI 状态传播为发布能力。
+
 ### 项目素材、活动产物和资源变体
 
 当前阶段不设置全局素材库。

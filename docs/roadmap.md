@@ -673,15 +673,20 @@ core 或 Vue。详细的 M0—M6 子路线、当前“项目每渠道唯一账�
 
 - [x] 定义 `marketing-ops` 0.1.x / contract v3 版本兼容矩阵和只读、有类型的
       `channels_status` 客户端；状态快照固定 60 秒有效期，且不授予外部写入。
-- [ ] 接入受管 runtime 的 MCP transport；未连接或版本不兼容时保持发布阻塞。
+- [x] 为已初始化的受管 MCP client 接入固定 `channels_status` transport；只接受
+      `structuredContent`，并把同一个状态客户端注入 CLI doctor、项目范围 Runtime API、
+      Content Studio MCP 只读工具和 Workbench。未连接或版本不兼容时保持发布阻塞。
+- [ ] 由安装器启动固定版本的 `marketing-ops` 进程并自动向本地 Runtime 注入已初始化
+      MCP client；当前应用层不自行发现命令、路径或凭据。
 - [ ] 明确 Content Studio 项目范围的单渠道唯一账号绑定；`marketing-ops` 维护全局多账号
       目录，活动只传渠道，Content Studio 发布流程解析并记录 `channelAccountRef`。
       兼容期的 `projectId` 只作为 `marketing-ops` 技术隔离句柄；在账号级状态和回执落地
       前，UI 不把演示数据当成可执行发布能力。
 - [x] `content-studio doctor` 在受管 runtime 已注入时检查版本、contract、状态新鲜度和
       适配器就绪数；未连接时只警告，不把 `marketing-ops` 的技术 Profile 展示成业务项目。
-- [ ] 未配置渠道时保持内容制作可用，把发布显示为未配置或被阻塞。
-- [ ] 读取项目最新渠道状态和策略，不使用本地 UI 状态推断授权。
+- [x] 未配置渠道时保持内容制作可用，把发布显示为未配置、未查询或被阻塞。
+- [x] Workbench 通过项目范围 API 每 30 秒读取最新渠道状态，不使用本地 UI 状态推断授权；
+      缺失渠道和读取失败都会清除旧的 live 状态。
 - [x] 用 transport-neutral 编译器把文章、图文、动态、视频和资源变体锁定为项目范围、
       语言感知且版本化的发布包；同一渠道可保留多个语言/形态。
 - [x] 使用校验和、窄素材 ID 和 renderer 产物，不传递任意文件路径。

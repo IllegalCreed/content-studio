@@ -1,6 +1,7 @@
 // @env node
 
 import type {
+  MarketingOpsChannelsStatusSnapshot,
   PlaywrightRecordingOptions,
   ProjectChannelBinding,
   ProjectRecord,
@@ -1213,6 +1214,108 @@ describe('content studio local application server', () => {
     }
     finally {
       await running.close()
+    }
+  })
+
+  it('serves a project-scoped read-only marketing-ops status snapshot', async () => {
+    const { project, snapshot } = createProject()
+    const observedAtMs = Date.now()
+    const observedAt = new Date(observedAtMs).toISOString()
+    const expiresAt = new Date(observedAtMs + 60_000).toISOString()
+    const statusSnapshot: MarketingOpsChannelsStatusSnapshot = {
+      authorizesExternalWrite: false,
+      channels: [{
+        accountAlias: '@project-a',
+        adapterReady: true,
+        channel: 'github',
+        health: 'ready',
+        nextStep: 'ready',
+      }],
+      contractVersion: 3,
+      expiresAt,
+      observedAt,
+      projectId: 'project-a',
+      runtimeVersion: '0.1.0',
+    }
+    const getChannelsStatus = vi.fn(async (projectId: string) => {
+      expect(projectId).toBe('project-a')
+      return statusSnapshot
+    })
+    const handle = createContentStudioServer({
+      marketingOpsStatus: { getChannelsStatus },
+      project,
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const response = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/marketing-ops/channels-status`,
+      )
+      expect(response.status).toBe(200)
+      expect(response.headers.get('cache-control')).toBe('private, no-store')
+      expect(await response.json()).toEqual(statusSnapshot)
+      expect(getChannelsStatus).toHaveBeenCalledWith('project-a')
+    }
+    finally {
+      await running.close()
+      handle.close()
+    }
+  })
+
+  it('keeps the marketing-ops status route fail-closed when the client is unavailable', async () => {
+    const { project, snapshot } = createProject()
+    const handle = createContentStudioServer({
+      project,
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const response = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/marketing-ops/channels-status`,
+      )
+      expect(response.status).toBe(503)
+      expect(await response.json()).toEqual({
+        error: 'Marketing Ops status unavailable; publishing remains blocked',
+      })
+    }
+    finally {
+      await running.close()
+      handle.close()
+    }
+  })
+
+  it('does not expose marketing-ops transport errors through the status route', async () => {
+    const { project, snapshot } = createProject()
+    const handle = createContentStudioServer({
+      marketingOpsStatus: {
+        getChannelsStatus: async () => {
+          throw new Error('private transport detail')
+        },
+      },
+      project,
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const response = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/marketing-ops/channels-status`,
+      )
+      expect(response.status).toBe(503)
+      const payload = await response.json()
+      expect(payload).toEqual({
+        error: 'Marketing Ops status unavailable; publishing remains blocked',
+      })
+      expect(JSON.stringify(payload)).not.toContain('private transport detail')
+    }
+    finally {
+      await running.close()
+      handle.close()
     }
   })
 

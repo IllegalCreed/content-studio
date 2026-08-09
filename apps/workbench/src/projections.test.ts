@@ -3,6 +3,7 @@ import type {
   ContentGroup,
   ContentStudioProjectIndex,
   ExecutionTask,
+  MarketingOpsChannelsStatusSnapshot,
   OwnerHandoff,
   ProjectChannelBinding,
   PublishingActivity,
@@ -16,6 +17,7 @@ import {
   preferRuntimeData,
   projectChannels,
   projectIndexProjections,
+  projectMarketingOpsChannels,
   taskToProjection,
 } from './projections'
 
@@ -96,6 +98,92 @@ describe('workbench runtime projections', () => {
       titleLimit: 128,
     })
     expect(channels[0]?.enabled).toBe(true)
+  })
+
+  it('只把新鲜 marketing-ops 快照映射成有限的渠道状态，不传播 nextAction 文本', () => {
+    const channels: ChannelProjection[] = [{
+      accounts: [{
+        accountId: 'github-account',
+        adapterReady: false,
+        alias: '@project-a',
+        assignedProjects: ['project-a'],
+        channel: 'github',
+        health: '未查询',
+        isDefault: true,
+        nextAction: '尚未读取该账号的 marketing-ops 状态',
+        statusSource: '项目配置',
+      }],
+      adapterReady: false,
+      alias: '@project-a',
+      bodyLimit: 12000,
+      channel: 'github',
+      delivery: '全自动候选',
+      enabled: true,
+      format: '文章',
+      health: '未查询',
+      metrics: [],
+      nextAction: '尚未读取该渠道的 marketing-ops 状态',
+      projectAccountId: 'github-account',
+      statusSource: '项目配置',
+      titleLimit: 128,
+    }]
+    const status: MarketingOpsChannelsStatusSnapshot = {
+      authorizesExternalWrite: false,
+      channels: [{
+        accountAlias: '@project-a',
+        adapterReady: false,
+        channel: 'github',
+        health: 'reauth-required',
+        nextStep: 'reauthorize',
+      }],
+      contractVersion: 3,
+      expiresAt: '2099-01-01T00:01:00.000Z',
+      observedAt: '2099-01-01T00:00:00.000Z',
+      projectId: 'project-a',
+      runtimeVersion: '0.1.0',
+    }
+
+    const [projected] = projectMarketingOpsChannels(channels, status)
+
+    expect(projected).toMatchObject({
+      adapterReady: false,
+      health: '需重新授权',
+      nextAction: '需要重新授权',
+      statusSource: 'marketing-ops',
+      accounts: [{
+        adapterReady: false,
+        health: '需重新授权',
+        nextAction: '需要重新授权',
+        statusSource: 'marketing-ops',
+      }],
+    })
+    expect(JSON.stringify(projected)).not.toContain('marketing-ops setup')
+  })
+
+  it('将缺失或不可用的 live status 重置为未查询，保留内容生产能力投影', () => {
+    const channels: ChannelProjection[] = [{
+      accounts: [],
+      adapterReady: true,
+      alias: '@demo',
+      bodyLimit: 300,
+      channel: 'bluesky',
+      delivery: '全自动候选',
+      enabled: true,
+      format: '短帖',
+      health: '已就绪',
+      metrics: [],
+      nextAction: null,
+      projectAccountId: null,
+      statusSource: 'marketing-ops',
+      titleLimit: 80,
+    }]
+
+    expect(projectMarketingOpsChannels(channels, null)).toEqual([expect.objectContaining({
+      adapterReady: false,
+      health: '未查询',
+      nextAction: '尚未读取该渠道的 marketing-ops 状态',
+      statusSource: '项目配置',
+    })])
   })
 
   it('把活动、内容组和人工交接整理成活动详情投影', () => {

@@ -126,7 +126,12 @@ export const MARKETING_OPS_COMPATIBILITY_MATRIX = [{
 
 export const MARKETING_OPS_RUNTIME_NAME = 'marketing-ops' as const
 
+export const MARKETING_OPS_STATUS_REFRESH_INTERVAL_MS = 30_000
+
 export const MARKETING_OPS_STATUS_TTL_MS = 60_000
+
+export const MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE
+  = 'Marketing Ops status unavailable; publishing remains blocked'
 
 export const DEFAULT_ACTION_DURATION_MS = {
   'capture': 2000,

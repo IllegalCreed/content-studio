@@ -9,7 +9,9 @@ export {
   MARKETING_OPS_PACKAGE_FORMAT_VALUES,
   MARKETING_OPS_PACKAGE_FORMATS,
   MARKETING_OPS_RUNTIME_NAME,
+  MARKETING_OPS_STATUS_REFRESH_INTERVAL_MS,
   MARKETING_OPS_STATUS_TTL_MS,
+  MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE,
   MARKETING_OPS_UTM_MEDIUM_VALUES,
 } from './constants'
 export { generateContentPackages } from './content/generate'
@@ -65,6 +67,7 @@ export {
   assertMatchingMarketingOpsReceipt,
   assessMarketingOpsCompatibility,
   createFakeMarketingOpsClient,
+  createMarketingOpsMcpStatusClient,
   createMarketingOpsStatusClient,
   type FakeMarketingOpsClientOptions,
   isMarketingOpsStatusSnapshotFresh,

@@ -7,6 +7,7 @@ import {
   assertMatchingMarketingOpsReceipt,
   assessMarketingOpsCompatibility,
   createFakeMarketingOpsClient,
+  createMarketingOpsMcpStatusClient,
   createMarketingOpsStatusClient,
   isMarketingOpsStatusSnapshotFresh,
 } from './client'
@@ -132,6 +133,10 @@ describe('marketing-ops client boundary', () => {
       snapshot,
       new Date('2026-08-09T12:01:00.000Z'),
     )).toBe(false)
+    expect(isMarketingOpsStatusSnapshotFresh({
+      ...snapshot,
+      expiresAt: '2026-08-09T12:02:00.000Z',
+    }, new Date('2026-08-09T12:00:30.000Z'))).toBe(false)
   })
 
   it('defines a fail-closed runtime and contract compatibility matrix', () => {
@@ -256,5 +261,68 @@ describe('marketing-ops client boundary', () => {
     await expect(duplicate.getChannelsStatus('project-a'))
       .rejects
       .toThrow(/duplicate/i)
+  })
+
+  it('adapts an initialized MCP client through the fixed channels_status tool only', async () => {
+    const calls: unknown[] = []
+    const client = createMarketingOpsMcpStatusClient({
+      mcp: {
+        callTool: async (input) => {
+          calls.push(input)
+          return {
+            content: [{
+              text: 'Untrusted display text that must not become status data',
+              type: 'text',
+            }],
+            isError: false,
+            structuredContent: {
+              channels: [{
+                adapterReady: true,
+                alias: '@project-a',
+                channel: 'github',
+                health: 'ready',
+                nextAction: null,
+              }],
+              contractVersion: 3,
+              projectId: 'project-a',
+            },
+          }
+        },
+        getServerVersion: () => ({ name: 'marketing-ops', version: '0.1.0' }),
+      },
+      now: () => new Date('2026-08-10T00:00:00.000Z'),
+    })
+
+    await expect(client.getChannelsStatus('project-a')).resolves.toMatchObject({
+      authorizesExternalWrite: false,
+      channels: [{ channel: 'github', nextStep: 'ready' }],
+      projectId: 'project-a',
+    })
+    expect(calls).toEqual([{
+      arguments: { projectId: 'project-a' },
+      name: 'channels_status',
+    }])
+  })
+
+  it('rejects MCP errors and text-only fallbacks without parsing their content', async () => {
+    const createClient = (result: unknown) => createMarketingOpsMcpStatusClient({
+      mcp: {
+        callTool: async () => result,
+        getServerVersion: () => ({ name: 'marketing-ops', version: '0.1.0' }),
+      },
+    })
+
+    await expect(createClient({
+      content: [{ text: '{"contractVersion":3}', type: 'text' }],
+      isError: true,
+      structuredContent: { code: 'ADAPTER_UNAVAILABLE' },
+    }).getChannelsStatus('project-a')).rejects.toThrow(/mcp tool failed/i)
+    await expect(createClient({
+      content: [{
+        text: '{"contractVersion":3,"projectId":"project-a","channels":[]}',
+        type: 'text',
+      }],
+      isError: false,
+    }).getChannelsStatus('project-a')).rejects.toThrow(/structuredContent/i)
   })
 })

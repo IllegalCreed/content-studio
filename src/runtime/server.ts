@@ -28,6 +28,7 @@ import type {
   Locale,
   MarketingOpsMediaKind,
   MarketingOpsPackageFormat,
+  MarketingOpsStatusClient,
   MarketingOpsUtmMedium,
   MonitoringObservation,
   ObservationMetric,
@@ -63,6 +64,7 @@ import {
   DEFAULT_STORAGE_RETENTION_POLICY,
   MARKETING_OPS_MEDIA_KINDS,
   MARKETING_OPS_PACKAGE_FORMAT_VALUES,
+  MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE,
   MARKETING_OPS_UTM_MEDIUM_VALUES,
 } from '../constants'
 import {
@@ -82,6 +84,7 @@ import {
   TaskStateError,
 } from '../jobs/task'
 import { ProductionWorker } from '../jobs/worker'
+import { isMarketingOpsStatusSnapshotFresh } from '../marketing-ops/client'
 import { createProjectRecord } from '../project/record'
 import {
   ProjectPreviewAdapterRegistry,
@@ -186,6 +189,7 @@ export interface ContentStudioServerOptions {
     snapshot: ProjectSnapshot
   }>
   databasePath?: string
+  marketingOpsStatus?: MarketingOpsStatusClient
   production?: ProductionTaskDependencies
   productionOutputRoot?: string
   projectPreviewAdapters?: ProjectPreviewAdapterRegistration[]
@@ -272,6 +276,7 @@ export function createContentStudioServer(
       options.project.projectId,
       {
         dependencies: production,
+        marketingOpsStatus: options.marketingOpsStatus,
         ownerTakeovers,
         outputRoot: productionOutputRoot,
         previewAdapters,
@@ -611,6 +616,43 @@ async function handleRequest(
     ) {
       const projectId = decodeSegment(segments[3]!)
       sendJson(response, 200, service.getProjectView(projectId))
+      return
+    }
+
+    if (
+      request.method === 'GET'
+      && segments.length === 6
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'marketing-ops'
+      && segments[5] === 'channels-status'
+    ) {
+      const requestProjectId = identifierField(
+        decodeSegment(segments[3]!),
+        'projectId',
+      )
+      service.getProjectView(requestProjectId)
+      if (production.marketingOpsStatus === undefined) {
+        sendMarketingOpsStatusUnavailable(response)
+        return
+      }
+      try {
+        const status = await production.marketingOpsStatus.getChannelsStatus(requestProjectId)
+        if (
+          status.projectId !== requestProjectId
+          || status.authorizesExternalWrite !== false
+          || !isMarketingOpsStatusSnapshotFresh(status)
+        ) {
+          sendMarketingOpsStatusUnavailable(response)
+          return
+        }
+        response.setHeader('Cache-Control', 'private, no-store')
+        sendJson(response, 200, status)
+      }
+      catch {
+        sendMarketingOpsStatusUnavailable(response)
+      }
       return
     }
 
@@ -2206,6 +2248,13 @@ function sendJson(
   response.end(body)
 }
 
+function sendMarketingOpsStatusUnavailable(response: ServerResponse): void {
+  response.setHeader('Cache-Control', 'private, no-store')
+  sendJson(response, 503, {
+    error: MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE,
+  })
+}
+
 function canonicalJson(value: unknown): string {
   return JSON.stringify(value, (_key, item) => {
     if (item === null || typeof item !== 'object' || Array.isArray(item))
@@ -2646,6 +2695,7 @@ class RequestError extends Error {
 
 interface RuntimeProductionOptions {
   dependencies: ProductionTaskDependencies
+  marketingOpsStatus?: MarketingOpsStatusClient
   ownerTakeovers: OwnerTakeoverRegistry
   outputRoot: string
   previewAdapters: ProjectPreviewAdapterRegistry

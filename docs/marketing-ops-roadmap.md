@@ -68,6 +68,11 @@ Content Studio 可以保存账号引用和脱敏投影，但不能保存或转�
 - [x] 固定当前 `marketing-ops` 0.1.x / contract v3 与 Content Studio 0.1.x 的兼容矩阵，
       并为 `channels_status` 建立只读、有类型客户端；快照在 Content Studio 侧只保留脱敏
       alias、能力状态和有限的下一步枚举，固定 60 秒有效期。
+- [x] 为已初始化的受管 MCP client 建立窄适配器，只调用 `channels_status` 并只接受
+      `structuredContent`；项目范围 Runtime API、Content Studio MCP 工具与 Workbench
+      复用同一状态客户端，HTTP 不缓存，Workbench 每 30 秒刷新。
+- [ ] 由安装器启动固定版本进程并把已初始化 MCP client 注入本地 Runtime；应用层不发现
+      任意命令、路径、凭据或浏览器状态。
 - [ ] 为发布准备、发布提交、状态查询、回执和监测读取建立有类型客户端；不在 Vue 中
       直接拼 MCP 参数。
 - 每次写入前执行项目级状态刷新、能力检查、素材校验和授权检查。
@@ -100,6 +105,12 @@ Bilibili 中文图文/GIF fixture 已覆盖该边界；它尚未调用真实 `pu
 渠道、未知字段或敏感字段；`observedAt/expiresAt` 由 Content Studio 生成，状态只映射为
 `ready/configure/reauthorize/blocked`，不把 `nextAction` 命令文本传播到项目数据或 MCP。
 `doctor` 未连接 runtime 时保持 warn，版本不兼容或快照过期时 fail closed。
+
+同日完成了消费链路：`createMarketingOpsMcpStatusClient` 把已初始化 MCP client 收窄为固定
+`channels_status` 调用，不解析 `content[].text`；本地 Runtime 通过
+`GET /api/v1/projects/:projectId/marketing-ops/channels-status` 返回 `private, no-store`
+快照，Content Studio MCP 提供同范围的只读工具。Workbench 每 30 秒重新读取；缺失、过期
+或失败时把发布助手状态重置为“未查询”，但项目、内容创作和本地制作仍保持可用。
 
 这份新包是下一版互操作契约草案，不冒充当前 v3 MCP 输入。接入写入前，`marketing-ops`
 仍需先支持稳定 package/publication ID、同渠道多包以及带校验和的素材引用；在此之前，
