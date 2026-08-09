@@ -298,6 +298,13 @@ describe('content Studio local MCP server', () => {
       }).contents[0]?.text
       expect(text).toBeDefined()
       const payload = JSON.parse(text!) as Record<string, unknown>
+      if (kind === 'content') {
+        expect(payload).toEqual({
+          channelContentReadiness: {},
+          channelContents: [],
+          contentGroups: [],
+        })
+      }
       if (kind === 'tasks')
         expect(payload).toEqual({ compositionReceipts: [], taskEvents: {}, tasks: [] })
       if (kind === 'assets')
@@ -673,6 +680,114 @@ describe('content Studio local MCP server', () => {
         structuredContent: {
           activities: [expect.objectContaining({ activityId: 'quick-sort-launch' })],
           channelContents: [expect.objectContaining({ contentId: 'quick-sort-github-en' })],
+        },
+      },
+    })
+  })
+
+  it('reports content readiness and rejects a publication plan with missing required media', async () => {
+    const server = createFixture({ includeBilibili: true })
+
+    await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'readiness-activity',
+      method: 'tools/call',
+      params: {
+        arguments: {
+          activityId: 'readiness-demo',
+          campaignId: 'readiness-demo',
+          channels: [{
+            contentFormats: ['image-text'],
+            id: 'bilibili',
+            locale: 'zh-CN',
+          }],
+          goal: 'education',
+          projectId,
+          projectSnapshotId: snapshot.snapshotId,
+          status: 'draft',
+          targetUrl: 'https://example.com/readiness-demo/',
+          topic: { 'en': 'Readiness', 'zh-CN': '发布就绪检查' },
+        },
+        name: 'create_publishing_activity',
+      },
+    })
+    await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'readiness-group',
+      method: 'tools/call',
+      params: {
+        arguments: {
+          activityId: 'readiness-demo',
+          contentGroupId: 'readiness-demo-group',
+          coreMessage: 'Show the final image before scheduling publication.',
+          projectId,
+          title: 'Readiness demo',
+        },
+        name: 'create_content_group',
+      },
+    })
+    await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'readiness-content',
+      method: 'tools/call',
+      params: {
+        arguments: {
+          activityId: 'readiness-demo',
+          artifactIds: [],
+          body: 'Image-text body',
+          channel: 'bilibili',
+          contentGroupId: 'readiness-demo-group',
+          contentId: 'readiness-image-text',
+          format: 'image-text',
+          locale: 'zh-CN',
+          projectId,
+          title: 'Image-text title',
+        },
+        name: 'save_channel_content',
+      },
+    })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'readiness-publication',
+      method: 'tools/call',
+      params: {
+        arguments: {
+          activityId: 'readiness-demo',
+          channel: 'bilibili',
+          contentId: 'readiness-image-text',
+          projectId,
+          publicationId: 'readiness-publication',
+        },
+        name: 'create_publication_plan',
+      },
+    })).resolves.toMatchObject({
+      result: {
+        content: [{
+          text: expect.stringMatching(/not ready.*image artifact.*required/i),
+          type: 'text',
+        }],
+        isError: true,
+      },
+    })
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'readiness-view',
+      method: 'tools/call',
+      params: {
+        arguments: { projectId },
+        name: 'get_project_view',
+      },
+    })).resolves.toMatchObject({
+      result: {
+        structuredContent: {
+          channelContentReadiness: {
+            'readiness-image-text': {
+              matchingArtifactIds: [],
+              missingMediaKinds: ['image'],
+              ready: false,
+            },
+          },
         },
       },
     })

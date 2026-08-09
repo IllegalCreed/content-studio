@@ -367,6 +367,7 @@ function projectViewCampaigns(
       activity,
       activityArtifacts: projectView.activityArtifacts,
       captureFlows: projectView.snapshot.manifest.captureFlows,
+      channelContentReadiness: projectView.channelContentReadiness,
       channelContents: projectView.channelContents,
       contentGroups: projectView.contentGroups,
       ownerHandoffs: projectView.ownerHandoffs,
@@ -1257,7 +1258,7 @@ function canPublishContent(channelId: ChannelId): boolean {
 }
 
 async function createPublicationPlanForContent(content: ChannelContentProjection): Promise<void> {
-  if (!runtimeConnected.value || !selectedCampaignIsRuntime.value || !canPublishContent(content.channel) || hasPublicationTask(content.contentId))
+  if (!runtimeConnected.value || !selectedCampaignIsRuntime.value || !canPublishContent(content.channel) || content.publicationReady === false || hasPublicationTask(content.contentId))
     return
   publicationPlanActionPending.value = content.contentId
   publicationPlanActionError.value = null
@@ -1570,6 +1571,7 @@ function applyProjectView(projectView: Awaited<ReturnType<typeof workbenchRuntim
       activity,
       activityArtifacts: projectView.activityArtifacts,
       captureFlows: projectView.snapshot.manifest.captureFlows,
+      channelContentReadiness: projectView.channelContentReadiness,
       channelContents: projectView.channelContents,
       contentGroups: projectView.contentGroups,
       ownerHandoffs: projectView.ownerHandoffs,

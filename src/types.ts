@@ -36,6 +36,15 @@ export interface ContentMediaRequirement {
   minCount: number
 }
 
+export interface ChannelContentReadiness {
+  artifactIds: string[]
+  matchingArtifactIds: string[]
+  missingMediaKinds: ContentMediaKind[]
+  ready: boolean
+  reason: string | null
+  requirement: ContentMediaRequirement
+}
+
 export interface ContentFormBlueprint {
   format: ContentFormat
   maxBodyLength: number
@@ -249,6 +258,7 @@ export interface ContentStudioProjectView {
   activityArtifacts: ActivityArtifact[]
   channelBlueprints: Readonly<Record<ChannelId, ChannelBlueprint>>
   channelContents: ChannelContent[]
+  channelContentReadiness: Record<string, ChannelContentReadiness>
   compositionReceipts: CompositionAttemptReceipt[]
   contentGroups: ContentGroup[]
   monitoringObservations: MonitoringObservation[]
@@ -302,6 +312,7 @@ export interface ContentStudioGlobalProjectView {
   activities: PublishingActivity[]
   activityArtifacts: ActivityArtifact[]
   channelContents: ChannelContent[]
+  channelContentReadiness: Record<string, ChannelContentReadiness>
   compositionReceipts: CompositionAttemptReceipt[]
   contentGroups: ContentGroup[]
   ownerHandoffs: OwnerHandoff[]

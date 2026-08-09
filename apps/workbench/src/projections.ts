@@ -4,6 +4,7 @@ import type {
   CaptureStep,
   ChannelContent,
   ChannelContentFormat,
+  ChannelContentReadiness,
   ChannelId,
   ContentGroup,
   ContentStudioProjectIndex,
@@ -38,6 +39,7 @@ import type {
 import {
   humanizeChannelContentFormat,
   humanizeTaskStatus,
+  mediaRequirementSummary,
   recordingReceiptToVideoJob,
   taskEventSummary,
   taskLifecycleProjection,
@@ -545,6 +547,7 @@ export interface ActivityProjectionInput {
   activity: PublishingActivity
   activityArtifacts?: readonly ActivityArtifact[]
   captureFlows?: readonly CaptureFlow[]
+  channelContentReadiness?: Readonly<Record<string, ChannelContentReadiness>>
   channelContents?: readonly ChannelContent[]
   contentGroups?: readonly ContentGroup[]
   ownerHandoffs?: readonly OwnerHandoff[]
@@ -558,6 +561,7 @@ export function activityToCampaign({
   activity,
   activityArtifacts = [],
   captureFlows = [],
+  channelContentReadiness = {},
   channelContents = [],
   contentGroups = [],
   ownerHandoffs = [],
@@ -572,17 +576,26 @@ export function activityToCampaign({
       contentGroupId: group.contentGroupId,
       contents: channelContents
         .filter(content => content.contentGroupId === group.contentGroupId)
-        .map<ChannelContentProjection>(content => ({
-          accountAlias: accountAliasForChannel(content.channel),
-          artifactIds: content.artifactIds,
-          body: content.body,
-          channel: content.channel,
-          contentId: content.contentId,
-          format: humanizeChannelContentFormat(content.format),
-          locale: content.locale,
-          status: '已生成',
-          title: content.title,
-        })),
+        .map<ChannelContentProjection>((content) => {
+          const readiness = channelContentReadiness[content.contentId]
+          return {
+            accountAlias: accountAliasForChannel(content.channel),
+            artifactIds: content.artifactIds,
+            body: content.body,
+            channel: content.channel,
+            contentId: content.contentId,
+            format: humanizeChannelContentFormat(content.format),
+            locale: content.locale,
+            ...(readiness === undefined
+              ? {}
+              : {
+                  publicationReadiness: publicationReadinessLabel(readiness),
+                  publicationReady: readiness.ready,
+                }),
+            status: '已生成',
+            title: content.title,
+          }
+        }),
       coreMessage: group.coreMessage,
       title: group.title,
     }))
@@ -663,6 +676,15 @@ export function activityToCampaign({
     videoPlan,
     videoJob,
   }
+}
+
+function publicationReadinessLabel(
+  readiness: ChannelContentReadiness,
+): string {
+  const requirement = mediaRequirementSummary(readiness.requirement)
+  return readiness.ready
+    ? `发布资源已就绪 · ${requirement}`
+    : `发布受阻 · ${requirement}，当前匹配 ${readiness.matchingArtifactIds.length} 个活动产物`
 }
 
 export interface TaskProjectionInput {

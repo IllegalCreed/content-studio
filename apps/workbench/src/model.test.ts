@@ -39,6 +39,7 @@ function projectView(overrides: Partial<ContentStudioProjectView> = {}): Content
     }],
     activityArtifacts: [],
     channelBlueprints: CHANNEL_BLUEPRINTS,
+    channelContentReadiness: {},
     channelContents: [{
       activityId: 'activity-a',
       artifactIds: [],

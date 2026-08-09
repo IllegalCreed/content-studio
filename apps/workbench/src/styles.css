@@ -3756,6 +3756,20 @@ footer {
   font-weight: 500;
 }
 
+.content-group-card li .content-publication-readiness {
+  grid-column: 1 / -1;
+  margin-top: 0.25rem;
+  line-height: 1.5;
+}
+
+.content-publication-readiness[data-readiness='ready'] {
+  color: var(--acid);
+}
+
+.content-publication-readiness[data-readiness='blocked'] {
+  color: #f0bd65;
+}
+
 .related-task-list button,
 .artifact-list button {
   display: flex;

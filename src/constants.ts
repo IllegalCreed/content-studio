@@ -179,7 +179,7 @@ function contentForm(
   format: ContentFormat,
   maxTitleLength: number,
   maxBodyLength: number,
-  media: ContentMediaRequirement = defaultMediaRequirement(format),
+  media: ContentMediaRequirement = defaultContentMediaRequirement(format),
 ): ContentFormBlueprint {
   return {
     format,
@@ -189,7 +189,9 @@ function contentForm(
   }
 }
 
-function defaultMediaRequirement(format: ContentFormat): ContentMediaRequirement {
+export function defaultContentMediaRequirement(
+  format: ContentFormat,
+): ContentMediaRequirement {
   if (format === 'article')
     return CONTENT_MEDIA_REQUIREMENTS.optionalImage
   if (format === 'image-text')

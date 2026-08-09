@@ -121,6 +121,11 @@ function createPublication(
   })
   const content = service.createChannelContent({
     activityId: activity.activityId,
+    artifactIds: [registerFinalVideoArtifact(
+      service,
+      activity,
+      `${projectId}-report-video`,
+    )],
     body: 'A video script',
     channel: 'youtube',
     contentGroupId: group.contentGroupId,
@@ -129,7 +134,6 @@ function createPublication(
     locale: 'en',
     projectId,
     title: 'Quick sort explained',
-    artifactIds: [],
   })
   const publication = service.createPublicationPlan({
     activityId: activity.activityId,
@@ -139,6 +143,22 @@ function createPublication(
     publicationId: `${projectId}-report-publication`,
   })
   return { activity, publication }
+}
+
+function registerFinalVideoArtifact(
+  service: ContentStudioApplicationService,
+  activity: ReturnType<typeof createActivity>,
+  artifactId: string,
+): string {
+  service.createActivityArtifact({
+    activityId: activity.activityId,
+    artifactId,
+    kind: 'video',
+    projectId: activity.projectId,
+    relativePath: `composed/${artifactId}.webm`,
+    sha256: 'f'.repeat(64),
+  })
+  return artifactId
 }
 
 function createProductionContent(
@@ -549,6 +569,149 @@ describe('content studio application service', () => {
     })).toThrow(/duplicate channel content form/i)
   })
 
+  it('blocks publication plans until the selected content form references final media', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'readiness-project')
+    enableYouTube(service, 'readiness-project')
+    const activity = createActivity(service, 'readiness-project')
+    const group = service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'readiness-group',
+      coreMessage: 'Explain the idea',
+      projectId: activity.projectId,
+      title: 'Readiness',
+    })
+    service.createActivityArtifact({
+      activityId: activity.activityId,
+      artifactId: 'readiness-clip',
+      kind: 'video-clip',
+      projectId: activity.projectId,
+      relativePath: 'recordings/clip.webm',
+      sha256: 'a'.repeat(64),
+    })
+    service.createActivityArtifact({
+      activityId: activity.activityId,
+      artifactId: 'readiness-video',
+      kind: 'video',
+      projectId: activity.projectId,
+      relativePath: 'composed/final.webm',
+      sha256: 'b'.repeat(64),
+    })
+    const blocked = service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: ['readiness-clip'],
+      body: 'Video body',
+      channel: 'youtube',
+      contentGroupId: group.contentGroupId,
+      contentId: 'blocked-video-content',
+      format: 'video',
+      locale: 'en',
+      projectId: activity.projectId,
+      title: 'Blocked video',
+    })
+    const ready = service.createChannelContent({
+      ...blocked,
+      artifactIds: ['readiness-video'],
+      contentId: 'ready-video-content',
+    })
+
+    expect(service.getProjectView(activity.projectId).channelContentReadiness)
+      .toMatchObject({
+        'blocked-video-content': {
+          matchingArtifactIds: [],
+          missingMediaKinds: ['video'],
+          ready: false,
+        },
+        'ready-video-content': {
+          matchingArtifactIds: ['readiness-video'],
+          missingMediaKinds: [],
+          ready: true,
+        },
+      })
+    expect(() => service.createPublicationPlan({
+      activityId: activity.activityId,
+      channel: 'youtube',
+      contentId: blocked.contentId,
+      projectId: activity.projectId,
+      publicationId: 'blocked-video-publication',
+    })).toThrow(/not ready.*video artifact.*required/i)
+    expect(service.createPublicationPlan({
+      activityId: activity.activityId,
+      channel: 'youtube',
+      contentId: ready.contentId,
+      projectId: activity.projectId,
+      publicationId: 'ready-video-publication',
+    })).toMatchObject({ publicationId: 'ready-video-publication' })
+  })
+
+  it('applies different readiness requirements to Bilibili image-text and short-post content', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'bilibili-readiness-project')
+    service.bindProjectChannel({
+      channel: 'bilibili',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId: 'bilibili-readiness-project',
+    })
+    const activity = service.createActivity({
+      activityId: 'bilibili-readiness-activity',
+      campaignId: 'bilibili-readiness-campaign',
+      channels: [{
+        contentFormats: ['image-text', 'short-post'],
+        id: 'bilibili',
+        locale: 'en',
+      }],
+      goal: 'education',
+      projectId: 'bilibili-readiness-project',
+      projectSnapshotId: 'bilibili-readiness-project-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://bilibili-readiness-project.example.com/',
+      topic: { 'en': 'A topic', 'zh-CN': '主题' },
+    })
+    const group = service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'bilibili-readiness-group',
+      coreMessage: 'Explain the idea',
+      projectId: activity.projectId,
+      title: 'Readiness',
+    })
+    const imageText = service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: [],
+      body: 'Image text body',
+      channel: 'bilibili',
+      contentGroupId: group.contentGroupId,
+      contentId: 'bilibili-image-text',
+      format: 'image-text',
+      locale: 'en',
+      projectId: activity.projectId,
+      title: 'Image text',
+    })
+    const shortPost = service.createChannelContent({
+      ...imageText,
+      contentId: 'bilibili-short-post',
+      format: 'short-post',
+      title: 'Short post',
+    })
+
+    expect(() => service.createPublicationPlan({
+      activityId: activity.activityId,
+      channel: 'bilibili',
+      contentId: imageText.contentId,
+      projectId: activity.projectId,
+      publicationId: 'bilibili-image-text-publication',
+    })).toThrow(/not ready.*image artifact.*required/i)
+    expect(service.createPublicationPlan({
+      activityId: activity.activityId,
+      channel: 'bilibili',
+      contentId: shortPost.contentId,
+      projectId: activity.projectId,
+      publicationId: 'bilibili-short-post-publication',
+    })).toMatchObject({ publicationId: 'bilibili-short-post-publication' })
+  })
+
   it('does not create a publication task for a content-only channel', () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)
@@ -613,6 +776,7 @@ describe('content studio application service', () => {
       activityArtifacts: [],
       channelBlueprints: CHANNEL_BLUEPRINTS,
       channelContents: [],
+      channelContentReadiness: {},
       compositionReceipts: [],
       contentGroups: [],
       ownerHandoffs: [],
@@ -1493,6 +1657,19 @@ describe('content studio application service', () => {
       relativePath: 'content-studio-compose-register/composed/preview.gif',
       sha256: 'e'.repeat(64),
     })])
+    expect(repository.getChannelContent('compose-project', contentId)).toMatchObject({
+      artifactIds: [
+        `composed-${taskId}`,
+        `cover-${taskId}`,
+        `gif-${taskId}`,
+      ],
+      version: 2,
+    })
+    expect(service.getProjectView('compose-project').channelContentReadiness[contentId])
+      .toMatchObject({
+        matchingArtifactIds: [`composed-${taskId}`],
+        ready: true,
+      })
     expect(
       service.getProjectView('compose-project').compositionReceipts,
     ).toMatchObject([{
@@ -1893,6 +2070,11 @@ describe('content studio application service', () => {
     })
     const content = service.createChannelContent({
       activityId: activity.activityId,
+      artifactIds: [registerFinalVideoArtifact(
+        service,
+        activity,
+        'publication-binding-video',
+      )],
       body: 'A video script',
       channel: 'youtube',
       contentGroupId: group.contentGroupId,
@@ -1901,7 +2083,6 @@ describe('content studio application service', () => {
       locale: 'en',
       projectId: 'project-a',
       title: 'Quick sort explained',
-      artifactIds: [],
     })
     const publication = service.createPublicationPlan({
       activityId: activity.activityId,
@@ -2239,6 +2420,11 @@ describe('content studio application service', () => {
     })
     const content = service.createChannelContent({
       activityId: activity.activityId,
+      artifactIds: [registerFinalVideoArtifact(
+        service,
+        activity,
+        'receipt-matching-video',
+      )],
       body: 'A video script',
       channel: 'youtube',
       contentGroupId: group.contentGroupId,
@@ -2247,7 +2433,6 @@ describe('content studio application service', () => {
       locale: 'en',
       projectId: 'project-a',
       title: 'Quick sort explained',
-      artifactIds: [],
     })
     const publication = service.createPublicationPlan({
       activityId: activity.activityId,
@@ -2296,6 +2481,11 @@ describe('content studio application service', () => {
     })
     const content = service.createChannelContent({
       activityId: activity.activityId,
+      artifactIds: [registerFinalVideoArtifact(
+        service,
+        activity,
+        'owner-handoff-video',
+      )],
       body: 'A video script',
       channel: 'youtube',
       contentGroupId: group.contentGroupId,
@@ -2304,7 +2494,6 @@ describe('content studio application service', () => {
       locale: 'en',
       projectId: 'project-a',
       title: 'Quick sort explained',
-      artifactIds: [],
     })
     const publication = service.createPublicationPlan({
       activityId: activity.activityId,
@@ -2372,6 +2561,11 @@ describe('content studio application service', () => {
     })
     const content = service.createChannelContent({
       activityId: activity.activityId,
+      artifactIds: [registerFinalVideoArtifact(
+        service,
+        activity,
+        'observation-video',
+      )],
       body: 'A video script',
       channel: 'youtube',
       contentGroupId: group.contentGroupId,
@@ -2380,7 +2574,6 @@ describe('content studio application service', () => {
       locale: 'en',
       projectId: 'project-a',
       title: 'Quick sort explained',
-      artifactIds: [],
     })
     const publication = service.createPublicationPlan({
       activityId: activity.activityId,
@@ -2453,6 +2646,11 @@ describe('content studio application service', () => {
     })
     const content = service.createChannelContent({
       activityId: activity.activityId,
+      artifactIds: [registerFinalVideoArtifact(
+        service,
+        activity,
+        'report-video',
+      )],
       body: 'A video script',
       channel: 'youtube',
       contentGroupId: group.contentGroupId,
@@ -2461,7 +2659,6 @@ describe('content studio application service', () => {
       locale: 'en',
       projectId: 'project-a',
       title: 'Quick sort explained',
-      artifactIds: [],
     })
     const publication = service.createPublicationPlan({
       activityId: activity.activityId,

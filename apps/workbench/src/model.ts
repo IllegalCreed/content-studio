@@ -490,6 +490,8 @@ export interface ChannelContentProjection {
   contentId: string
   format: HumanizedChannelContentFormat
   locale: 'zh-CN' | 'en'
+  publicationReadiness?: string
+  publicationReady?: boolean
   status: '草稿' | '已生成' | '制作中' | '待审核' | '已完成'
   title: string
 }

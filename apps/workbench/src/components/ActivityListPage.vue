@@ -371,6 +371,14 @@ const emit = defineEmits<{
                     <span>{{ content.format }}成品 · {{ content.channel }} · {{ content.accountAlias ?? '项目账号待绑定' }}</span>
                     <strong>{{ content.title }}</strong>
                     <small>{{ content.locale }} · {{ content.status }}</small>
+                    <small
+                      v-if="content.publicationReadiness"
+                      class="content-publication-readiness"
+                      :data-readiness="content.publicationReady === false ? 'blocked' : 'ready'"
+                      data-testid="content-publication-readiness"
+                    >
+                      {{ content.publicationReadiness }}
+                    </small>
                     <details v-if="content.body" class="content-preview-details">
                       <summary>查看文字预览</summary>
                       <pre>{{ content.body }}</pre>
@@ -378,10 +386,10 @@ const emit = defineEmits<{
                     <button
                       type="button"
                       class="content-action-button"
-                      :disabled="!props.canPublishContent(content.channel) || !props.selectedCampaignIsRuntime || !props.snapshot.runtimeConnected || props.hasPublicationTask(content.contentId) || props.publicationPlanActionPending !== null"
+                      :disabled="!props.canPublishContent(content.channel) || content.publicationReady === false || !props.selectedCampaignIsRuntime || !props.snapshot.runtimeConnected || props.hasPublicationTask(content.contentId) || props.publicationPlanActionPending !== null"
                       @click="emit('create-publication-plan', content)"
                     >
-                      {{ !props.canPublishContent(content.channel) ? '仅生成内容 · 不进入发布' : props.publicationPlanActionPending === content.contentId ? '创建中…' : props.hasPublicationTask(content.contentId) ? '已建立发布安排' : '建立发布安排' }}
+                      {{ !props.canPublishContent(content.channel) ? '仅生成内容 · 不进入发布' : props.publicationPlanActionPending === content.contentId ? '创建中…' : props.hasPublicationTask(content.contentId) ? '已建立发布安排' : content.publicationReady === false ? '等待发布资源就绪' : '建立发布安排' }}
                     </button>
                   </li>
                 </ul>

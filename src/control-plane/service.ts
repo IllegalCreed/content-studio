@@ -9,6 +9,7 @@ import type {
   ActivityRevisionInput,
   ChannelContent,
   ChannelContentFormat,
+  ChannelContentReadiness,
   ChannelId,
   ComposeProduction,
   ComposeProductionResult,
@@ -51,6 +52,10 @@ import type {
 } from '../types'
 import { join, relative, resolve } from 'node:path'
 import { CHANNEL_BLUEPRINTS } from '../constants'
+import {
+  assessChannelContentReadiness,
+  assessChannelContentsReadiness,
+} from '../content/readiness'
 import { runProductionTask as executeProductionTask } from '../jobs/production'
 import { InMemoryExecutionTaskStore } from '../jobs/task'
 import { assertMatchingMarketingOpsReceipt } from '../marketing-ops/client'
@@ -613,20 +618,26 @@ export class ContentStudioApplicationService {
       this.repository.listActivities(projectId),
       activity => activity.activityId,
     )
+    const activityArtifacts = latestById(
+      activities.flatMap(activity =>
+        this.repository.listActivityArtifacts(projectId, activity.activityId),
+      ),
+      artifact => artifact.artifactId,
+    )
+    const channelContents = latestById(
+      this.repository.listChannelContents(projectId),
+      content => content.contentId,
+    )
     const tasks = this.taskStore.listTasks(projectId)
     return {
       activities,
-      activityArtifacts: latestById(
-        activities.flatMap(activity =>
-          this.repository.listActivityArtifacts(projectId, activity.activityId),
-        ),
-        artifact => artifact.artifactId,
-      ),
+      activityArtifacts,
       channelBlueprints: clone(CHANNEL_BLUEPRINTS),
-      channelContents: latestById(
-        this.repository.listChannelContents(projectId),
-        content => content.contentId,
+      channelContentReadiness: assessChannelContentsReadiness(
+        channelContents,
+        activityArtifacts,
       ),
+      channelContents,
       compositionReceipts: tasks.flatMap(task =>
         this.taskStore.listCompositionReceipts(projectId, task.taskId),
       ),
@@ -700,6 +711,7 @@ export class ContentStudioApplicationService {
       return {
         activities: view.activities,
         activityArtifacts: view.activityArtifacts,
+        channelContentReadiness: view.channelContentReadiness,
         channelContents: view.channelContents,
         compositionReceipts: view.compositionReceipts,
         contentGroups: view.contentGroups,
@@ -734,6 +746,17 @@ export class ContentStudioApplicationService {
     version?: number,
   ): ProjectAsset | undefined {
     return this.repository.getProjectAsset(projectId, assetId, version)
+  }
+
+  getChannelContentReadiness(
+    projectId: string,
+    contentId: string,
+  ): ChannelContentReadiness {
+    this.requireProject(projectId)
+    const content = this.repository.getChannelContent(projectId, contentId)
+    if (content === undefined)
+      throw new RecordNotFoundError('Channel content', contentId)
+    return this.contentReadiness(content)
   }
 
   registerProject(
@@ -1070,6 +1093,13 @@ export class ContentStudioApplicationService {
         sha256: gifArtifact.sha256,
       })
     }
+    if (task.contentId !== undefined) {
+      this.attachActivityArtifactsToChannelContent(
+        projectId,
+        task.contentId,
+        compositionArtifacts.map(artifact => artifact.artifactId),
+      )
+    }
     this.taskStore.saveCompositionReceipt(projectId, taskId, {
       artifacts: compositionArtifacts,
       attempt: task.attempt,
@@ -1395,6 +1425,7 @@ export class ContentStudioApplicationService {
       },
     ])
     this.assertPublishableChannel(input.projectId, input.channel)
+    this.assertChannelContentPublicationReadiness(content)
     const plan = this.repository.savePublicationPlan(input)
     this.createPublicationTask(plan)
     return plan
@@ -1690,6 +1721,61 @@ export class ContentStudioApplicationService {
         )
       }
     }
+  }
+
+  private assertChannelContentPublicationReadiness(
+    content: ChannelContent,
+  ): void {
+    this.assertChannelContentArtifacts(
+      content.projectId,
+      content.activityId,
+      content.artifactIds,
+    )
+    const readiness = this.contentReadiness(content)
+    if (!readiness.ready) {
+      throw new Error(
+        `Channel content ${content.contentId} is not ready for publication: ${readiness.reason}`,
+      )
+    }
+  }
+
+  private contentReadiness(content: ChannelContent): ChannelContentReadiness {
+    const artifacts = latestById(
+      this.repository.listActivityArtifacts(
+        content.projectId,
+        content.activityId,
+      ),
+      artifact => artifact.artifactId,
+    )
+    return assessChannelContentReadiness(
+      content.channel,
+      content.format,
+      content.artifactIds,
+      artifacts,
+    )
+  }
+
+  private attachActivityArtifactsToChannelContent(
+    projectId: string,
+    contentId: string,
+    artifactIds: readonly string[],
+  ): ChannelContent {
+    const content = this.repository.getChannelContent(projectId, contentId)
+    if (content === undefined)
+      throw new RecordNotFoundError('Channel content', contentId)
+    const nextArtifactIds = [...new Set([...content.artifactIds, ...artifactIds])]
+    if (nextArtifactIds.length === content.artifactIds.length)
+      return content
+    this.assertChannelContentArtifacts(
+      projectId,
+      content.activityId,
+      nextArtifactIds,
+    )
+    return this.repository.saveChannelContent({
+      ...content,
+      artifactIds: nextArtifactIds,
+      version: content.version + 1,
+    })
   }
 
   private assertActivityVideo(

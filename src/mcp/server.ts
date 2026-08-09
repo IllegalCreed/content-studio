@@ -333,6 +333,7 @@ function readResource(
       ? view.activities
       : kind === 'content'
         ? {
+            channelContentReadiness: view.channelContentReadiness,
             channelContents: view.channelContents,
             contentGroups: view.contentGroups,
           }
@@ -373,7 +374,7 @@ function toolDefinitions(): Array<Record<string, unknown>> {
         openWorldHint: false,
         readOnlyHint: true,
       },
-      description: '读取当前项目的事实、活动、内容、渠道逐形态规格、素材和任务快照。不会执行外部发布。',
+      description: '读取当前项目的事实、活动、内容、逐形态规格、发布资源 readiness、素材和任务快照。不会执行外部发布。',
       inputSchema: projectIdSchema(),
       name: 'get_project_view',
       title: '读取项目工作视图',
@@ -498,7 +499,7 @@ function toolDefinitions(): Array<Record<string, unknown>> {
         openWorldHint: false,
         readOnlyHint: false,
       },
-      description: '为活动中的一个渠道成品建立本地发布安排和发布任务，不会执行渠道发布。',
+      description: '为活动中已满足逐形态媒体要求的渠道成品建立本地发布安排和发布任务，不会执行渠道发布。',
       inputSchema: publicationPlanSchema(),
       name: 'create_publication_plan',
       title: '创建发布安排',
@@ -542,7 +543,7 @@ function toolDefinitions(): Array<Record<string, unknown>> {
         openWorldHint: false,
         readOnlyHint: false,
       },
-      description: '一次保存 AI 宿主生成的内容组和多个渠道版本，不会发布到渠道。',
+      description: '一次保存 AI 宿主生成的内容组和多个渠道版本，可引用同活动的最终媒体产物；不会发布到渠道。',
       inputSchema: activityContentPackSchema(),
       name: 'save_activity_content_pack',
       title: '保存活动内容包',
@@ -553,7 +554,7 @@ function toolDefinitions(): Array<Record<string, unknown>> {
         openWorldHint: false,
         readOnlyHint: false,
       },
-      description: '保存某个渠道的文章、图文、动态或视频内容版本，不会发布到渠道。',
+      description: '保存某个渠道的文章、图文、动态或视频内容版本，可引用同活动的最终媒体产物；不会发布到渠道。',
       inputSchema: channelContentSchema(),
       name: 'save_channel_content',
       title: '保存渠道内容',
@@ -808,7 +809,7 @@ function channelContentSchema(): Record<string, unknown> {
     properties: {
       activityId: { type: 'string' },
       artifactIds: {
-        description: '引用本活动内的活动素材 ID,缺省为空数组',
+        description: '引用本活动内的活动素材 ID；发布 readiness 只把最终 image/video 计入逐形态媒体要求，缺省为空数组',
         items: { type: 'string' },
         type: 'array',
       },
@@ -845,7 +846,7 @@ function activityContentPackSchema(): Record<string, unknown> {
         items: {
           properties: {
             artifactIds: {
-              description: '引用本活动内的活动素材 ID,缺省为空数组',
+              description: '引用本活动内的活动素材 ID；发布 readiness 只把最终 image/video 计入逐形态媒体要求，缺省为空数组',
               items: { type: 'string' },
               type: 'array',
             },

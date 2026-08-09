@@ -10,6 +10,32 @@ import WorkbenchApp from './WorkbenchApp.vue'
 import './styles.css'
 
 describe('content studio workbench', () => {
+  it('在发布按钮旁显示资源就绪状态，并阻止缺少必需媒体的内容进入发布安排', async () => {
+    const router = createWorkbenchRouter(true)
+    await router.push('/project/activities')
+    await router.isReady()
+    const pinia = createPinia()
+    const wrapper = mount(WorkbenchApp, {
+      global: {
+        plugins: [pinia, router],
+      },
+    })
+    const viewModel = wrapper.vm as unknown as { snapshot: WorkbenchSnapshot }
+    const content = viewModel.snapshot.campaigns[0]?.contentGroups[0]?.contents[0]
+    expect(content).toBeDefined()
+    content!.publicationReady = false
+    content!.publicationReadiness = '发布受阻 · 需要 1 个视频，当前匹配 0 个活动产物'
+    await nextTick()
+
+    const row = wrapper.findAll('.content-group-card li')
+      .find(candidate => candidate.text().includes(content!.title))
+    expect(row).toBeDefined()
+    expect(row!.get('[data-testid="content-publication-readiness"]').text())
+      .toContain('需要 1 个视频')
+    expect(row!.get('.content-action-button').attributes()).toHaveProperty('disabled')
+    expect(row!.get('.content-action-button').text()).toContain('等待发布资源就绪')
+  })
+
   it('把规划中的模块作为可切换的功能页面展示', async () => {
     const router = createWorkbenchRouter(true)
     const routerPush = vi.spyOn(router, 'push')

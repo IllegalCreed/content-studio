@@ -152,6 +152,19 @@ describe('workbench runtime projections', () => {
     const campaign = activityToCampaign({
       accountAliasForChannel: () => '项目账号',
       activity,
+      channelContentReadiness: {
+        'content-a': {
+          artifactIds: [],
+          matchingArtifactIds: [],
+          missingMediaKinds: ['image'],
+          ready: false,
+          reason: 'At least 1 matching image artifact is required',
+          requirement: {
+            allowedKinds: ['image'],
+            minCount: 1,
+          },
+        },
+      },
       channelContents: [content],
       contentGroups: [contentGroup],
       ownerHandoffs: [handoff],
@@ -161,7 +174,12 @@ describe('workbench runtime projections', () => {
       activityStatus: '已规划',
       channelContentFormats: { github: ['article'] },
       channels: ['github'],
-      contentGroups: [{ contents: [{ accountAlias: '项目账号', title: 'Channel article' }] }],
+      contentGroups: [{ contents: [{
+        accountAlias: '项目账号',
+        publicationReadiness: '发布受阻 · 至少 1 张图片，当前匹配 0 个活动产物',
+        publicationReady: false,
+        title: 'Channel article',
+      }] }],
       handoffs: [{ handoffId: 'handoff-a', status: 'waiting' }],
       title: '一个主题',
     })

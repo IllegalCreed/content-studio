@@ -740,6 +740,23 @@ describe('content studio local application server', () => {
       expect(contentResponse.status).toBe(201)
       expect(await contentResponse.json()).toMatchObject({ contentId: 'content-a', version: 1 })
 
+      const readinessViewResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a`,
+      )
+      expect(readinessViewResponse.status).toBe(200)
+      expect(await readinessViewResponse.json()).toMatchObject({
+        channelContentReadiness: {
+          'content-a': {
+            matchingArtifactIds: [],
+            ready: true,
+            requirement: {
+              allowedKinds: ['image'],
+              minCount: 0,
+            },
+          },
+        },
+      })
+
       const artifactResponse = await fetch(
         `${running.baseUrl}/api/v1/projects/project-a/activities/activity-a/artifacts`,
         {
