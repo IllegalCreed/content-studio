@@ -437,11 +437,24 @@ readiness；`preview-frame`、`video-clip` 和其他中间产物不计入。视�
 创建发布安排会再次校验最小/最大数量并 fail closed。这个本地校验不会伪造外部平台授权
 或发布回执，`marketing-ops` 仍负责账号、策略和最终发布包校验。
 
+活动产物可显式标记 `en`、`zh-CN` 或 `neutral`；旧记录未带语言时按 `neutral` 处理。
+渠道内容只能引用同语言或 neutral 产物，这个约束同时作用于内容保存、媒体修订、readiness
+和发布包编译，避免中文图片静默进入英文内容，或反向混用。neutral 只表示确实无语言的
+可复用素材，不应被用来绕过本应本地化的文案、字幕或配音。
+
 正文先完成、图片后生成时，由窄范围 `revise_channel_content_media` 工具更新已有渠道内容：
 调用必须携带当前 `baseVersion`，只能选择同活动的最终 `image`/`video`，并明确 `append` 或
 `replace`。替换操作只移除旧的最终媒体引用，保留文章、音频和中间证据；每次有效变更生成
 新的渠道内容版本。发布安排一旦建立，媒体引用即锁定，避免本地 readiness 校验后的发布包
 被静默改写。
+
+Content Studio 的 transport-neutral 发布包以发布安排为稳定 package ID，并锁定
+`channel + locale + contentFormat + contentVersion`。同一渠道可以拥有多个不同语言或形态
+的包，批量编译只要求 package ID 唯一，不按渠道去重。跨边界的产物引用只包含
+`artifactId`、sha256、版本、类型和语言，不包含 `relativePath`；renderer 的格式、链接、
+规范 origin 和媒体类型在本地 fail closed 后形成稳定内容哈希。当前 `marketing-ops` v3
+仍按渠道限制一个包，且人工辅助媒体缺少已验证 asset-reference，因此这份包先作为下一版
+互操作契约，不直接触发外部写入。
 
 素材只有两个当前作用域：
 

@@ -645,6 +645,75 @@ describe('content studio application service', () => {
     })).toMatchObject({ publicationId: 'ready-video-publication' })
   })
 
+  it('keeps channel content artifacts in the content locale or neutral', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'locale-artifact-project')
+    enableYouTube(service, 'locale-artifact-project')
+    const activity = createActivity(service, 'locale-artifact-project')
+    const group = service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'locale-artifact-group',
+      coreMessage: 'Keep localized media aligned',
+      projectId: activity.projectId,
+      title: 'Locale artifacts',
+    })
+    const chineseVideo = service.createActivityArtifact({
+      activityId: activity.activityId,
+      artifactId: 'chinese-video',
+      kind: 'video',
+      locale: 'zh-CN',
+      projectId: activity.projectId,
+      relativePath: 'media/chinese.webm',
+      sha256: 'a'.repeat(64),
+    })
+    const neutralVideo = service.createActivityArtifact({
+      activityId: activity.activityId,
+      artifactId: 'neutral-video',
+      kind: 'video',
+      locale: 'neutral',
+      projectId: activity.projectId,
+      relativePath: 'media/neutral.webm',
+      sha256: 'b'.repeat(64),
+    })
+
+    expect(chineseVideo.locale).toBe('zh-CN')
+    expect(neutralVideo.locale).toBe('neutral')
+    expect(() => service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: [chineseVideo.artifactId],
+      body: 'English video copy',
+      channel: 'youtube',
+      contentGroupId: group.contentGroupId,
+      contentId: 'locale-drift-content',
+      format: 'video',
+      locale: 'en',
+      projectId: activity.projectId,
+      title: 'Locale drift',
+    })).toThrow(/artifact.*locale/i)
+
+    const content = service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: [neutralVideo.artifactId],
+      body: 'English video copy',
+      channel: 'youtube',
+      contentGroupId: group.contentGroupId,
+      contentId: 'neutral-artifact-content',
+      format: 'video',
+      locale: 'en',
+      projectId: activity.projectId,
+      title: 'Neutral artifact',
+    })
+    expect(content.artifactIds).toEqual(['neutral-video'])
+    expect(() => service.reviseChannelContentMedia({
+      artifactIds: [chineseVideo.artifactId],
+      baseVersion: content.version,
+      contentId: content.contentId,
+      mode: 'replace',
+      projectId: activity.projectId,
+    })).toThrow(/artifact.*locale/i)
+  })
+
   it('applies different readiness requirements to Bilibili image-text and short-post content', () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)

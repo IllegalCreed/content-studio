@@ -109,7 +109,12 @@ const emit = defineEmits<{
 
 const finalMediaArtifacts = computed(() =>
   props.selectedCampaign.activityArtifacts.filter(artifact =>
-    artifact.kind === '图片' || artifact.kind === '视频',
+    (artifact.kind === '图片' || artifact.kind === '视频')
+    && (
+      artifact.locale === undefined
+      || artifact.locale === 'neutral'
+      || artifact.locale === props.mediaRevisionContent?.locale
+    ),
   ),
 )
 </script>
@@ -429,7 +434,7 @@ const finalMediaArtifacts = computed(() =>
                   />
                   <span>
                     <strong>{{ artifact.name }}</strong>
-                    <small>{{ artifact.kind }} · {{ artifact.artifactId }}{{ props.mediaRevisionContent.artifactIds?.includes(artifact.artifactId) ? ' · 当前已引用' : '' }}</small>
+                    <small>{{ artifact.kind }} · {{ artifact.locale ?? 'neutral' }} · {{ artifact.artifactId }}{{ props.mediaRevisionContent.artifactIds?.includes(artifact.artifactId) ? ' · 当前已引用' : '' }}</small>
                   </span>
                 </label>
                 <p v-if="finalMediaArtifacts.length === 0" class="empty-state">当前活动还没有最终图片或视频。请先由 MCP 主机登记最终媒体产物。</p>

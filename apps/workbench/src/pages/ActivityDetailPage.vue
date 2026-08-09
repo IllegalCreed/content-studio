@@ -343,7 +343,7 @@ watch(videoPlan, syncViewportDraft, { immediate: true })
       </div>
       <div>
         <div class="detail-section-heading"><div><p class="eyebrow">活动产物</p><h2>素材与成品</h2></div><span>{{ artifacts.length }} 个</span></div>
-        <ul v-if="artifacts.length > 0" class="detail-task-list"><li v-for="artifact in artifacts" :key="artifact.artifactId"><div><strong>{{ artifact.name }}</strong><small>{{ artifact.kind }} · {{ artifact.size }} · 校验和 {{ artifact.checksum ? artifact.checksum.slice(0, 12) + '…' : '未登记' }}</small></div><span>{{ artifact.artifactId }}</span></li></ul>
+        <ul v-if="artifacts.length > 0" class="detail-task-list"><li v-for="artifact in artifacts" :key="artifact.artifactId"><div><strong>{{ artifact.name }}</strong><small>{{ artifact.kind }} · {{ artifact.locale ?? 'neutral' }} · {{ artifact.size }} · 校验和 {{ artifact.checksum ? artifact.checksum.slice(0, 12) + '…' : '未登记' }}</small></div><span>{{ artifact.artifactId }}</span></li></ul>
         <p v-else class="empty-state">当前活动还没有登记产物。</p>
       </div>
     </section>

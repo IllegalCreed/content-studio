@@ -1,5 +1,7 @@
 export type Locale = 'en' | 'zh-CN'
 
+export type ActivityArtifactLocale = Locale | 'neutral'
+
 export type ChannelId
   = | 'bilibili'
     | 'bluesky'
@@ -449,6 +451,7 @@ export interface ActivityArtifact {
   activityId: string
   artifactId: string
   kind: ActivityArtifactKind
+  locale?: ActivityArtifactLocale
   projectId: string
   relativePath: string
   sha256: string
@@ -604,6 +607,72 @@ export interface MarketingOpsPublicationRequest {
 export interface MarketingOpsPublicationReceipt extends PublicationReceipt {
   issuedAt: string
   source: 'marketing-ops'
+}
+
+export type MarketingOpsPackageFormat
+  = | 'article'
+    | 'manual-package'
+    | 'post'
+    | 'release'
+    | 'status'
+
+export type MarketingOpsMediaKind = 'gif' | 'image' | 'video'
+
+export type MarketingOpsUtmMedium = 'community' | 'social'
+
+/**
+ * Metadata emitted by a project renderer. Content Studio validates this
+ * metadata but never rewrites renderer copy or tracking rules.
+ */
+export interface MarketingOpsRendererOutput {
+  canonicalUrl: string
+  format: MarketingOpsPackageFormat
+  links: string[]
+  media: MarketingOpsMediaKind[]
+  utmMedium: MarketingOpsUtmMedium
+}
+
+/**
+ * An immutable, path-free reference that may cross the marketing-ops trust
+ * boundary once that runtime supports validated media asset references.
+ */
+export interface MarketingOpsArtifactReference {
+  artifactId: string
+  kind: ActivityArtifactKind
+  locale: ActivityArtifactLocale
+  mediaKind?: MarketingOpsMediaKind
+  sha256: string
+  version: number
+}
+
+export interface MarketingOpsPublicationPackage {
+  accountRef?: string
+  activityId: string
+  artifactRefs: MarketingOpsArtifactReference[]
+  body: string
+  campaignId: string
+  channel: ChannelId
+  contentFormat: ChannelContentFormat
+  contentHash: string
+  contentId: string
+  contentVersion: number
+  locale: Locale
+  packageId: string
+  projectId: string
+  publicationId: string
+  renderer: MarketingOpsRendererOutput
+  schemaVersion: 1
+  title: string
+}
+
+export interface MarketingOpsPublicationPackageInput {
+  accountRef?: string
+  activity: PublishingActivity
+  artifacts: readonly ActivityArtifact[]
+  content: ChannelContent
+  publication: PublicationPlan
+  renderer: MarketingOpsRendererOutput
+  snapshot: ProjectSnapshot
 }
 
 export type OwnerHandoffStatus = 'cancelled' | 'completed' | 'expired' | 'pending'

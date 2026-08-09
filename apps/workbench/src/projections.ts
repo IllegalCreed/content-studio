@@ -105,6 +105,7 @@ export function activityArtifactProjections(
     artifactId: artifact.artifactId,
     checksum: artifact.sha256,
     kind: activityArtifactKindLabel(artifact.kind),
+    ...(artifact.locale === undefined ? {} : { locale: artifact.locale }),
     name: fileName(artifact.relativePath),
     previewKind: activityArtifactPreviewKind(artifact.kind),
     previewUrl: `/api/v1/projects/${encodeURIComponent(artifact.projectId)}/activity-artifacts/${encodeURIComponent(artifact.artifactId)}/preview`,

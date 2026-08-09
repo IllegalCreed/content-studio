@@ -6,6 +6,7 @@ import type {
   ContentFormat,
   ContentFormBlueprint,
   ContentMediaRequirement,
+  MarketingOpsPackageFormat,
   StorageRetentionPolicy,
   VideoFormat,
   VideoViewport,
@@ -67,6 +68,32 @@ export const CHANNEL_BLUEPRINTS = {
   'youtube': blueprint('owner-assisted', 'video-metadata', 100, 5000),
   'zhihu': blueprint('owner-assisted', 'article', 100, 20000),
 } satisfies Record<ChannelId, ChannelBlueprint>
+
+/**
+ * Renderer formats understood by the current marketing-ops contract. This
+ * describes package shape only; it does not imply adapter or write support.
+ */
+export const MARKETING_OPS_PACKAGE_FORMATS = {
+  'bilibili': 'manual-package',
+  'bluesky': 'post',
+  'dev': 'article',
+  'douyin': 'manual-package',
+  'facebook': 'manual-package',
+  'github': 'release',
+  'hacker-news': 'manual-package',
+  'jianshu': 'manual-package',
+  'juejin': 'manual-package',
+  'mastodon': 'status',
+  'product-hunt': 'manual-package',
+  'reddit': 'post',
+  'v2ex': 'manual-package',
+  'wechat': 'manual-package',
+  'weibo': 'post',
+  'x': 'manual-package',
+  'xiaohongshu': 'manual-package',
+  'youtube': 'manual-package',
+  'zhihu': 'manual-package',
+} as const satisfies Record<ChannelId, MarketingOpsPackageFormat>
 
 export const DEFAULT_ACTION_DURATION_MS = {
   'capture': 2000,

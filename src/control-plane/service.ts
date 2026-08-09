@@ -35,6 +35,7 @@ import type {
   ExecutionTaskEvent,
   ExecutionTaskKind,
   ExecutionTaskStore,
+  Locale,
   MonitoringObservation,
   OwnerHandoff,
   ProjectAsset,
@@ -1299,9 +1300,17 @@ export class ContentStudioApplicationService {
       throw new RecordNotFoundError('Content group', input.contentGroupId)
     if (group.activityId !== activity.activityId)
       throw new Error('Content group must belong to the activity')
-    if (!activity.channels.some(channel => channel.id === input.channel))
-      throw new Error('Channel content must target an activity channel')
-    this.assertActivityChannelContentFormat(activity, input.channel, input.format)
+    if (!activity.channels.some(channel =>
+      channel.id === input.channel && channel.locale === input.locale,
+    )) {
+      throw new Error('Channel content must target an activity channel and locale')
+    }
+    this.assertActivityChannelContentFormat(
+      activity,
+      input.channel,
+      input.locale,
+      input.format,
+    )
     this.assertEnabledChannels(input.projectId, [
       {
         id: input.channel,
@@ -1312,6 +1321,7 @@ export class ContentStudioApplicationService {
       input.projectId,
       activity.activityId,
       input.artifactIds,
+      input.locale,
     )
     const content = this.repository.saveChannelContent({
       ...input,
@@ -1349,11 +1359,13 @@ export class ContentStudioApplicationService {
       input.projectId,
       current.activityId,
       current.artifactIds,
+      current.locale,
     )
     this.assertChannelContentMediaArtifacts(
       input.projectId,
       current.activityId,
       input.artifactIds,
+      current.locale,
     )
     const currentMediaArtifactIds = current.artifactIds.filter((artifactId) => {
       const artifact = this.repository.getActivityArtifact(
@@ -1414,11 +1426,17 @@ export class ContentStudioApplicationService {
       )) {
         throw new Error('Content pack channel and locale must match the activity')
       }
-      this.assertActivityChannelContentFormat(activity, content.channel, content.format)
+      this.assertActivityChannelContentFormat(
+        activity,
+        content.channel,
+        content.locale,
+        content.format,
+      )
       this.assertChannelContentArtifacts(
         input.projectId,
         input.activityId,
         content.artifactIds,
+        content.locale,
       )
     }
     this.assertEnabledChannels(
@@ -1749,9 +1767,12 @@ export class ContentStudioApplicationService {
   private assertActivityChannelContentFormat(
     activity: PublishingActivity,
     channel: ChannelId,
+    locale: Locale,
     format: ChannelContentFormat,
   ): void {
-    const target = activity.channels.find(candidate => candidate.id === channel)
+    const target = activity.channels.find(candidate =>
+      candidate.id === channel && candidate.locale === locale,
+    )
     if (target?.contentFormats === undefined)
       return
     const packageFormat = format === 'video' ? 'video-metadata' : format
@@ -1780,6 +1801,7 @@ export class ContentStudioApplicationService {
     projectId: string,
     activityId: string,
     artifactIds: readonly string[],
+    locale: Locale,
   ): void {
     const seen = new Set<string>()
     for (const artifactId of artifactIds) {
@@ -1794,6 +1816,15 @@ export class ContentStudioApplicationService {
           'Channel content artifacts must belong to the activity',
         )
       }
+      if (
+        artifact.locale !== undefined
+        && artifact.locale !== 'neutral'
+        && artifact.locale !== locale
+      ) {
+        throw new Error(
+          'Channel content artifact locale must match the content locale or be neutral',
+        )
+      }
     }
   }
 
@@ -1801,8 +1832,9 @@ export class ContentStudioApplicationService {
     projectId: string,
     activityId: string,
     artifactIds: readonly string[],
+    locale: Locale,
   ): void {
-    this.assertChannelContentArtifacts(projectId, activityId, artifactIds)
+    this.assertChannelContentArtifacts(projectId, activityId, artifactIds, locale)
     for (const artifactId of artifactIds) {
       const artifact = this.repository.getActivityArtifact(projectId, artifactId)
       if (artifact !== undefined && !isFinalMediaArtifactKind(artifact.kind)) {
@@ -1820,6 +1852,7 @@ export class ContentStudioApplicationService {
       content.projectId,
       content.activityId,
       content.artifactIds,
+      content.locale,
     )
     const readiness = this.contentReadiness(content)
     if (!readiness.ready) {
@@ -1842,6 +1875,7 @@ export class ContentStudioApplicationService {
       content.format,
       content.artifactIds,
       artifacts,
+      content.locale,
     )
   }
 
@@ -1860,6 +1894,7 @@ export class ContentStudioApplicationService {
       projectId,
       content.activityId,
       nextArtifactIds,
+      content.locale,
     )
     return this.repository.saveChannelContent({
       ...content,

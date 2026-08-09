@@ -104,7 +104,7 @@ const emit = defineEmits<{
         <article v-for="artifact in props.snapshot.activityArtifacts" :key="artifact.artifactId" class="artifact-list-item">
           <button type="button" @click="emit('select-artifact', artifact.activityId)">
             <strong>{{ artifact.name }}</strong>
-            <span>{{ artifact.kind }} · {{ artifact.size }} · {{ artifact.status }} · 校验和 {{ artifact.checksum ? artifact.checksum.slice(0, 12) + '…' : '未登记' }}</span>
+            <span>{{ artifact.kind }} · {{ artifact.locale ?? 'neutral' }} · {{ artifact.size }} · {{ artifact.status }} · 校验和 {{ artifact.checksum ? artifact.checksum.slice(0, 12) + '…' : '未登记' }}</span>
           </button>
           <AssetPreview
             v-if="props.runtimeConnected && artifact.previewKind && artifact.previewUrl"

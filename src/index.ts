@@ -4,6 +4,7 @@ export {
   DEFAULT_STORAGE_RETENTION_POLICY,
   defaultContentMediaRequirement,
   GIF_LIMITS,
+  MARKETING_OPS_PACKAGE_FORMATS,
 } from './constants'
 export { generateContentPackages } from './content/generate'
 export {
@@ -61,6 +62,10 @@ export {
   type MarketingOpsClient,
   type MarketingOpsReceiptMatch,
 } from './marketing-ops/client'
+export {
+  compileMarketingOpsPublicationPackage,
+  compileMarketingOpsPublicationPackages,
+} from './marketing-ops/package'
 export {
   type ContentStudioMcpHttpServerHandle,
   type ContentStudioMcpHttpServerOptions,

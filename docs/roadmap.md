@@ -649,6 +649,14 @@ viewport≠outputSize 的成品尺寸偏差。新增 `probeVideoSize` 探测成�
 和中间产物引用。过期版本、录制片段、跨活动产物以及已有发布安排都会 fail closed，修订后
 的项目视图会立即重新计算 readiness。
 
+2026-08-09 多语言发布包契约切片已完成：活动产物可标记 `en`、`zh-CN` 或 `neutral`，
+渠道内容保存、媒体修订、readiness 和发布包编译都会拒绝语言漂移。新增的纯本地编译器
+把发布安排固定为 `channel + locale + contentFormat + contentVersion` 包，只输出窄
+artifact ID、sha256、版本和语言，不输出本地路径；英文 GitHub 文章与中文 Bilibili
+图文/GIF fixture 已验证 renderer 链接、origin、媒体和稳定内容哈希。批量编译允许同一渠道
+存在多语言/多形态包，但尚未接入仍按渠道唯一且缺少媒体 asset-reference 的
+`marketing-ops` v3 写入接口。
+
 V0.4 的完成标准是：一个视频渠道内容可以从脚本和录制片段生成最终资源变体，
 并在工作台中查看、取消和重试。
 
@@ -670,8 +678,11 @@ core 或 Vue。详细的 M0—M6 子路线、当前“项目每渠道唯一账�
       `marketing-ops` 的技术 Profile 展示成 Content Studio 业务项目。
 - [ ] 未配置渠道时保持内容制作可用，把发布显示为未配置或被阻塞。
 - [ ] 读取项目最新渠道状态和策略，不使用本地 UI 状态推断授权。
-- [ ] 把文章、图文、动态、视频和资源变体编译为项目范围发布包。
-- [ ] 使用校验和、窄素材 ID 和 renderer 产物，不传递任意文件路径。
+- [x] 用 transport-neutral 编译器把文章、图文、动态、视频和资源变体锁定为项目范围、
+      语言感知且版本化的发布包；同一渠道可保留多个语言/形态。
+- [x] 使用校验和、窄素材 ID 和 renderer 产物，不传递任意文件路径。
+- [ ] 把已编译包接入应用服务和下一版 `marketing-ops` asset-reference 契约；当前 v3
+      不支持同渠道多包，人工辅助媒体也不能把类型声明当作已解析素材。
 
 ### 人工接管、回执与报告
 

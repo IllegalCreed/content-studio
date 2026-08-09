@@ -8,8 +8,9 @@ import {
 function artifact(
   artifactId: string,
   kind: ActivityArtifact['kind'],
-): Pick<ActivityArtifact, 'artifactId' | 'kind'> {
-  return { artifactId, kind }
+  locale?: ActivityArtifact['locale'],
+): Pick<ActivityArtifact, 'artifactId' | 'kind' | 'locale'> {
+  return { artifactId, kind, locale }
 }
 
 describe('content publication readiness', () => {
@@ -93,6 +94,31 @@ describe('content publication readiness', () => {
         allowedKinds: ['image'],
         minCount: 1,
       },
+    })
+  })
+
+  it('treats neutral artifacts as reusable and rejects locale-specific drift', () => {
+    expect(assessChannelContentReadiness(
+      'bilibili',
+      'image-text',
+      ['neutral-cover'],
+      [artifact('neutral-cover', 'image', 'neutral')],
+      'en',
+    )).toMatchObject({
+      matchingArtifactIds: ['neutral-cover'],
+      ready: true,
+    })
+
+    expect(assessChannelContentReadiness(
+      'bilibili',
+      'image-text',
+      ['chinese-cover'],
+      [artifact('chinese-cover', 'image', 'zh-CN')],
+      'en',
+    )).toMatchObject({
+      matchingArtifactIds: [],
+      ready: false,
+      reason: expect.stringMatching(/locale/i),
     })
   })
 })

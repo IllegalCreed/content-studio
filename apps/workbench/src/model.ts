@@ -1,4 +1,5 @@
 import type {
+  ActivityArtifactLocale,
   CampaignJobStatus,
   CampaignVideo,
   ChannelContentFormat,
@@ -523,6 +524,7 @@ export interface ActivityArtifactProjection {
   artifactId: string
   checksum?: string
   kind: '文章版本' | '图片' | '音频' | '预览帧' | '视频片段' | '视频'
+  locale?: ActivityArtifactLocale
   name: string
   previewKind?: AssetPreviewKind
   previewUrl?: string

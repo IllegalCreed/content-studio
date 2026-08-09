@@ -591,11 +591,34 @@ describe('content studio local application server', () => {
       activityId: 'activity-a',
       artifactId: 'artifact-a',
       kind: 'video-clip',
+      locale: 'zh-CN',
       projectId: 'project-a',
       relativePath: '.content-studio/activity-a/clip.webm',
       sha256: 'a'.repeat(64),
     }, 'project-a', 'activity-a')
-    expect(artifact).toMatchObject({ artifactId: 'artifact-a', kind: 'video-clip' })
+    expect(artifact).toMatchObject({
+      artifactId: 'artifact-a',
+      kind: 'video-clip',
+      locale: 'zh-CN',
+    })
+    expect(parseCreateActivityArtifactInput({
+      activityId: 'activity-a',
+      artifactId: 'neutral-artifact',
+      kind: 'image',
+      locale: 'neutral',
+      projectId: 'project-a',
+      relativePath: 'cover.png',
+      sha256: 'b'.repeat(64),
+    }, 'project-a', 'activity-a')).toMatchObject({ locale: 'neutral' })
+    expect(() => parseCreateActivityArtifactInput({
+      activityId: 'activity-a',
+      artifactId: 'artifact-a',
+      kind: 'video-clip',
+      locale: 'fr',
+      projectId: 'project-a',
+      relativePath: 'clip.webm',
+      sha256: 'a'.repeat(64),
+    }, 'project-a', 'activity-a')).toThrow(/locale/i)
     expect(() => parseCreateActivityArtifactInput({
       activityId: 'activity-a',
       artifactId: 'artifact-a',

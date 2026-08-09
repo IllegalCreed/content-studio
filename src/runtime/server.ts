@@ -146,6 +146,11 @@ const ACTIVITY_ARTIFACT_KINDS = new Set<ActivityArtifact['kind']>([
   'video-clip',
   'video',
 ])
+const ACTIVITY_ARTIFACT_LOCALES = new Set<NonNullable<ActivityArtifact['locale']>>([
+  'en',
+  'zh-CN',
+  'neutral',
+])
 const PROJECT_ASSET_KINDS = new Set<ProjectAssetKind>([
   'audio',
   'font',
@@ -1429,6 +1434,7 @@ export function parseCreateActivityArtifactInput(
     'activityId',
     'artifactId',
     'kind',
+    'locale',
     'projectId',
     'relativePath',
     'sha256',
@@ -1446,10 +1452,22 @@ export function parseCreateActivityArtifactInput(
   const kind = stringField(value.kind, 'kind')
   if (!ACTIVITY_ARTIFACT_KINDS.has(kind as ActivityArtifact['kind']))
     throw new RequestError(400, `Unsupported activity artifact kind: ${kind}`)
+  const locale = value.locale === undefined
+    ? undefined
+    : stringField(value.locale, 'locale')
+  if (
+    locale !== undefined
+    && !ACTIVITY_ARTIFACT_LOCALES.has(locale as NonNullable<ActivityArtifact['locale']>)
+  ) {
+    throw new RequestError(400, `Unsupported activity artifact locale: ${locale}`)
+  }
   return {
     activityId,
     artifactId: identifierField(value.artifactId, 'artifactId'),
     kind: kind as ActivityArtifact['kind'],
+    ...(locale === undefined
+      ? {}
+      : { locale: locale as NonNullable<ActivityArtifact['locale']> }),
     projectId,
     relativePath: relativePathField(value.relativePath),
     sha256: sha256Field(value.sha256),

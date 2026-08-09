@@ -1,7 +1,7 @@
 # marketing-ops 扩展路线
 
 > 状态：Content Studio 总路线的配套子路线
-> 最近评审：2026-08-02
+> 最近评审：2026-08-09
 
 ## 定位
 
@@ -28,6 +28,8 @@ Content Studio 负责项目、发布活动、内容、素材、制作任务和�
 - `channels_status` 返回脱敏的渠道健康、适配器状态、账号别名和下一步建议。
 - 当前公共状态面按渠道暴露一个可见 `alias`；它还不是统一的跨项目账号目录接口。
 - `publish_campaign` 的发布包没有 `channelAccountRef`/`accountId` 选择字段。
+- 当前 v3 发布包按 `channel` 唯一，不能在同一请求中表达同一渠道的多语言或多内容
+  形态；人工辅助确认仍只接受文本，`image`/`gif`/`video` 类型本身不是已解析素材。
 - 发布回执、报告和反馈接口也没有统一的账号维度。
 - 个别适配器内部可能已有账号 ID，但这不等于跨渠道、可由项目绑定的公共能力。
 
@@ -77,6 +79,17 @@ Content Studio 可以保存账号引用和脱敏投影，但不能保存或转�
 提供只生成 fixture 的假适配器和回执匹配校验。成功回执必须声明
 `source: "marketing-ops"`、有效签发时间，并匹配项目、活动、发布安排、渠道及已绑定的
 不透明账号引用；这仍不代表真实 `marketing-ops` 已接入或已经可以发布。
+
+2026-08-09 Content Studio 已增加 transport-neutral 发布包编译器：每个包固定
+`projectId`、活动、发布安排、渠道、语言、内容形态和内容版本，只携带窄
+`artifactId`、sha256、产物版本和 `zh-CN`/`en`/`neutral` 语言标记，不携带本地路径。
+编译器校验 renderer 格式、HTTPS 规范 origin、正文链接、最终媒体类型和素材语言，允许
+同一渠道出现不同语言或形态的多个包，并用稳定内容哈希锁定输入。GitHub 英文文章和
+Bilibili 中文图文/GIF fixture 已覆盖该边界；它尚未调用真实 `publish_campaign`。
+
+这份新包是下一版互操作契约草案，不冒充当前 v3 MCP 输入。接入写入前，`marketing-ops`
+仍需先支持稳定 package/publication ID、同渠道多包以及带校验和的素材引用；在此之前，
+含媒体的人工辅助包保持 blocked，不能通过删除 `media` 降级为“已就绪”。
 
 ### M1：账号目录与项目绑定契约（每项目每渠道唯一，优先扩展）
 
@@ -143,6 +156,11 @@ Content Studio 可以保存账号引用和脱敏投影，但不能保存或转�
 - 先维护已有安全适配器，再按真实用户需求增加渠道；不为了“渠道数量”接入私有
   API、绕过验证、stealth 或任意浏览器脚本。
 - 公开展示的渠道规格与实时授权状态分开，实时状态必须来自新鲜快照。
+
+建议适配顺序是在包契约互通后，先用 GitHub/Bluesky/DEV/Mastodon 回归英文直接渠道，
+再以 Bilibili 的中文图文、动态和视频元数据验证“同渠道多形态 + 已解析媒体”的人工辅助
+路径；随后补齐 WeChat、Xiaohongshu 的中文内容交付和 Reddit 的英文内容交付。渠道枚举
+数量不等于已完成适配器数量，每一步都必须有无凭据 fixture 和明确的 unsupported 状态。
 
 ### M6：随 Content Studio 分发和诊断（对应 V0.6/V1.0）
 

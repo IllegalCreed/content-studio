@@ -374,6 +374,12 @@ describe('content Studio local MCP server', () => {
         },
       },
     })
+    const registerArtifactTool = listedTools.find(tool => tool.name === 'register_activity_artifact')
+    expect(registerArtifactTool?.inputSchema).toMatchObject({
+      properties: {
+        locale: { enum: ['en', 'zh-CN', 'neutral'] },
+      },
+    })
     const recordingProfile = (createActivityTool?.inputSchema as {
       properties: {
         video: {
@@ -1380,6 +1386,7 @@ describe('content Studio local MCP server', () => {
           activityId: 'content-pack-demo',
           artifactId: 'content-pack-cover',
           kind: 'image',
+          locale: 'neutral',
           projectId,
           relativePath: '.content-studio/content-pack-demo/cover.png',
           sha256: 'a'.repeat(64),
@@ -1391,6 +1398,7 @@ describe('content Studio local MCP server', () => {
         structuredContent: {
           activityId: 'content-pack-demo',
           artifactId: 'content-pack-cover',
+          locale: 'neutral',
         },
       },
     })
