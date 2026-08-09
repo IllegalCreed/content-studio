@@ -17,6 +17,7 @@ import {
   preferRuntimeData,
   projectChannels,
   projectIndexProjections,
+  projectMarketingOpsAccountCandidate,
   projectMarketingOpsChannels,
   taskToProjection,
 } from './projections'
@@ -98,6 +99,125 @@ describe('workbench runtime projections', () => {
       titleLimit: 128,
     })
     expect(channels[0]?.enabled).toBe(true)
+  })
+
+  it('将已确认的 opaque accountRef 投影成项目账号，并用同一引用接收实时状态', () => {
+    const channels: ChannelProjection[] = [{
+      accounts: [],
+      adapterReady: false,
+      alias: null,
+      bodyLimit: 12000,
+      channel: 'github',
+      delivery: '全自动候选',
+      enabled: false,
+      format: '文章',
+      health: '未查询',
+      metrics: [],
+      nextAction: '尚未读取该渠道的 marketing-ops 状态',
+      projectAccountId: null,
+      statusSource: '项目配置',
+      titleLimit: 128,
+    }]
+    const bindings: ProjectChannelBinding[] = [{
+      accountAlias: '@release-bot',
+      accountRef: 'account.github.current',
+      channel: 'github',
+      delivery: 'automatic-candidate',
+      enabled: true,
+      projectId: 'project-a',
+    }]
+
+    const [bound] = projectChannels({ bindings, channels })
+
+    expect(bound).toMatchObject({
+      accounts: [{
+        accountId: 'account.github.current',
+        alias: '@release-bot',
+        assignedProjects: ['project-a'],
+        statusSource: '项目配置',
+      }],
+      projectAccountId: 'account.github.current',
+    })
+    expect(channels[0]?.accounts).toEqual([])
+
+    const [live] = projectMarketingOpsChannels([bound!], {
+      authorizesExternalWrite: false,
+      channels: [{
+        accountAlias: '@renamed-release-bot',
+        accountRef: 'account.github.current',
+        adapterReady: true,
+        channel: 'github',
+        health: 'ready',
+        nextStep: 'ready',
+      }],
+      contractVersion: 3,
+      expiresAt: '2099-01-01T00:01:00.000Z',
+      observedAt: '2099-01-01T00:00:00.000Z',
+      projectId: 'project-a',
+      runtimeVersion: '0.1.0',
+    })
+
+    expect(live).toMatchObject({
+      alias: '@renamed-release-bot',
+      health: '已就绪',
+      accounts: [{
+        accountId: 'account.github.current',
+        adapterReady: true,
+        health: '已就绪',
+        statusSource: 'marketing-ops',
+      }],
+    })
+  })
+
+  it('only offers a fresh resolved account reference as a binding candidate', () => {
+    const channel: ChannelProjection = {
+      accounts: [],
+      adapterReady: false,
+      alias: null,
+      bodyLimit: 12000,
+      channel: 'github',
+      delivery: '全自动候选',
+      enabled: false,
+      format: '文章',
+      health: '未查询',
+      metrics: [],
+      nextAction: '尚未读取该渠道的 marketing-ops 状态',
+      projectAccountId: null,
+      statusSource: '项目配置',
+      titleLimit: 128,
+    }
+    const status: MarketingOpsChannelsStatusSnapshot = {
+      authorizesExternalWrite: false,
+      channels: [{
+        accountAlias: '@release-bot',
+        accountRef: 'account.github.current',
+        adapterReady: true,
+        channel: 'github',
+        health: 'ready',
+        nextStep: 'ready',
+      }],
+      contractVersion: 3,
+      expiresAt: '2026-08-10T01:01:00.000Z',
+      observedAt: '2026-08-10T01:00:00.000Z',
+      projectId: 'project-a',
+      runtimeVersion: '0.1.0',
+    }
+    const now = new Date('2026-08-10T01:00:30.000Z')
+
+    expect(projectMarketingOpsAccountCandidate(channel, status, now)).toEqual({
+      accountAlias: '@release-bot',
+      accountRef: 'account.github.current',
+    })
+    expect(projectMarketingOpsAccountCandidate(channel, status, new Date('2026-08-10T01:01:00.000Z')))
+      .toBeNull()
+    expect(projectMarketingOpsAccountCandidate(channel, {
+      ...status,
+      channels: [{ ...status.channels[0]!, accountRef: undefined }],
+    }, now)).toBeNull()
+    expect(projectMarketingOpsAccountCandidate({
+      ...channel,
+      delivery: '仅生成内容',
+    }, status, now)).toBeNull()
   })
 
   it('只把新鲜 marketing-ops 快照映射成有限的渠道状态，不传播 nextAction 文本', () => {

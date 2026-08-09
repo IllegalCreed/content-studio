@@ -279,6 +279,44 @@ describe('content studio workbench', () => {
     expect(router.currentRoute.value.path).toBe('/project/activities')
   })
 
+  it('将新鲜的 marketing-ops opaque accountRef 作为项目绑定候选展示', async () => {
+    const router = createWorkbenchRouter(true)
+    await router.push('/project')
+    await router.isReady()
+    const pinia = createPinia()
+    const wrapper = mount(WorkbenchApp, {
+      global: {
+        plugins: [pinia, router],
+      },
+    })
+    const runtimeStore = useWorkbenchStore(pinia)
+    runtimeStore.markRuntimeReady()
+    runtimeStore.marketingOpsStatus = {
+      authorizesExternalWrite: false,
+      channels: [{
+        accountAlias: '@release-bot',
+        accountRef: 'account.github.current',
+        adapterReady: true,
+        channel: 'github',
+        health: 'ready',
+        nextStep: 'ready',
+      }],
+      contractVersion: 3,
+      expiresAt: '2099-01-01T00:01:00.000Z',
+      observedAt: '2026-01-01T00:00:00.000Z',
+      projectId: 'algorithm-visualizer',
+      runtimeVersion: '0.1.0',
+    }
+    await nextTick()
+
+    await wrapper.get('button[data-project-channel-id="github"]').trigger('click')
+    const accountSelect = wrapper.get('[data-testid="project-channel-account"]')
+    await accountSelect.get('[data-testid="select-trigger"]').trigger('click')
+
+    expect(accountSelect.get('[data-value="account.github.current"]').text())
+      .toContain('@release-bot · marketing-ops 当前检测到的账号')
+  })
+
   it('读取本地运行时期间不把演示活动和任务当成真实数据', async () => {
     const router = createWorkbenchRouter(true)
     await router.push('/project/activities')

@@ -88,10 +88,87 @@ export function projectChannels({
     const binding = bindingByChannel.get(channel.channel)
     return {
       ...channel,
+      accounts: projectChannelAccounts(channel, binding),
       enabled: binding?.enabled ?? false,
       projectAccountId: binding?.accountRef ?? null,
     }
   })
+}
+
+function projectChannelAccounts(
+  channel: ChannelProjection,
+  binding: ProjectChannelBinding | undefined,
+): ChannelProjection['accounts'] {
+  if (
+    binding?.accountRef === undefined
+    || channel.delivery === '仅生成内容'
+  ) {
+    return channel.accounts
+  }
+  const existing = channel.accounts.find(account => account.accountId === binding.accountRef)
+  if (existing !== undefined) {
+    return channel.accounts.map(account => account.accountId !== binding.accountRef
+      ? account
+      : {
+          ...account,
+          ...(binding.accountAlias === undefined ? {} : { alias: binding.accountAlias }),
+          assignedProjects: account.assignedProjects.includes(binding.projectId)
+            ? account.assignedProjects
+            : [...account.assignedProjects, binding.projectId],
+        })
+  }
+  return [
+    ...channel.accounts,
+    {
+      accountId: binding.accountRef,
+      adapterReady: false,
+      alias: binding.accountAlias ?? '已绑定账号',
+      assignedProjects: [binding.projectId],
+      channel: channel.channel,
+      health: '未查询',
+      isDefault: channel.accounts.length === 0,
+      nextAction: '尚未读取该账号的 marketing-ops 状态',
+      statusSource: '项目配置',
+    },
+  ]
+}
+
+export interface MarketingOpsAccountCandidate {
+  accountAlias?: string
+  accountRef: string
+}
+
+/**
+ * Returns a user-confirmable project binding candidate only while the
+ * read-only status snapshot is fresh. It never creates a binding itself.
+ */
+export function projectMarketingOpsAccountCandidate(
+  channel: ChannelProjection,
+  status: MarketingOpsChannelsStatusSnapshot | null,
+  now = new Date(),
+): MarketingOpsAccountCandidate | null {
+  if (!isPublishingAssistantChannel(channel) || status === null)
+    return null
+  const observedAt = Date.parse(status.observedAt)
+  const expiresAt = Date.parse(status.expiresAt)
+  const current = now.getTime()
+  if (
+    !Number.isFinite(observedAt)
+    || !Number.isFinite(expiresAt)
+    || !Number.isFinite(current)
+    || expiresAt <= observedAt
+    || current < observedAt
+    || current >= expiresAt
+  ) {
+    return null
+  }
+  const live = status.channels.find(candidate => candidate.channel === channel.channel)
+  if (live?.accountRef === undefined)
+    return null
+  return {
+    ...(live.accountAlias === undefined ? {} : { accountAlias: live.accountAlias }),
+    accountRef: live.accountRef,
+  }
 }
 
 const marketingOpsHealthLabels: Record<MarketingOpsChannelHealth, ChannelProjection['health']> = {

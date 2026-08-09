@@ -16,6 +16,7 @@ import {
   activityToCampaign,
   preferRuntimeData,
   projectChannels,
+  projectMarketingOpsAccountCandidate,
   projectMarketingOpsChannels,
   runtimeActivityArtifacts,
   runtimeProjectAssets,
@@ -660,15 +661,36 @@ const projectAccounts = computed(() =>
   }),
 )
 
-const projectAccountOptions = computed(() => [
-  { label: '不使用该渠道', value: '' },
-  ...(selectedChannel.value.delivery === '仅生成内容'
-    ? [{ label: '启用内容生成 · 无需发布账号', value: CONTENT_ONLY_PROJECT_BINDING }]
-    : selectedChannel.value.accounts.map(account => ({
-        label: `${account.alias} · 已被 ${account.assignedProjects.length} 个项目引用`,
-        value: account.accountId,
-      }))),
-])
+const selectedMarketingOpsAccountCandidate = computed(() =>
+  projectMarketingOpsAccountCandidate(
+    selectedChannel.value,
+    marketingOpsStatus.value,
+  ),
+)
+
+const projectAccountOptions = computed(() => {
+  const channel = selectedChannel.value
+  const candidate = selectedMarketingOpsAccountCandidate.value
+  const hasCandidateAccount = candidate !== null
+    && channel.accounts.some(account => account.accountId === candidate.accountRef)
+  return [
+    { label: '不使用该渠道', value: '' },
+    ...(channel.delivery === '仅生成内容'
+      ? [{ label: '启用内容生成 · 无需发布账号', value: CONTENT_ONLY_PROJECT_BINDING }]
+      : [
+          ...(!hasCandidateAccount && candidate !== null
+            ? [{
+                label: `${candidate.accountAlias ?? '已解析账号'} · marketing-ops 当前检测到的账号`,
+                value: candidate.accountRef,
+              }]
+            : []),
+          ...channel.accounts.map(account => ({
+            label: `${account.alias} · 已被 ${account.assignedProjects.length} 个项目引用`,
+            value: account.accountId,
+          })),
+        ]),
+  ]
+})
 
 const selectedCampaignChannelOptions = computed(() =>
   selectedCampaign.value.channels.map(channel => ({ label: channel, value: channel })),
@@ -1159,14 +1181,19 @@ async function saveChannelBinding(): Promise<void> {
   const selectedAccount = channelBindingForm.accountRef === '' || channelBindingForm.accountRef === CONTENT_ONLY_PROJECT_BINDING
     ? null
     : selectedChannel.value.accounts.find(account => account.accountId === channelBindingForm.accountRef) ?? null
+  const selectedMarketingOpsAccount = selectedMarketingOpsAccountCandidate.value?.accountRef
+    === channelBindingForm.accountRef
+    ? selectedMarketingOpsAccountCandidate.value
+    : null
+  const accountAlias = selectedAccount?.alias ?? selectedMarketingOpsAccount?.accountAlias
   const input: ProjectChannelBinding = {
     channel: selectedChannel.value.channel,
     delivery: deliveryModeForChannel(selectedChannel.value),
     enabled: channelBindingForm.accountRef !== '',
     projectId: snapshot.project.projectId,
-    ...(selectedAccount === null
+    ...(accountAlias === undefined
       ? {}
-      : { accountAlias: selectedAccount.alias }),
+      : { accountAlias }),
     ...(channelBindingForm.accountRef.trim() === ''
       ? {}
       : { accountRef: channelBindingForm.accountRef.trim() }),
