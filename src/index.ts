@@ -67,6 +67,7 @@ export {
   assertMatchingMarketingOpsReceipt,
   assessMarketingOpsCompatibility,
   createFakeMarketingOpsClient,
+  createMarketingOpsManagedRuntime,
   createMarketingOpsMcpStatusClient,
   createMarketingOpsStatusClient,
   type FakeMarketingOpsClientOptions,

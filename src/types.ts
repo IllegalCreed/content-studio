@@ -765,6 +765,21 @@ export interface MarketingOpsMcpStatusClientOptions {
   now?: () => Date
 }
 
+/**
+ * Explicit lifecycle boundary supplied by the installer or host runtime.
+ * Content Studio never discovers or starts the managed process itself.
+ */
+export interface MarketingOpsManagedRuntime {
+  close: () => Promise<void> | void
+  statusClient: MarketingOpsStatusClient
+}
+
+export interface MarketingOpsManagedRuntimeOptions {
+  close: () => Promise<void> | void
+  mcp: MarketingOpsMcpClient
+  now?: () => Date
+}
+
 export type OwnerHandoffStatus = 'cancelled' | 'completed' | 'expired' | 'pending'
 
 export interface OwnerHandoff {

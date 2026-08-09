@@ -174,6 +174,9 @@ MCP 工具为 `prepare_marketing_ops_package`。调用方只提交项目、发�
 60 秒、`authorizesExternalWrite: false` 的项目快照；HTTP 使用 `private, no-store`。
 未注入受管 MCP client、版本不兼容、响应不合法或快照过期时统一 fail closed，不把底层
 transport 错误、MCP 文本内容或本地 UI 状态传播为发布能力。
+安装器/宿主可通过 `MarketingOpsManagedRuntime` 提供已初始化 client 与关闭句柄；CLI
+消费同一个状态 client，并在命令结束时幂等关闭该句柄。Content Studio 不负责发现或启动
+任意命令，也不接收凭据。
 
 ### 项目素材、活动产物和资源变体
 

@@ -676,6 +676,8 @@ core 或 Vue。详细的 M0—M6 子路线、当前“项目每渠道唯一账�
 - [x] 为已初始化的受管 MCP client 接入固定 `channels_status` transport；只接受
       `structuredContent`，并把同一个状态客户端注入 CLI doctor、项目范围 Runtime API、
       Content Studio MCP 只读工具和 Workbench。未连接或版本不兼容时保持发布阻塞。
+- [x] 定义 `MarketingOpsManagedRuntime` 生命周期注入合同；安装器/宿主负责初始化 MCP
+      client，CLI 在命令结束时幂等关闭，应用层不发现任意命令、路径或凭据。
 - [ ] 由安装器启动固定版本的 `marketing-ops` 进程并自动向本地 Runtime 注入已初始化
       MCP client；当前应用层不自行发现命令、路径或凭据。
 - [ ] 明确 Content Studio 项目范围的单渠道唯一账号绑定；`marketing-ops` 维护全局多账号

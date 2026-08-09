@@ -71,6 +71,9 @@ Content Studio 可以保存账号引用和脱敏投影，但不能保存或转�
 - [x] 为已初始化的受管 MCP client 建立窄适配器，只调用 `channels_status` 并只接受
       `structuredContent`；项目范围 Runtime API、Content Studio MCP 工具与 Workbench
       复用同一状态客户端，HTTP 不缓存，Workbench 每 30 秒刷新。
+- [x] 定义 `MarketingOpsManagedRuntime` 注入合同：安装器/宿主提供已初始化 MCP client
+      和幂等关闭句柄，CLI 只消费状态 client 并在命令结束时关闭；应用层不发现命令、路径
+      或凭据。
 - [ ] 由安装器启动固定版本进程并把已初始化 MCP client 注入本地 Runtime；应用层不发现
       任意命令、路径、凭据或浏览器状态。
 - [ ] 为发布准备、发布提交、状态查询、回执和监测读取建立有类型客户端；不在 Vue 中
@@ -111,6 +114,11 @@ Bilibili 中文图文/GIF fixture 已覆盖该边界；它尚未调用真实 `pu
 `GET /api/v1/projects/:projectId/marketing-ops/channels-status` 返回 `private, no-store`
 快照，Content Studio MCP 提供同范围的只读工具。Workbench 每 30 秒重新读取；缺失、过期
 或失败时把发布助手状态重置为“未查询”，但项目、内容创作和本地制作仍保持可用。
+
+随后补齐了生命周期切片：`createMarketingOpsManagedRuntime` 只接受安装器已经初始化的
+MCP client 和关闭回调，关闭操作幂等；`runCli` 会在命令结束时执行该关闭句柄。固定版本
+进程的实际安装、启动和 MCP transport 初始化仍留在安装器/宿主，未在应用层实现任意命令
+或路径发现。
 
 这份新包是下一版互操作契约草案，不冒充当前 v3 MCP 输入。接入写入前，`marketing-ops`
 仍需先支持稳定 package/publication ID、同渠道多包以及带校验和的素材引用；在此之前，

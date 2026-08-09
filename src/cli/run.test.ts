@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { Readable, Writable } from 'node:stream'
 import { describe, expect, it } from 'vitest'
-import { createMarketingOpsStatusClient } from '../marketing-ops/client'
+import { createMarketingOpsManagedRuntime, createMarketingOpsStatusClient } from '../marketing-ops/client'
 import { runCli } from './run'
 
 const project = {
@@ -226,6 +226,36 @@ describe('content-studio CLI', () => {
     ).rejects.toThrow(/Missing required option: --campaign/)
   })
 
+  it('closes an installer-managed marketing-ops runtime after a CLI command', async () => {
+    let closeCalls = 0
+    const managed = createMarketingOpsManagedRuntime({
+      close: async () => {
+        closeCalls += 1
+      },
+      mcp: {
+        callTool: async () => ({
+          isError: false,
+          structuredContent: {
+            channels: [],
+            contractVersion: 3,
+            projectId: 'algorithm-visualizer',
+          },
+        }),
+        getServerVersion: () => ({
+          name: 'marketing-ops',
+          version: '0.1.0',
+        }),
+      },
+    })
+
+    await expect(runCli(['help'], {
+      cwd: process.cwd(),
+      marketingOpsRuntime: managed,
+      write: () => undefined,
+    })).resolves.toBe(0)
+    expect(closeCalls).toBe(1)
+  })
+
   it('validates inputs without writing a bundle', async () => {
     const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
     const projectPath = join(temporaryDirectory, 'project.json')
@@ -327,7 +357,10 @@ describe('content-studio CLI', () => {
         ['doctor', '--project', projectPath],
         {
           cwd: temporaryDirectory,
-          marketingOpsStatus: compatible,
+          marketingOpsRuntime: {
+            close: async () => undefined,
+            statusClient: compatible,
+          },
           write: message => messages.push(message),
         },
       )).resolves.toBe(0)

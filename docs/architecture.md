@@ -150,6 +150,8 @@ Runtime 提供显式确认的 `POST /api/v1/registry/projects` 登记端点，�
    0.1.x / contract v3 兼容矩阵，并把 `channels_status` 快照限制为 60 秒。受管 MCP
    client 只允许调用这个固定工具且只接受 `structuredContent`；项目范围 Runtime API、
    Content Studio MCP 只读工具和 Workbench 共享同一快照，Workbench 每 30 秒刷新；
+   安装器/宿主通过显式 `MarketingOpsManagedRuntime` 注入已初始化 client 和关闭句柄，
+   CLI 只在命令结束时幂等关闭，不自行探测或启动进程；
 3. 只传递 renderer 生成的版本化发布包、窄素材引用和必要的发布上下文；
 4. 重试保持活动/发布安排标识和幂等键；
 5. 只有匹配且持久化的 `marketing-ops` 发布回执才能更新发布投影；成功回执还必须

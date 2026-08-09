@@ -51,6 +51,8 @@ content-studio mcp --stdio \
 时只读项目事实仍可用，但需要渠道绑定的内容与制作工具会 fail closed。
 `get_marketing_ops_channels_status` 也只在受管 `marketing-ops` MCP client 已由本地
 Runtime 注入时可用；否则它返回阻塞状态，不会自动发现命令、读取凭据或扩大发布权限。
+宿主若通过 `MarketingOpsManagedRuntime` 注入该 client，CLI 会在本次命令结束时幂等关闭
+受管连接；Plugin 本身不携带进程路径、账号配置或凭据。
 
 项目清单可由下面两条命令起草；登记或使用前仍须由项目所有者确认：
 

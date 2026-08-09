@@ -7,6 +7,7 @@ import {
   assertMatchingMarketingOpsReceipt,
   assessMarketingOpsCompatibility,
   createFakeMarketingOpsClient,
+  createMarketingOpsManagedRuntime,
   createMarketingOpsMcpStatusClient,
   createMarketingOpsStatusClient,
   isMarketingOpsStatusSnapshotFresh,
@@ -302,6 +303,36 @@ describe('marketing-ops client boundary', () => {
       arguments: { projectId: 'project-a' },
       name: 'channels_status',
     }])
+  })
+
+  it('wraps an installer-initialized MCP client with an idempotent lifecycle close', async () => {
+    let closeCalls = 0
+    const managed = createMarketingOpsManagedRuntime({
+      close: async () => {
+        closeCalls += 1
+      },
+      mcp: {
+        callTool: async () => ({
+          isError: false,
+          structuredContent: {
+            channels: [],
+            contractVersion: 3,
+            projectId: 'project-a',
+          },
+        }),
+        getServerVersion: () => ({
+          name: 'marketing-ops',
+          version: '0.1.0',
+        }),
+      },
+      now: () => new Date('2026-08-10T00:00:00.000Z'),
+    })
+
+    await expect(managed.statusClient.getChannelsStatus('project-a'))
+      .resolves
+      .toMatchObject({ projectId: 'project-a' })
+    await Promise.all([managed.close(), managed.close()])
+    expect(closeCalls).toBe(1)
   })
 
   it('rejects MCP errors and text-only fallbacks without parsing their content', async () => {

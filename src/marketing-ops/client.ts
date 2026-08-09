@@ -8,6 +8,8 @@ import type {
   MarketingOpsChannelStatus,
   MarketingOpsCompatibilityAssessment,
   MarketingOpsCompatibilityInput,
+  MarketingOpsManagedRuntime,
+  MarketingOpsManagedRuntimeOptions,
   MarketingOpsMcpStatusClientOptions,
   MarketingOpsPublicationReceipt,
   MarketingOpsPublicationRequest,
@@ -141,6 +143,27 @@ export function createMarketingOpsMcpStatusClient(
       getRuntimeInfo: async () => options.mcp.getServerVersion(),
     },
   })
+}
+
+/**
+ * Creates the narrow status client and an idempotent shutdown handle from an
+ * installer-initialized MCP connection. Process discovery and startup remain
+ * outside this package and therefore outside the Content Studio trust scope.
+ */
+export function createMarketingOpsManagedRuntime(
+  options: MarketingOpsManagedRuntimeOptions,
+): MarketingOpsManagedRuntime {
+  const statusClient = createMarketingOpsMcpStatusClient(options)
+  let closePromise: Promise<void> | undefined
+  return {
+    close: () => {
+      closePromise ??= Promise.resolve()
+        .then(() => options.close())
+        .then(() => undefined)
+      return closePromise
+    },
+    statusClient,
+  }
 }
 
 export function isMarketingOpsStatusSnapshotFresh(

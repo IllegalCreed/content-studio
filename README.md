@@ -50,6 +50,8 @@ Vue 3 工作台是同一套 Content Studio core 和应用服务的可视化控�
   已初始化的受管 MCP client 只能通过固定 `channels_status` 适配器接入，Content Studio
   忽略工具文本，只接受 `structuredContent`。Runtime 的项目范围 HTTP/MCP 读取入口和
   Workbench 共用该快照；HTTP 禁止缓存，Workbench 每 30 秒刷新，失败时只显示“未查询”。
+  安装器或宿主通过显式的 `MarketingOpsManagedRuntime` 注入已初始化 client 和关闭句柄；
+  CLI 只负责消费并在命令结束时幂等关闭，不探测命令、路径或凭据。
 - 素材归项目所有，活动产物归具体活动；当前不设置全局素材库。
 - 同一发布活动可以为不同平台创作完全不同的内容。
 - 图片是可由 AI 独立生成的素材，通常服务于文章、图文、视频或封面。

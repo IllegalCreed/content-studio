@@ -126,6 +126,8 @@ ChatGPT/Codex 公共 Plugin
 “独立边界”意味着：
 
 - `marketing-ops` 保持独立仓库、包和运行进程或 MCP 服务；
+- 安装器/宿主通过显式 `MarketingOpsManagedRuntime` 把已初始化 MCP client 和关闭句柄
+  注入 Content Studio；应用层不发现任意命令、路径或凭据，CLI 只在命令结束时幂等关闭；
 - Content Studio 不复制渠道适配器，不直接执行真实渠道写入；
 - 两者不共享凭据存储，也不通过 MCP 传递凭据或浏览器会话；
 - `marketing-ops` 的渠道运行配置、账号授权、渠道策略和发布回执仍是外部写入事实来源；

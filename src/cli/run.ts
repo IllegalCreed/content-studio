@@ -2,6 +2,7 @@
 
 import type {
   CampaignSpec,
+  MarketingOpsManagedRuntime,
   MarketingOpsStatusClient,
   PlaywrightRecordingOptions,
   ProjectChannelBinding,
@@ -39,6 +40,7 @@ export interface CliRuntime {
   cwd: string
   env?: NodeJS.ProcessEnv
   input?: NodeJS.ReadableStream
+  marketingOpsRuntime?: MarketingOpsManagedRuntime
   marketingOpsStatus?: MarketingOpsStatusClient
   output?: NodeJS.WritableStream
   signal?: AbortSignal
@@ -68,6 +70,19 @@ export async function runCli(
   arguments_: string[],
   runtime: CliRuntime = DEFAULT_RUNTIME,
   services: CliServices = DEFAULT_SERVICES,
+): Promise<number> {
+  try {
+    return await runCliInternal(arguments_, runtime, services)
+  }
+  finally {
+    await closeMarketingOpsRuntime(runtime)
+  }
+}
+
+async function runCliInternal(
+  arguments_: string[],
+  runtime: CliRuntime,
+  services: CliServices,
 ): Promise<number> {
   const command = arguments_[0]
   if (command === undefined || command === 'help' || command === '--help') {
@@ -163,8 +178,12 @@ export async function runCli(
         )
     return runMcp(project, campaign, options, runtime, services)
   }
-  if (command === 'doctor')
-    return runDoctor(project, options, runtime)
+  if (command === 'doctor') {
+    return runDoctor(project, options, {
+      ...runtime,
+      marketingOpsStatus: marketingOpsStatusClient(runtime),
+    })
+  }
 
   const campaignPath = requireOption(options, 'campaign')
   const campaign = validateCampaign(
@@ -367,7 +386,7 @@ async function runMcp(
       return await runMcpHttp(execution, project.projectId, options, runtime)
     await serveMcpStdio(
       createContentStudioMcpServer({
-        marketingOpsStatus: runtime.marketingOpsStatus,
+        marketingOpsStatus: marketingOpsStatusClient(runtime),
         ownerTakeovers: execution.ownerTakeovers,
         projectId: project.projectId,
         productionWorker: execution.worker,
@@ -465,7 +484,7 @@ async function runMcpHttp(
 ): Promise<number> {
   const http = createContentStudioMcpHttpServer({
     server: createContentStudioMcpServer({
-      marketingOpsStatus: runtime.marketingOpsStatus,
+      marketingOpsStatus: marketingOpsStatusClient(runtime),
       ownerTakeovers: execution.ownerTakeovers,
       projectId,
       productionWorker: execution.worker,
@@ -529,7 +548,7 @@ function createApplicationOptions(
       ?? environmentDatabasePath
       ?? '.content-studio/content-studio.sqlite',
     ),
-    marketingOpsStatus: runtime.marketingOpsStatus,
+    marketingOpsStatus: marketingOpsStatusClient(runtime),
     project: projectRecord,
     projectChannelBindings,
     snapshot,
@@ -564,3 +583,19 @@ function parsePort(input: string | undefined, defaultPort = 11001): number {
 }
 
 export type { CampaignSpec, ProjectManifest }
+
+function marketingOpsStatusClient(
+  runtime: CliRuntime,
+): MarketingOpsStatusClient | undefined {
+  return runtime.marketingOpsRuntime?.statusClient ?? runtime.marketingOpsStatus
+}
+
+async function closeMarketingOpsRuntime(runtime: CliRuntime): Promise<void> {
+  try {
+    await runtime.marketingOpsRuntime?.close()
+  }
+  catch {
+    // Shutdown is best effort; never expose managed transport details or
+    // replace the command result with a close error.
+  }
+}

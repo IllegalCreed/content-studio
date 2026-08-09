@@ -80,6 +80,8 @@ OpenAI 当前文档已经提供 Plugin 公共提交、审核、批准和发布�
 调用它。兼容期可以附带 Content Studio `projectId` 作为技术隔离句柄，但这不把
 Content Studio 的项目、活动和素材交给 `marketing-ops` 管理。随附安装、健康检查和
 渠道就绪都不能代替当前活动对应的外部写入授权。
+安装器/宿主通过显式 `MarketingOpsManagedRuntime` 注入已初始化 MCP client 和关闭句柄；
+CLI 只消费该状态 client 并在命令结束时幂等关闭，应用层不探测任意命令、路径或凭据。
 
 完整安装器、安全与部署形态见
 [开源、本地优先与安装分发](local-first-distribution.md)。
