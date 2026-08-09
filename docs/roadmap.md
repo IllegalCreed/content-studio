@@ -590,6 +590,9 @@ viewport≠outputSize 的成品尺寸偏差。新增 `probeVideoSize` 探测成�
       合成（标题、活动主题、渠道规格尺寸的纯文本版式），让没有图像生成模型的 MCP
       宿主也能产出可用的图片产物。项目登记截图和文章配图的复用仍按同一 artifact 契约
       继续扩展。
+- [x] 增加本地确定性 GIF 降级产物：从最终成片截取有界片段，使用调色板两遍编码生成
+      无音频、无限循环的 `composed/preview.gif`，登记为活动级 `image` artifact，并由
+      Workbench/Runtime 的通用图片预览直接提供。
 - [ ] 接入可审核的可选 AI 图片 provider，作为本地基线之上的能力增强（而非唯一来源）：
       当 MCP 宿主的模型支持图像生成时，登记其生成结果为同一类 ActivityArtifact；
       provider 走可选接口，复用同一任务事件、取消、重试、校验和与版本契约，不在
@@ -607,6 +610,13 @@ viewport≠outputSize 的成品尺寸偏差。新增 `probeVideoSize` 探测成�
 预览接口和工作台的通用图片预览可以直接查看它。整个路径不调用图像模型、不接收凭据，
 合成调用前后均检查协作式取消；真实 Algorithm Visualizer 成片已完成 SVG→PNG 的浏览器视觉
 检查。AI 图片 provider、字幕和旁白仍保留在后续切片。
+
+2026-08-09 本地确定性 GIF 切片已完成：默认视频合成在封面之后从
+`composed/final.webm` 截取一个有界片段，按最终成片画幅缩放到 640px 长边以内，以
+10 FPS、4 秒默认值和调色板两遍编码生成无限循环的 `composed/preview.gif`。产物限制为
+24 FPS、300 帧、300 万像素和 8 MiB，并登记为同一活动的 `image` artifact；Runtime
+返回 `image/gif`，Workbench 无需新增专用投影。真实成片的 GIF 帧差异和元数据已通过
+本地视觉检查，未连接真实渠道或外部图片服务。
 
 V0.4 的完成标准是：一个视频渠道内容可以从脚本和录制片段生成最终资源变体，
 并在工作台中查看、取消和重试。

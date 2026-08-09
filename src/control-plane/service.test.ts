@@ -1304,6 +1304,19 @@ describe('content studio application service', () => {
               width: 1920,
             },
             durationSeconds: 3,
+            gif: {
+              artifactPath: join(
+                '/tmp/content-studio-compose-register',
+                'composed',
+                'preview.gif',
+              ),
+              durationSeconds: 3,
+              fps: 10,
+              height: 360,
+              sha256: 'e'.repeat(64),
+              sizeBytes: 9,
+              width: 640,
+            },
             reencoded: false,
             sha256: 'c'.repeat(64),
             sizeBytes: 7,
@@ -1328,6 +1341,14 @@ describe('content studio application service', () => {
         subtitle: 'youtube · en',
         title: 'Content',
       },
+      gif: {
+        outputPath: join(
+          '/tmp/content-studio-compose-register',
+          'composed',
+          'preview.gif',
+        ),
+        outputSize: { height: 360, width: 640 },
+      },
       normalizeLoudness: true,
       outputPath: join('/tmp/content-studio-compose-register', 'composed', 'final.webm'),
       outputSize: { height: 1080, width: 1920 },
@@ -1344,6 +1365,11 @@ describe('content studio application service', () => {
       kind: 'image',
       relativePath: 'content-studio-compose-register/composed/cover.svg',
       sha256: 'd'.repeat(64),
+    }), expect.objectContaining({
+      artifactId: `gif-${taskId}`,
+      kind: 'image',
+      relativePath: 'content-studio-compose-register/composed/preview.gif',
+      sha256: 'e'.repeat(64),
     })])
   })
 

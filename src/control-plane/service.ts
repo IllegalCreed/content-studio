@@ -45,6 +45,7 @@ import { join, relative, resolve } from 'node:path'
 import { runProductionTask as executeProductionTask } from '../jobs/production'
 import { InMemoryExecutionTaskStore } from '../jobs/task'
 import { assertMatchingMarketingOpsReceipt } from '../marketing-ops/client'
+import { resolveGifOutputSize } from '../media/gif'
 import { compileVideoPlan } from '../video/compile'
 import { validateVideoRecordingProfile } from '../video/recording-config'
 
@@ -920,6 +921,7 @@ export class ContentStudioApplicationService {
       ? undefined
       : this.repository.getChannelContent(projectId, task.contentId)
     const coverPath = join(input.outputDirectory, 'composed', 'cover.svg')
+    const gifPath = join(input.outputDirectory, 'composed', 'preview.gif')
     const cancelledBeforeCompose = this.cancelProductionIfRequested(
       projectId,
       taskId,
@@ -935,6 +937,10 @@ export class ContentStudioApplicationService {
           outputPath: coverPath,
           subtitle: `${task.channel ?? 'local'} · ${plan.recordingConfig.locale}`,
           title: content?.title ?? activity.topic[plan.recordingConfig.locale],
+        },
+        gif: {
+          outputPath: gifPath,
+          outputSize: resolveGifOutputSize(plan.recordingConfig.outputSize),
         },
         normalizeLoudness: true,
         outputPath,
@@ -986,6 +992,20 @@ export class ContentStudioApplicationService {
         projectId,
         relativePath: coverRelativePath,
         sha256: composed.cover.sha256,
+      })
+    }
+    if (composed.gif !== undefined) {
+      const gifRelativePath = relative(
+        join(input.outputDirectory, '..'),
+        composed.gif.artifactPath,
+      )
+      this.createActivityArtifact({
+        activityId: task.activityId,
+        artifactId: `gif-${taskId}`,
+        kind: 'image',
+        projectId,
+        relativePath: gifRelativePath,
+        sha256: composed.gif.sha256,
       })
     }
     const completed = this.taskStore.transitionTask(

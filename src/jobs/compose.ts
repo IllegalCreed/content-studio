@@ -13,6 +13,10 @@ import {
 import { dirname } from 'node:path'
 import { composeVideoClips } from '../media/compose'
 import { generateDeterministicCover } from '../media/cover'
+import {
+  generateDeterministicGif,
+  resolveGifOutputSize,
+} from '../media/gif'
 
 /**
  * Default composition for a production task: crossfades the scene clips of a
@@ -46,11 +50,21 @@ export async function composeProductionVideoClips(
         ...(input.signal === undefined ? {} : { signal: input.signal }),
         sourcePath: input.outputPath,
       })
+  const gif = input.gif === undefined
+    ? undefined
+    : await generateDeterministicGif({
+        ...input.gif,
+        outputSize: input.gif.outputSize
+          ?? resolveGifOutputSize(input.outputSize ?? { height: 1080, width: 1920 }),
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+        sourcePath: input.outputPath,
+      })
   const info = await stat(input.outputPath)
   const sha256 = await hashFile(input.outputPath)
   return {
     artifactPath: input.outputPath,
     ...(cover === undefined ? {} : { cover }),
+    ...(gif === undefined ? {} : { gif }),
     durationSeconds: composed.durationSeconds,
     reencoded: composed.reencoded,
     sha256,

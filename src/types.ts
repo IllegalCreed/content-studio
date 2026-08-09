@@ -989,6 +989,7 @@ export interface RecordingJobDependencies {
 export interface ComposeProductionInput {
   clipPaths: string[]
   cover?: ProductionCoverSpec
+  gif?: ProductionGifSpec
   normalizeLoudness?: boolean
   outputPath: string
   outputSize?: VideoViewport
@@ -1000,6 +1001,7 @@ export interface ComposeProductionResult {
   artifactPath: string
   cover?: ProductionCoverResult
   durationSeconds: number
+  gif?: ProductionGifResult
   reencoded: boolean
   sha256: string
   sizeBytes: number
@@ -1013,6 +1015,24 @@ export interface ProductionCoverSpec {
 
 export interface ProductionCoverResult {
   artifactPath: string
+  height: number
+  sha256: string
+  sizeBytes: number
+  width: number
+}
+
+export interface ProductionGifSpec {
+  durationSeconds?: number
+  fps?: number
+  outputPath: string
+  outputSize?: VideoViewport
+  startSeconds?: number
+}
+
+export interface ProductionGifResult {
+  artifactPath: string
+  durationSeconds: number
+  fps: number
   height: number
   sha256: string
   sizeBytes: number

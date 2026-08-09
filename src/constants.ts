@@ -61,6 +61,18 @@ export const VIDEO_VIEWPORT_LIMITS = {
   minDimension: 320,
 } as const
 
+export const GIF_LIMITS = {
+  defaultDurationSeconds: 4,
+  defaultFps: 10,
+  defaultLongEdge: 640,
+  maxDimension: 1920,
+  maxDurationSeconds: 15,
+  maxFps: 24,
+  maxFrames: 300,
+  maxPixels: 3_000_000,
+  maxSizeBytes: 8 * 1024 * 1024,
+} as const
+
 export const CAMPAIGN_JOB_TRANSITIONS = {
   'awaiting-owner': ['cancelled', 'published', 'recording'],
   'cancelled': ['queued'],

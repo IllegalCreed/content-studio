@@ -115,6 +115,7 @@ describe.skipIf(!ffmpegIsAvailable)('production video composition', () => {
       const source = await makeClip(directory, 'source.webm', 0.5)
       const outputPath = join(directory, 'composed', 'final.webm')
       const coverPath = join(directory, 'composed', 'cover.svg')
+      const gifPath = join(directory, 'composed', 'preview.gif')
 
       const result = await composeProductionVideoClips({
         clipPaths: [source],
@@ -122,6 +123,12 @@ describe.skipIf(!ffmpegIsAvailable)('production video composition', () => {
           outputPath: coverPath,
           subtitle: 'local fallback',
           title: 'Quick Sort',
+        },
+        gif: {
+          durationSeconds: 0.4,
+          fps: 8,
+          outputPath: gifPath,
+          outputSize: { height: 120, width: 160 },
         },
         outputPath,
         outputSize: { height: 240, width: 320 },
@@ -133,6 +140,13 @@ describe.skipIf(!ffmpegIsAvailable)('production video composition', () => {
         width: 320,
       })
       await expect(access(coverPath)).resolves.toBeUndefined()
+      expect(result.gif).toMatchObject({
+        artifactPath: gifPath,
+        fps: 8,
+        height: 120,
+        width: 160,
+      })
+      await expect(access(gifPath)).resolves.toBeUndefined()
     }
     finally {
       await rm(directory, { force: true, recursive: true })

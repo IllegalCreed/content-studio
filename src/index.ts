@@ -2,6 +2,7 @@ export { generateStudioBundle } from './bundle/generate'
 export {
   CHANNEL_BLUEPRINTS,
   DEFAULT_STORAGE_RETENTION_POLICY,
+  GIF_LIMITS,
 } from './constants'
 export { generateContentPackages } from './content/generate'
 export {
@@ -83,6 +84,12 @@ export {
   probeVideoSize,
   resolveFfmpegPath,
 } from './media/ffmpeg'
+export {
+  generateDeterministicGif,
+  type GenerateDeterministicGifInput,
+  MediaGifError,
+  resolveGifOutputSize,
+} from './media/gif'
 export { writeStudioBundle } from './output/write'
 export { createProjectRecord } from './project/record'
 export {
