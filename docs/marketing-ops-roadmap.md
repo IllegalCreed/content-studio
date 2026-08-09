@@ -120,6 +120,12 @@ MCP client 和关闭回调，关闭操作幂等；`runCli` 会在命令结束时
 进程的实际安装、启动和 MCP transport 初始化仍留在安装器/宿主，未在应用层实现任意命令
 或路径发现。
 
+同日做了本机只读互操作烟测：用标准 MCP SDK 启动本地
+`@illegalcreed/marketing-ops` 0.1.0 bundled server，Content Studio 只调用一次
+`channels_status`，收到 contract v3、5 个渠道状态、4 个就绪适配器，并确认
+`authorizesExternalWrite: false`；未调用任何写工具。该结果是手工环境证据，不替代 CI
+或安装器发布验收，也不表示渠道已获得本次活动授权。
+
 这份新包是下一版互操作契约草案，不冒充当前 v3 MCP 输入。接入写入前，`marketing-ops`
 仍需先支持稳定 package/publication ID、同渠道多包以及带校验和的素材引用；在此之前，
 含媒体的人工辅助包保持 blocked，不能通过删除 `media` 降级为“已就绪”。
