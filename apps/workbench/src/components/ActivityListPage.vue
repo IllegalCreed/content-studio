@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type {
+  ChannelContentFormat,
   ChannelId,
   VideoFormat,
 } from '@content-studio/core-types'
@@ -25,7 +26,7 @@ interface ContentForm {
   body: string
   channel: ChannelId
   coreMessage: string
-  format: 'article' | 'video'
+  format: ChannelContentFormat
   locale: 'en' | 'zh-CN'
   title: string
 }
@@ -52,6 +53,8 @@ const props = defineProps<{
   selectedCampaignContentCounts: {
     article: number
     artifacts: number
+    imageText: number
+    shortPost: number
     video: number
   }
   selectedCampaignIsRuntime: boolean
@@ -318,6 +321,8 @@ const emit = defineEmits<{
         </section>
         <div class="content-type-grid">
           <div><span>文章成品</span><strong>{{ props.selectedCampaignContentCounts.article }}</strong><small>按渠道分别生成</small></div>
+          <div><span>图文成品</span><strong>{{ props.selectedCampaignContentCounts.imageText }}</strong><small>同一渠道可独立生成</small></div>
+          <div><span>动态成品</span><strong>{{ props.selectedCampaignContentCounts.shortPost }}</strong><small>同一渠道可独立生成</small></div>
           <div><span>视频成品</span><strong>{{ props.selectedCampaignContentCounts.video }}</strong><small>素材组装后发布</small></div>
           <div><span>活动素材</span><strong>{{ props.selectedCampaignContentCounts.artifacts }}</strong><small>引用的项目或活动产物</small></div>
           <div><span>目标渠道</span><strong>{{ props.selectedCampaign.channels.length }}</strong><small>账号由项目绑定</small></div>

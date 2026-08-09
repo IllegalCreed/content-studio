@@ -55,15 +55,26 @@ interface OutputFile {
 }
 
 function collectFiles(bundle: StudioBundle): OutputFile[] {
+  const packageCounts = new Map<string, number>()
+  for (const contentPackage of bundle.contentPackages) {
+    const key = `${contentPackage.channel}:${contentPackage.locale}`
+    packageCounts.set(key, (packageCounts.get(key) ?? 0) + 1)
+  }
   const files: OutputFile[] = [
     {
       content: `${JSON.stringify(bundle, null, 2)}\n`,
       path: 'bundle.json',
     },
-    ...bundle.contentPackages.map(contentPackage => ({
-      content: renderMarkdown(contentPackage),
-      path: `content/${contentPackage.channel}.${contentPackage.locale}.md`,
-    })),
+    ...bundle.contentPackages.map(contentPackage => {
+      const key = `${contentPackage.channel}:${contentPackage.locale}`
+      const suffix = (packageCounts.get(key) ?? 0) > 1
+        ? `.${contentPackage.format}`
+        : ''
+      return {
+        content: renderMarkdown(contentPackage),
+        path: `content/${contentPackage.channel}.${contentPackage.locale}${suffix}.md`,
+      }
+    }),
   ]
 
   if (bundle.videoPlan !== null) {

@@ -78,6 +78,52 @@ describe('bundle writer', () => {
     await expect(writeStudioBundle(bundle, ' ')).rejects.toThrow(/must not be empty/i)
   })
 
+  it('keeps multiple forms of one channel in separate deterministic files', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-'))
+    const outputDirectory = join(temporaryDirectory, 'multi-form')
+    const multiFormBundle: StudioBundle = {
+      ...bundle,
+      contentPackages: [
+        {
+          ...bundle.contentPackages[0]!,
+          channel: 'bilibili',
+        },
+        {
+          ...bundle.contentPackages[0]!,
+          body: 'Bilibili image-text body',
+          channel: 'bilibili',
+          format: 'image-text',
+          title: 'Image-text quick sort',
+        },
+      ],
+    }
+
+    try {
+      const result = await writeStudioBundle(multiFormBundle, outputDirectory)
+
+      expect(result.files).toEqual([
+        'bundle.json',
+        'content/bilibili.en.video-metadata.md',
+        'content/bilibili.en.image-text.md',
+        'video/plan.json',
+      ])
+      await expect(readFile(
+        join(outputDirectory, 'content/bilibili.en.video-metadata.md'),
+        'utf8',
+      )).resolves.toContain('Understand quick sort')
+      await expect(readFile(
+        join(outputDirectory, 'content/bilibili.en.image-text.md'),
+        'utf8',
+      )).resolves.toContain('Bilibili image-text body')
+    }
+    finally {
+      await rm(temporaryDirectory, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
+
   it('omits the video directory when a campaign has no video plan', async () => {
     const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-'))
     const outputDirectory = join(temporaryDirectory, 'text-only')

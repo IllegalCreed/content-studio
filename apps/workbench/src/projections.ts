@@ -3,6 +3,7 @@ import type {
   CaptureFlow,
   CaptureStep,
   ChannelContent,
+  ChannelContentFormat,
   ChannelId,
   ContentGroup,
   ContentStudioProjectIndex,
@@ -35,6 +36,7 @@ import type {
   VideoPlanProjection,
 } from './model'
 import {
+  humanizeChannelContentFormat,
   humanizeTaskStatus,
   recordingReceiptToVideoJob,
   taskEventSummary,
@@ -280,7 +282,9 @@ export function runtimeReports(
       activityTitle: activity?.topic['zh-CN'] ?? activity?.topic.en ?? plan.activityId,
       accountAlias: accountAliasByChannel.get(plan.channel) ?? '项目账号待绑定',
       channel: plan.channel,
-      contentType: content?.format === 'video' ? '视频' : '文章',
+      contentType: content?.format === undefined
+        ? '文章'
+        : humanizeChannelContentFormat(content.format),
       lastChecked: latestObservation === undefined
         ? receipt?.status === 'published' ? '已发布 · 尚未采集' : '尚未采集 · 无成功发布回执'
         : `最近采集 · ${latestObservation.collectedAt}`,
@@ -300,7 +304,7 @@ export function runtimeReports(
   })
 }
 
-function defaultReportMetrics(format: 'article' | 'video' | undefined): ReportProjection['metrics'] {
+function defaultReportMetrics(format: ChannelContentFormat | undefined): ReportProjection['metrics'] {
   const keys: ObservationMetric[] = format === 'video'
     ? ['views', 'likes', 'comments', 'favorites']
     : ['reads', 'likes', 'comments', 'shares']
@@ -309,7 +313,7 @@ function defaultReportMetrics(format: 'article' | 'video' | undefined): ReportPr
 
 function reportMetrics(
   metrics: Partial<Record<ObservationMetric, number | null>>,
-  format: 'article' | 'video' | undefined,
+  format: ChannelContentFormat | undefined,
   includeMissing = true,
 ): ReportProjection['metrics'] {
   const preferredKeys: ObservationMetric[] = format === 'video'
@@ -574,7 +578,7 @@ export function activityToCampaign({
           body: content.body,
           channel: content.channel,
           contentId: content.contentId,
-          format: content.format === 'article' ? '文章' : '视频',
+          format: humanizeChannelContentFormat(content.format),
           locale: content.locale,
           status: '已生成',
           title: content.title,

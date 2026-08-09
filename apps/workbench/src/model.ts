@@ -1,6 +1,7 @@
 import type {
   CampaignJobStatus,
   CampaignVideo,
+  ChannelContentFormat,
   ChannelId,
   ContentFormat,
   DeliveryMode,
@@ -51,7 +52,7 @@ export interface ReportProjection {
   activityTitle: string
   accountAlias: string
   channel: ChannelId
-  contentType: '文章' | '视频'
+  contentType: HumanizedChannelContentFormat
   lastChecked: string
   metrics: Array<{ label: string, value: string }>
   note: string
@@ -60,6 +61,8 @@ export interface ReportProjection {
   status: '监测中' | '发布失败' | '等待发布回执' | '等待监测数据'
   timeline: ReportTimelineProjection[]
 }
+
+export type HumanizedChannelContentFormat = '文章' | '图文' | '动态' | '视频'
 
 function fileName(relativePath: string): string {
   const segments = relativePath.split(/[\\/]/u)
@@ -320,6 +323,18 @@ export function humanizeTaskStatus(status: CampaignJobStatus): string {
   return taskLifecycleLabels[status]
 }
 
+export function humanizeChannelContentFormat(
+  format: ChannelContentFormat,
+): HumanizedChannelContentFormat {
+  return format === 'video'
+    ? '视频'
+    : format === 'image-text'
+      ? '图文'
+      : format === 'short-post'
+        ? '动态'
+        : '文章'
+}
+
 export function humanizeTaskEventKind(kind: string): string {
   const labels: Record<string, string> = {
     'attempt-cancelled': '尝试已取消',
@@ -462,7 +477,7 @@ export interface ChannelContentProjection {
   body?: string
   channel: ChannelId
   contentId: string
-  format: '文章' | '视频'
+  format: HumanizedChannelContentFormat
   locale: 'zh-CN' | 'en'
   status: '草稿' | '已生成' | '制作中' | '待审核' | '已完成'
   title: string
@@ -551,11 +566,12 @@ export interface ChannelProjection {
   delivery: '全自动候选' | '人工辅助' | '仅生成内容'
   projectAccountId: string | null
   enabled: boolean
-  format: '文章' | '短帖' | '视频信息'
+  format: '文章' | '图文' | '短帖' | '视频信息'
   health: '已就绪' | '需重新授权' | '已阻塞' | '未配置' | '未查询'
   metrics: string[]
   nextAction: string | null
   statusSource: 'marketing-ops' | '项目配置'
+  supportedFormats?: string[]
   titleLimit: number
 }
 
@@ -704,9 +720,11 @@ function deliveryLabel(delivery: DeliveryMode): ChannelProjection['delivery'] {
 function formatLabel(format: ContentFormat): ChannelProjection['format'] {
   return format === 'article'
     ? '文章'
-    : format === 'short-post'
-      ? '短帖'
-      : '视频信息'
+    : format === 'image-text'
+      ? '图文'
+      : format === 'short-post'
+        ? '短帖'
+        : '视频信息'
 }
 
 function completeChannelDirectory(
@@ -717,9 +735,14 @@ function completeChannelDirectory(
   )
   return (Object.keys(CHANNEL_BLUEPRINTS) as ChannelId[]).map((channelId) => {
     const configured = configuredChannels.get(channelId)
-    if (configured !== undefined)
-      return configured
     const blueprint = CHANNEL_BLUEPRINTS[channelId]
+    const supportedFormats = blueprint.supportedFormats.map(formatLabel)
+    if (configured !== undefined) {
+      return {
+        ...configured,
+        supportedFormats: configured.supportedFormats ?? supportedFormats,
+      }
+    }
     return {
       accounts: [],
       adapterReady: false,
@@ -734,6 +757,7 @@ function completeChannelDirectory(
       nextAction: '尚未配置全局账号',
       projectAccountId: null,
       statusSource: '项目配置',
+      supportedFormats,
       titleLimit: blueprint.maxTitleLength,
     }
   })

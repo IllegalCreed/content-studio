@@ -115,4 +115,23 @@ describe('content generation', () => {
     expect(packages[0]!.body).toContain(campaign.targetUrl)
     expect(packages[0]!.body).toContain('…')
   })
+
+  it('generates one independent package for each selected channel form', () => {
+    const packages = generateContentPackages(project, {
+      ...campaign,
+      channels: [{
+        contentFormats: ['video-metadata', 'image-text'],
+        id: 'bilibili',
+        locale: 'zh-CN',
+      }],
+    })
+
+    expect(packages).toHaveLength(2)
+    expect(packages.map(packageItem => packageItem.format)).toEqual([
+      'video-metadata',
+      'image-text',
+    ])
+    expect(packages.every(packageItem => packageItem.channel === 'bilibili'))
+      .toBe(true)
+  })
 })

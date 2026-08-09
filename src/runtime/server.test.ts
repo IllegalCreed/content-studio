@@ -163,6 +163,28 @@ describe('content studio local application server', () => {
         outline: [{ flowId: 'quick-sort' }],
       },
     })
+    expect(parseCreateActivityInput({
+      activityId: 'activity-bilibili',
+      campaignId: 'campaign-bilibili',
+      channels: [{
+        contentFormats: ['video-metadata', 'image-text'],
+        id: 'bilibili',
+        locale: 'zh-CN',
+      }],
+      goal: 'education',
+      projectId: 'project-a',
+      projectSnapshotId: 'project-a-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://project-a.example.com/guide',
+      topic: {
+        'en': 'A guide',
+        'zh-CN': '一篇指南',
+      },
+    }, 'project-a').channels).toEqual([{
+      contentFormats: ['video-metadata', 'image-text'],
+      id: 'bilibili',
+      locale: 'zh-CN',
+    }])
 
     expect(() => parseCreateActivityInput({
       activityId: 'activity-a',
@@ -285,6 +307,13 @@ describe('content studio local application server', () => {
       'activity-a',
       'group-a',
     )).toMatchObject({ artifactIds: ['artifact-a'] })
+
+    expect(parseCreateChannelContentInput(
+      { ...baseBody, format: 'image-text' },
+      'project-a',
+      'activity-a',
+      'group-a',
+    )).toMatchObject({ format: 'image-text' })
 
     // 非 kebab-case id 被拒
     expect(() => parseCreateChannelContentInput(

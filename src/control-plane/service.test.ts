@@ -1,5 +1,6 @@
 import type {
   CaptureFlow,
+  ChannelContentFormat,
   ChannelId,
   ContentStudioReport,
   MonitoringObservation,
@@ -142,7 +143,7 @@ function createPublication(
 function createProductionContent(
   service: ContentStudioApplicationService,
   activity: ReturnType<typeof createActivity>,
-  format: 'article' | 'video' = 'video',
+  format: ChannelContentFormat = 'video',
   channel: ChannelId = 'youtube',
   contentId = `${activity.activityId}-content`,
 ): string {
@@ -428,6 +429,123 @@ describe('content studio application service', () => {
         taskId: `production-${content.contentId}`,
       }),
     ])
+  })
+
+  it('maps non-video channel forms to article-like production execution', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'multi-form-project')
+    enableYouTube(service, 'multi-form-project')
+    const activity = createActivity(service, 'multi-form-project')
+    const contentId = createProductionContent(
+      service,
+      activity,
+      'image-text',
+      'youtube',
+      'multi-form-image-text',
+    )
+
+    expect(service.getProjectView('multi-form-project').channelContents)
+      .toEqual([expect.objectContaining({ contentId, format: 'image-text' })])
+    expect(service.getProjectView('multi-form-project').tasks)
+      .toEqual([expect.objectContaining({
+        contentId,
+        productionType: 'article',
+        taskId: `production-${contentId}`,
+      })])
+  })
+
+  it('enforces the content forms selected on an activity channel', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'selected-form-project')
+    service.bindProjectChannel({
+      channel: 'bilibili',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId: 'selected-form-project',
+    })
+    const activity = service.createActivity({
+      activityId: 'selected-form-activity',
+      campaignId: 'selected-form-campaign',
+      channels: [{
+        contentFormats: ['image-text'],
+        id: 'bilibili',
+        locale: 'en',
+      }],
+      goal: 'education',
+      projectId: 'selected-form-project',
+      projectSnapshotId: 'selected-form-project-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://selected-form-project.example.com/',
+      topic: { 'en': 'A topic', 'zh-CN': '主题' },
+    })
+
+    expect(createProductionContent(
+      service,
+      activity,
+      'image-text',
+      'bilibili',
+      'selected-image-text',
+    )).toBe('selected-image-text')
+    const group = service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'selected-video-group',
+      coreMessage: 'Video form',
+      projectId: activity.projectId,
+      title: 'Video form',
+    })
+    expect(() => service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: [],
+      body: 'Video body',
+      channel: 'bilibili',
+      contentGroupId: group.contentGroupId,
+      contentId: 'selected-video',
+      format: 'video',
+      locale: 'en',
+      projectId: activity.projectId,
+      title: 'Video',
+    })).toThrow(/does not select content form.*video-metadata/i)
+  })
+
+  it('rejects empty or duplicate content form selections at the service boundary', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'invalid-form-project')
+    service.bindProjectChannel({
+      channel: 'bilibili',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId: 'invalid-form-project',
+    })
+    const baseInput = {
+      activityId: 'invalid-form-activity',
+      campaignId: 'invalid-form-campaign',
+      goal: 'education' as const,
+      projectId: 'invalid-form-project',
+      projectSnapshotId: 'invalid-form-project-snapshot-1',
+      status: 'draft' as const,
+      targetUrl: 'https://invalid-form-project.example.com/',
+      topic: { 'en': 'A topic', 'zh-CN': '主题' },
+    }
+
+    expect(() => service.createActivity({
+      ...baseInput,
+      channels: [{
+        contentFormats: [],
+        id: 'bilibili',
+        locale: 'en',
+      }],
+    })).toThrow(/contentFormats must not be empty/i)
+    expect(() => service.createActivity({
+      ...baseInput,
+      channels: [{
+        contentFormats: ['image-text', 'image-text'],
+        id: 'bilibili',
+        locale: 'en',
+      }],
+    })).toThrow(/duplicate channel content form/i)
   })
 
   it('does not create a publication task for a content-only channel', () => {

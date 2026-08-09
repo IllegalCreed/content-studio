@@ -5,6 +5,7 @@ import type {
 } from '@content-studio/core-types'
 import { describe, expect, it } from 'vitest'
 import {
+  humanizeChannelContentFormat,
   humanizeTaskEventKind,
   isPublishingAssistantChannel,
   recordingReceiptToVideoJob,
@@ -124,6 +125,8 @@ describe('channel delivery projection', () => {
     expect(contentOnly?.delivery).toBe('仅生成内容')
     expect(isPublishingAssistantChannel(contentOnly!)).toBe(false)
     expect(isPublishingAssistantChannel(ownerAssisted!)).toBe(true)
+    expect(snapshot.channels.find(channel => channel.channel === 'bilibili')?.supportedFormats)
+      .toEqual(['视频信息', '图文', '短帖'])
     expect(snapshot.channels).toHaveLength(19)
   })
 })
@@ -554,5 +557,11 @@ describe('execution task projection', () => {
     expect(humanizeTaskEventKind(event.kind)).toBe('GIF 已生成')
     expect(taskEventSummary(event)).toContain('640×360')
     expect(taskEventSummary(event)).toContain('272 KB')
+  })
+
+  it('keeps channel content forms distinct in the workbench', () => {
+    expect(humanizeChannelContentFormat('image-text')).toBe('图文')
+    expect(humanizeChannelContentFormat('short-post')).toBe('动态')
+    expect(humanizeChannelContentFormat('video')).toBe('视频')
   })
 })

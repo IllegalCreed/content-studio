@@ -26,7 +26,7 @@ export type DeliveryMode
     | 'content-only'
     | 'owner-assisted'
 
-export type ContentFormat = 'article' | 'short-post' | 'video-metadata'
+export type ContentFormat = 'article' | 'image-text' | 'short-post' | 'video-metadata'
 
 export type VideoFormat = 'landscape' | 'portrait' | 'square'
 
@@ -175,6 +175,7 @@ export interface ProjectManifest {
 }
 
 export interface CampaignChannel {
+  contentFormats?: ContentFormat[]
   id: ChannelId
   locale: Locale
 }
@@ -363,7 +364,7 @@ export interface ContentGroup {
 
 export type CreateContentGroupInput = Omit<ContentGroup, 'version'>
 
-export type ChannelContentFormat = 'article' | 'video'
+export type ChannelContentFormat = 'article' | 'image-text' | 'short-post' | 'video'
 
 export interface ChannelContent {
   activityId: string
@@ -623,6 +624,7 @@ export interface ChannelBlueprint {
   format: ContentFormat
   maxBodyLength: number
   maxTitleLength: number
+  supportedFormats: readonly ContentFormat[]
 }
 
 export interface ContentPackage {

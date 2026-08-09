@@ -3,13 +3,20 @@ import type {
   CaptureStep,
   ChannelBlueprint,
   ChannelId,
+  ContentFormat,
   StorageRetentionPolicy,
   VideoFormat,
   VideoViewport,
 } from './types'
 
 export const CHANNEL_BLUEPRINTS = {
-  'bilibili': blueprint('owner-assisted', 'video-metadata', 80, 2000),
+  'bilibili': blueprint(
+    'owner-assisted',
+    'video-metadata',
+    80,
+    2000,
+    ['video-metadata', 'image-text', 'short-post'],
+  ),
   'bluesky': blueprint('automatic-candidate', 'short-post', 80, 300),
   'dev': blueprint('automatic-candidate', 'article', 128, 12000),
   'douyin': blueprint('owner-assisted', 'video-metadata', 55, 2200),
@@ -121,11 +128,13 @@ function blueprint(
   format: ChannelBlueprint['format'],
   maxTitleLength: number,
   maxBodyLength: number,
+  supportedFormats: readonly ContentFormat[] = [format],
 ): ChannelBlueprint {
   return {
     delivery,
     format,
     maxBodyLength,
     maxTitleLength,
+    supportedFormats,
   }
 }

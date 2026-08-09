@@ -35,6 +35,7 @@ import type {
 } from './model'
 import type {
   ChannelId,
+  ChannelContentFormat,
   CreatePublishingActivityInput,
   CreateChannelContentInput,
   CreateContentGroupInput,
@@ -308,7 +309,7 @@ const contentForm = reactive<{
   body: string
   channel: ChannelId
   coreMessage: string
-  format: 'article' | 'video'
+  format: ChannelContentFormat
   locale: 'en' | 'zh-CN'
   title: string
 }>({
@@ -327,6 +328,8 @@ const channelBindingForm = reactive<{
 
 const contentFormatOptions = [
   { label: '文章', value: 'article' },
+  { label: '图文', value: 'image-text' },
+  { label: '动态', value: 'short-post' },
   { label: '视频', value: 'video' },
 ]
 
@@ -615,6 +618,8 @@ const selectedCampaignContentCounts = computed(() => {
   return {
     article: contents.filter(content => content.format === '文章').length,
     artifacts: contents.reduce((total, content) => total + (content.artifactIds?.length ?? 0), 0),
+    imageText: contents.filter(content => content.format === '图文').length,
+    shortPost: contents.filter(content => content.format === '动态').length,
     video: contents.filter(content => content.format === '视频').length,
   }
 })

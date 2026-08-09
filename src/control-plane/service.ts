@@ -8,6 +8,7 @@ import type {
   ActivityContentPack,
   ActivityRevisionInput,
   ChannelContent,
+  ChannelContentFormat,
   ChannelId,
   ComposeProduction,
   ComposeProductionResult,
@@ -16,6 +17,7 @@ import type {
   CompositionProgressEvent,
   CompositionTaskEventKind,
   ConfirmActivityVideoPlanInput,
+  ContentFormat,
   ContentGroup,
   ContentStudioGlobalProjectView,
   ContentStudioGlobalView,
@@ -48,6 +50,7 @@ import type {
   VideoViewport,
 } from '../types'
 import { join, relative, resolve } from 'node:path'
+import { CHANNEL_BLUEPRINTS } from '../constants'
 import { runProductionTask as executeProductionTask } from '../jobs/production'
 import { InMemoryExecutionTaskStore } from '../jobs/task'
 import { assertMatchingMarketingOpsReceipt } from '../marketing-ops/client'
@@ -796,6 +799,7 @@ export class ContentStudioApplicationService {
     this.requireProject(input.projectId)
     const snapshot = this.requireSnapshot(input.projectId, input.projectSnapshotId)
     this.assertActivityVideo(input.video, snapshot)
+    this.assertChannelContentFormats(input.channels)
     this.assertEnabledChannels(input.projectId, input.channels)
     const activity = this.repository.saveActivity({
       ...input,
@@ -1265,6 +1269,7 @@ export class ContentStudioApplicationService {
       throw new Error('Content group must belong to the activity')
     if (!activity.channels.some(channel => channel.id === input.channel))
       throw new Error('Channel content must target an activity channel')
+    this.assertActivityChannelContentFormat(activity, input.channel, input.format)
     this.assertEnabledChannels(input.projectId, [
       {
         id: input.channel,
@@ -1304,6 +1309,7 @@ export class ContentStudioApplicationService {
       )) {
         throw new Error('Content pack channel and locale must match the activity')
       }
+      this.assertActivityChannelContentFormat(activity, content.channel, content.format)
       this.assertChannelContentArtifacts(
         input.projectId,
         input.activityId,
@@ -1608,6 +1614,48 @@ export class ContentStudioApplicationService {
     }
   }
 
+  private assertChannelContentFormats(
+    channels: readonly {
+      contentFormats?: readonly ContentFormat[]
+      id: ChannelId
+    }[],
+  ): void {
+    for (const channel of channels) {
+      const formats = channel.contentFormats
+      if (formats === undefined)
+        continue
+      if (formats.length === 0)
+        throw new Error(`Channel ${channel.id} contentFormats must not be empty`)
+      const seen = new Set<ContentFormat>()
+      for (const format of formats) {
+        if (seen.has(format))
+          throw new Error(`Duplicate channel content form: ${format}`)
+        seen.add(format)
+        if (!CHANNEL_BLUEPRINTS[channel.id].supportedFormats.includes(format)) {
+          throw new Error(
+            `Channel ${channel.id} does not support content form: ${format}`,
+          )
+        }
+      }
+    }
+  }
+
+  private assertActivityChannelContentFormat(
+    activity: PublishingActivity,
+    channel: ChannelId,
+    format: ChannelContentFormat,
+  ): void {
+    const target = activity.channels.find(candidate => candidate.id === channel)
+    if (target?.contentFormats === undefined)
+      return
+    const packageFormat = format === 'video' ? 'video-metadata' : format
+    if (!target.contentFormats.includes(packageFormat)) {
+      throw new Error(
+        `Activity channel ${channel} does not select content form: ${packageFormat}`,
+      )
+    }
+  }
+
   private assertPublishableChannel(
     projectId: string,
     channel: ProjectChannelBinding['channel'],
@@ -1694,7 +1742,7 @@ export class ContentStudioApplicationService {
       channel: content.channel,
       contentId: content.contentId,
       kind: 'production',
-      productionType: content.format,
+      productionType: content.format === 'video' ? 'video' : 'article',
       projectId: content.projectId,
       taskId,
     })

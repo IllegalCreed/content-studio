@@ -13,7 +13,11 @@ import {
   activityBusinessProgressProjection,
   activityPublicationProjections,
 } from '../projections'
-import { humanizeTaskStatus, videoViewportForFormat } from '../model'
+import {
+  humanizeChannelContentFormat,
+  humanizeTaskStatus,
+  videoViewportForFormat,
+} from '../model'
 import { useWorkbenchStore } from '../stores/workbench'
 
 const route = useRoute()
@@ -107,7 +111,7 @@ const contentGroups = computed<ContentGroupProjection[]>(() => {
           body: content.body,
           channel: content.channel,
           contentId: content.contentId,
-          format: content.format === 'video' ? '视频' : '文章',
+          format: humanizeChannelContentFormat(content.format),
           locale: content.locale,
           status: '已生成',
           title: content.title,
@@ -303,7 +307,7 @@ watch(videoPlan, syncViewportDraft, { immediate: true })
           <ul><li v-for="content in group.contents" :key="content.contentId"><strong>{{ content.title }}</strong><span>{{ content.channel }} · {{ content.format }} · 已登记</span></li></ul>
         </article>
       </div>
-      <p v-else class="empty-state">当前活动还没有渠道成品。下一步应由 AI 根据主题和渠道生成文章、视频脚本或其他内容版本。</p>
+      <p v-else class="empty-state">当前活动还没有渠道成品。下一步应由 AI 根据主题、渠道和所选内容形态生成文章、图文、动态、视频脚本或其他内容版本。</p>
     </section>
 
     <section class="detail-section" data-testid="activity-publication-results">

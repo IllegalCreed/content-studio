@@ -46,7 +46,7 @@ const selectedMetrics = computed(() =>
 )
 
 const selectedFormatSummary = computed(
-  () => `${props.selectedChannel.format} · 标题 ${props.selectedChannel.titleLimit} 字 · 正文 ${props.selectedChannel.bodyLimit} 字`,
+  () => `${props.selectedChannel.supportedFormats?.join(' / ') ?? props.selectedChannel.format} · 标题 ${props.selectedChannel.titleLimit} 字 · 正文 ${props.selectedChannel.bodyLimit} 字`,
 )
 
 const publishingChannels = computed(() =>
@@ -95,7 +95,7 @@ const selectedChannelReferenceCount = computed(() =>
         <span>{{ props.accountReferenceCount(channel) }} 个项目</span>
         <span>{{ channel.format }}</span>
         <span class="channel-health" :data-health="channel.health">{{ isPublishingAssistantChannel(channel) ? channel.health : '不进入发布助手' }}</span>
-        <small>{{ channel.titleLimit }} 字标题 · {{ channel.bodyLimit }} 字正文</small>
+        <small>支持 {{ channel.supportedFormats?.join(' / ') ?? channel.format }} · {{ channel.titleLimit }} 字标题 · {{ channel.bodyLimit }} 字正文</small>
       </button>
     </div>
     <article class="channel-detail-card">

@@ -78,6 +78,34 @@ describe('manifest validation', () => {
     expect(validateCampaign(campaign, project)).toEqual(campaign)
   })
 
+  it('accepts multiple supported content forms for one channel', () => {
+    const validated = validateCampaign({
+      ...campaign,
+      channels: [{
+        contentFormats: ['video-metadata', 'image-text'],
+        id: 'bilibili',
+        locale: 'zh-CN',
+      }],
+    }, project)
+
+    expect(validated.channels).toEqual([{
+      contentFormats: ['video-metadata', 'image-text'],
+      id: 'bilibili',
+      locale: 'zh-CN',
+    }])
+  })
+
+  it('rejects a content form that the selected channel does not support', () => {
+    expect(() => validateCampaign({
+      ...campaign,
+      channels: [{
+        contentFormats: ['image-text'],
+        id: 'x',
+        locale: 'en',
+      }],
+    }, project)).toThrow(/does not support content form.*image-text/i)
+  })
+
   it('accepts explicit source-owned and web-assisted integration modes', () => {
     const sourceOwned = validateProjectManifest({
       ...project,

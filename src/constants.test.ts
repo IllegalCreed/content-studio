@@ -7,6 +7,11 @@ describe('channel blueprints', () => {
     expect(CHANNEL_BLUEPRINTS.github.delivery).toBe('automatic-candidate')
     expect(CHANNEL_BLUEPRINTS.x.delivery).toBe('owner-assisted')
     expect(CHANNEL_BLUEPRINTS.bilibili.format).toBe('video-metadata')
+    expect(CHANNEL_BLUEPRINTS.bilibili.supportedFormats).toEqual([
+      'video-metadata',
+      'image-text',
+      'short-post',
+    ])
     expect(CHANNEL_BLUEPRINTS.wechat.delivery).toBe('content-only')
     expect(CHANNEL_BLUEPRINTS.xiaohongshu.delivery).toBe('content-only')
   })

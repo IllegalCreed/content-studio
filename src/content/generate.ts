@@ -16,32 +16,36 @@ export function generateContentPackages(
   const campaign = validateCampaign(campaignInput, project)
   const factsById = new Map(project.facts.map(fact => [fact.id, fact]))
 
-  return campaign.channels.map(({ id, locale }) => {
+  return campaign.channels.flatMap(({ contentFormats, id, locale }) => {
     const blueprint = CHANNEL_BLUEPRINTS[id]
-    const facts = campaign.highlights.map(
-      factId => factsById.get(factId)!.text[locale],
-    )
-    const title = fitTitle(campaign.topic[locale], blueprint.maxTitleLength)
-    const tags = campaign.tags.map(tag => `#${tag}`)
-    return {
-      body: generateBody(
-        blueprint,
+    const formats = contentFormats ?? [blueprint.format]
+    return formats.map((format) => {
+      const formatBlueprint = { ...blueprint, format }
+      const facts = campaign.highlights.map(
+        factId => factsById.get(factId)!.text[locale],
+      )
+      const title = fitTitle(campaign.topic[locale], formatBlueprint.maxTitleLength)
+      const tags = campaign.tags.map(tag => `#${tag}`)
+      return {
+        body: generateBody(
+          formatBlueprint,
+          locale,
+          title,
+          project.tagline[locale],
+          facts,
+          campaign.targetUrl,
+          tags,
+        ),
+        campaignId: campaign.campaignId,
+        channel: id,
+        delivery: formatBlueprint.delivery,
+        format,
         locale,
-        title,
-        project.tagline[locale],
-        facts,
-        campaign.targetUrl,
         tags,
-      ),
-      campaignId: campaign.campaignId,
-      channel: id,
-      delivery: blueprint.delivery,
-      format: blueprint.format,
-      locale,
-      tags,
-      targetUrl: campaign.targetUrl,
-      title,
-    }
+        targetUrl: campaign.targetUrl,
+        title,
+      }
+    })
   })
 }
 
@@ -55,6 +59,8 @@ function generateBody(
   tags: string[],
 ): string {
   if (blueprint.format === 'article')
+    return fitBody(articleParts(locale, title, tagline, facts, targetUrl, tags), blueprint.maxBodyLength)
+  if (blueprint.format === 'image-text')
     return fitBody(articleParts(locale, title, tagline, facts, targetUrl, tags), blueprint.maxBodyLength)
   if (blueprint.format === 'video-metadata')
     return fitBody(videoParts(locale, tagline, facts, targetUrl, tags), blueprint.maxBodyLength)

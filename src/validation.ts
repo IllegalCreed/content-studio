@@ -3,6 +3,7 @@ import type {
   CaptureFlow,
   CaptureStep,
   ChannelId,
+  ContentFormat,
   Locale,
   LocalizedText,
   ProjectAccessMode,
@@ -25,6 +26,12 @@ const IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const SENSITIVE_KEY_PATTERN
   = /cookie|credential|keychain|password|secret|token|api[-_]?key/i
 const LOCALES = new Set<Locale>(['en', 'zh-CN'])
+const CONTENT_FORMATS = new Set<ContentFormat>([
+  'article',
+  'image-text',
+  'short-post',
+  'video-metadata',
+])
 const GOALS = new Set<CampaignSpec['goal']>([
   'education',
   'feedback',
@@ -434,7 +441,11 @@ function parseChannels(
     )
     if (!LOCALES.has(locale as Locale) || !projectLocales.includes(locale as Locale))
       throw new Error(`Unsupported project locale: ${locale}`)
+    const contentFormats = value.contentFormats === undefined
+      ? undefined
+      : parseChannelContentFormats(value.contentFormats, id as ChannelId)
     return {
+      ...(contentFormats === undefined ? {} : { contentFormats }),
       id: id as ChannelId,
       locale: locale as Locale,
     }
@@ -444,6 +455,27 @@ function parseChannels(
     'channel/locale pair',
   )
   return channels
+}
+
+function parseChannelContentFormats(
+  input: unknown,
+  channel: ChannelId,
+): ContentFormat[] {
+  const formats = parseStringArray(input, 'channel.contentFormats')
+  if (formats.length === 0)
+    throw new TypeError('channel.contentFormats must not be empty')
+  const parsed = formats.map((format) => {
+    if (!CONTENT_FORMATS.has(format as ContentFormat))
+      throw new Error(`Unsupported content form: ${format}`)
+    if (!CHANNEL_BLUEPRINTS[channel].supportedFormats.includes(format as ContentFormat)) {
+      throw new Error(
+        `Channel ${channel} does not support content form: ${format}`,
+      )
+    }
+    return format as ContentFormat
+  })
+  assertUnique(parsed, 'channel content form')
+  return parsed
 }
 
 function parseCampaignVideo(

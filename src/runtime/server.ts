@@ -13,6 +13,7 @@ import type {
   ActivityRevisionInput,
   ChannelContentFormat,
   ChannelId,
+  ContentFormat,
   ContentStudioGlobalView,
   ContentStudioProjectIndex,
   ContentStudioProjectView,
@@ -103,7 +104,18 @@ const ACTIVITY_STATUSES = new Set([
   'draft',
   'planned',
 ])
-const CONTENT_FORMATS = new Set<ChannelContentFormat>(['article', 'video'])
+const CONTENT_FORMATS = new Set<ChannelContentFormat>([
+  'article',
+  'image-text',
+  'short-post',
+  'video',
+])
+const CAMPAIGN_CONTENT_FORMATS = new Set<ContentFormat>([
+  'article',
+  'image-text',
+  'short-post',
+  'video-metadata',
+])
 const DELIVERY_MODES = new Set<DeliveryMode>([
   'automatic-candidate',
   'content-only',
@@ -1660,7 +1672,14 @@ function channelsField(input: unknown): CreatePublishingActivityInput['channels'
     const locale = stringField(value.locale, `channels[${index}].locale`)
     if (!LOCALES.has(locale as Locale))
       throw new RequestError(400, `Unsupported locale: ${locale}`)
-    return { id: id as CreatePublishingActivityInput['channels'][number]['id'], locale: locale as Locale }
+    const contentFormats = value.contentFormats === undefined
+      ? undefined
+      : campaignContentFormatsField(value.contentFormats, id as ChannelId, index)
+    return {
+      ...(contentFormats === undefined ? {} : { contentFormats }),
+      id: id as CreatePublishingActivityInput['channels'][number]['id'],
+      locale: locale as Locale,
+    }
   })
   const ids = new Set<string>()
   for (const channel of channels) {
@@ -1669,6 +1688,25 @@ function channelsField(input: unknown): CreatePublishingActivityInput['channels'
     ids.add(channel.id)
   }
   return channels
+}
+
+function campaignContentFormatsField(
+  input: unknown,
+  channel: ChannelId,
+  channelIndex: number,
+): ContentFormat[] {
+  const formats = stringListField(input, `channels[${channelIndex}].contentFormats`)
+  return formats.map((format) => {
+    if (!CAMPAIGN_CONTENT_FORMATS.has(format as ContentFormat))
+      throw new RequestError(400, `Unsupported content form: ${format}`)
+    if (!CHANNEL_BLUEPRINTS[channel].supportedFormats.includes(format as ContentFormat)) {
+      throw new RequestError(
+        400,
+        `Channel ${channel} does not support content form: ${format}`,
+      )
+    }
+    return format as ContentFormat
+  })
 }
 
 function localizedTextField(input: unknown, name: string): CreatePublishingActivityInput['topic'] {

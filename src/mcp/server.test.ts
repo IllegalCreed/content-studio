@@ -76,6 +76,7 @@ const snapshot: ProjectSnapshot = {
 }
 
 function createFixture(options: {
+  includeBilibili?: boolean
   ownerTakeovers?: OwnerTakeoverRegistry
   taskStore?: InMemoryExecutionTaskStore
 } = {}) {
@@ -91,6 +92,14 @@ function createFixture(options: {
     enabled: true,
     projectId,
   })
+  if (options.includeBilibili === true) {
+    service.bindProjectChannel({
+      channel: 'bilibili',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId,
+    })
+  }
   return createContentStudioMcpServer({
     ownerTakeovers: options.ownerTakeovers,
     projectId,
@@ -356,6 +365,25 @@ describe('content Studio local MCP server', () => {
           type: 'string',
         },
       })
+    const channelSchema = (createActivityTool?.inputSchema as {
+      properties: {
+        channels: {
+          items: {
+            properties: {
+              contentFormats: unknown
+            }
+          }
+        }
+      }
+    }).properties.channels.items.properties
+    expect(channelSchema.contentFormats).toMatchObject({
+      items: {
+        enum: ['article', 'image-text', 'short-post', 'video-metadata'],
+      },
+      minItems: 1,
+      type: 'array',
+      uniqueItems: true,
+    })
     await expect(server.handleMessage({
       jsonrpc: '2.0',
       id: 13,
@@ -407,6 +435,48 @@ describe('content Studio local MCP server', () => {
       params: { uri: 42 },
     })).resolves.toMatchObject({
       error: { code: -32602 },
+    })
+  })
+
+  it('lets the AI host select multiple content forms for one channel', async () => {
+    const server = createFixture({ includeBilibili: true })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'multi-form-activity',
+      method: 'tools/call',
+      params: {
+        name: 'create_publishing_activity',
+        arguments: {
+          activityId: 'bilibili-multi-form',
+          campaignId: 'bilibili-multi-form',
+          channels: [{
+            contentFormats: ['video-metadata', 'image-text', 'short-post'],
+            id: 'bilibili',
+            locale: 'zh-CN',
+          }],
+          goal: 'education',
+          projectId,
+          projectSnapshotId: snapshot.snapshotId,
+          status: 'draft',
+          targetUrl: 'https://example.com/quick-sort/',
+          topic: {
+            'en': 'Explain quick sort',
+            'zh-CN': '讲解快速排序',
+          },
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          channels: [{
+            contentFormats: ['video-metadata', 'image-text', 'short-post'],
+            id: 'bilibili',
+            locale: 'zh-CN',
+          }],
+        },
+      },
     })
   })
 
