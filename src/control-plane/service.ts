@@ -622,6 +622,7 @@ export class ContentStudioApplicationService {
         ),
         artifact => artifact.artifactId,
       ),
+      channelBlueprints: clone(CHANNEL_BLUEPRINTS),
       channelContents: latestById(
         this.repository.listChannelContents(projectId),
         content => content.contentId,

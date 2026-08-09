@@ -4,10 +4,33 @@ import type {
   ChannelBlueprint,
   ChannelId,
   ContentFormat,
+  ContentFormBlueprint,
+  ContentMediaRequirement,
   StorageRetentionPolicy,
   VideoFormat,
   VideoViewport,
 } from './types'
+
+const CONTENT_MEDIA_REQUIREMENTS = {
+  none: {
+    allowedKinds: [],
+    maxCount: 0,
+    minCount: 0,
+  },
+  optionalImage: {
+    allowedKinds: ['image'],
+    minCount: 0,
+  },
+  requiredImage: {
+    allowedKinds: ['image'],
+    minCount: 1,
+  },
+  requiredVideo: {
+    allowedKinds: ['video'],
+    maxCount: 1,
+    minCount: 1,
+  },
+} as const satisfies Record<string, ContentMediaRequirement>
 
 export const CHANNEL_BLUEPRINTS = {
   'bilibili': blueprint(
@@ -15,7 +38,15 @@ export const CHANNEL_BLUEPRINTS = {
     'video-metadata',
     80,
     2000,
-    ['video-metadata', 'image-text', 'short-post'],
+    [
+      contentForm('image-text', 80, 2000),
+      contentForm(
+        'short-post',
+        80,
+        2000,
+        CONTENT_MEDIA_REQUIREMENTS.optionalImage,
+      ),
+    ],
   ),
   'bluesky': blueprint('automatic-candidate', 'short-post', 80, 300),
   'dev': blueprint('automatic-candidate', 'article', 128, 12000),
@@ -128,13 +159,42 @@ function blueprint(
   format: ChannelBlueprint['format'],
   maxTitleLength: number,
   maxBodyLength: number,
-  supportedFormats: readonly ContentFormat[] = [format],
+  additionalContentForms: readonly ContentFormBlueprint[] = [],
 ): ChannelBlueprint {
+  const contentForms = [
+    contentForm(format, maxTitleLength, maxBodyLength),
+    ...additionalContentForms,
+  ]
   return {
+    contentForms,
     delivery,
     format,
     maxBodyLength,
     maxTitleLength,
-    supportedFormats,
+    supportedFormats: contentForms.map(form => form.format),
   }
+}
+
+function contentForm(
+  format: ContentFormat,
+  maxTitleLength: number,
+  maxBodyLength: number,
+  media: ContentMediaRequirement = defaultMediaRequirement(format),
+): ContentFormBlueprint {
+  return {
+    format,
+    maxBodyLength,
+    maxTitleLength,
+    media,
+  }
+}
+
+function defaultMediaRequirement(format: ContentFormat): ContentMediaRequirement {
+  if (format === 'article')
+    return CONTENT_MEDIA_REQUIREMENTS.optionalImage
+  if (format === 'image-text')
+    return CONTENT_MEDIA_REQUIREMENTS.requiredImage
+  if (format === 'video-metadata')
+    return CONTENT_MEDIA_REQUIREMENTS.requiredVideo
+  return CONTENT_MEDIA_REQUIREMENTS.none
 }

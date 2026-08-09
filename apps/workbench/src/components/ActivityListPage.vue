@@ -2,8 +2,10 @@
 import type {
   ChannelContentFormat,
   ChannelId,
+  ContentFormat,
   VideoFormat,
 } from '@content-studio/core-types'
+import ActivityChannelFormats from './ActivityChannelFormats.vue'
 import SelectMenu from './SelectMenu.vue'
 import type {
   CampaignProjection,
@@ -15,6 +17,7 @@ import { humanizeActivityStatus, humanizeStatus } from '../model'
 
 interface ActivityForm {
   channels: ChannelId[]
+  contentFormats: Partial<Record<ChannelId, ContentFormat[]>>
   topic: string
   videoEnabled: boolean
   videoFormat: VideoFormat
@@ -89,6 +92,7 @@ const emit = defineEmits<{
   'save-activity': []
   'save-channel-content': []
   'select-task': [taskId: string]
+  'toggle-activity-channel-format': [channelId: ChannelId, format: ContentFormat]
 }>()
 </script>
 
@@ -110,17 +114,32 @@ const emit = defineEmits<{
         <span>先保存业务对象，AI 内容生成随后接入</span>
       </div>
       <div class="activity-composer-grid">
-        <label>
+        <label class="field-wide">
           活动主题
           <input v-model="props.activityForm.topic" autocomplete="off" name="activity-topic" required placeholder="例如：用动画理解快速排序的分区过程" />
         </label>
-        <fieldset class="channel-choice-field">
+        <fieldset class="channel-choice-field field-wide">
           <legend>目标渠道（可多选）</legend>
-          <label v-for="channel in props.enabledChannels" :key="channel.channel" class="channel-choice">
-            <input v-model="props.activityForm.channels" :name="'activity-channel-' + channel.channel" type="checkbox" :value="channel.channel" />
-            <span><strong>{{ channel.channel }}</strong><small>{{ channel.delivery === '仅生成内容' ? '仅生成内容 · 无需发布账号' : props.projectAccountAlias(channel) ?? '项目账号待绑定' }}</small></span>
-          </label>
-          <small v-if="props.enabledChannels.length === 0" class="form-hint">请先在渠道管理中启用项目渠道。</small>
+          <div class="channel-choice-grid">
+            <div
+              v-for="channel in props.enabledChannels"
+              :key="channel.channel"
+              class="channel-choice-group"
+              :class="{ selected: props.activityForm.channels.includes(channel.channel) }"
+            >
+              <label class="channel-choice">
+                <input v-model="props.activityForm.channels" :name="'activity-channel-' + channel.channel" type="checkbox" :value="channel.channel" />
+                <span><strong>{{ channel.channel }}</strong><small>{{ channel.delivery === '仅生成内容' ? '仅生成内容 · 无需发布账号' : props.projectAccountAlias(channel) ?? '项目账号待绑定' }}</small></span>
+              </label>
+              <ActivityChannelFormats
+                v-if="props.activityForm.channels.includes(channel.channel)"
+                :channel="channel"
+                :selected-formats="props.activityForm.contentFormats[channel.channel] ?? []"
+                @toggle="emit('toggle-activity-channel-format', channel.channel, $event)"
+              />
+            </div>
+            <small v-if="props.enabledChannels.length === 0" class="form-hint">请先在渠道管理中启用项目渠道。</small>
+          </div>
         </fieldset>
         <label class="video-plan-toggle field-wide">
           <span>

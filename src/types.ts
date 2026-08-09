@@ -28,6 +28,21 @@ export type DeliveryMode
 
 export type ContentFormat = 'article' | 'image-text' | 'short-post' | 'video-metadata'
 
+export type ContentMediaKind = 'image' | 'video'
+
+export interface ContentMediaRequirement {
+  allowedKinds: readonly ContentMediaKind[]
+  maxCount?: number
+  minCount: number
+}
+
+export interface ContentFormBlueprint {
+  format: ContentFormat
+  maxBodyLength: number
+  maxTitleLength: number
+  media: ContentMediaRequirement
+}
+
 export type VideoFormat = 'landscape' | 'portrait' | 'square'
 
 export type VideoColorScheme = 'dark' | 'light' | 'no-preference'
@@ -232,6 +247,7 @@ export interface ProjectSnapshot {
 export interface ContentStudioProjectView {
   activities: PublishingActivity[]
   activityArtifacts: ActivityArtifact[]
+  channelBlueprints: Readonly<Record<ChannelId, ChannelBlueprint>>
   channelContents: ChannelContent[]
   compositionReceipts: CompositionAttemptReceipt[]
   contentGroups: ContentGroup[]
@@ -620,6 +636,7 @@ export interface ContentStudioReport {
 }
 
 export interface ChannelBlueprint {
+  contentForms: readonly ContentFormBlueprint[]
   delivery: DeliveryMode
   format: ContentFormat
   maxBodyLength: number

@@ -610,6 +610,11 @@ export function activityToCampaign({
         asset.assetId === artifactId || asset.sourceArtifactId === artifactId,
       )),
   )
+  const channelContentFormatEntries = activity.channels.flatMap(channel =>
+    channel.contentFormats === undefined
+      ? []
+      : [[channel.id, [...channel.contentFormats]] as const],
+  )
   return {
     activityArtifacts: activityArtifactProjections(
       activityArtifacts.filter(artifact => artifact.activityId === activity.activityId),
@@ -625,6 +630,11 @@ export function activityToCampaign({
             : '草稿',
     assets: referencedAssetIds.size,
     campaignId: activity.activityId,
+    ...(channelContentFormatEntries.length === 0
+      ? {}
+      : {
+          channelContentFormats: Object.fromEntries(channelContentFormatEntries),
+        }),
     channels: activity.channels.map(channel => channel.id),
     contentGroups: groups,
     executionStatus: videoTask?.status ?? 'queued',

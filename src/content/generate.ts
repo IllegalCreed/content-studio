@@ -1,6 +1,6 @@
 import type {
   CampaignSpec,
-  ChannelBlueprint,
+  ContentFormBlueprint,
   ContentPackage,
   Locale,
   ProjectManifest,
@@ -20,15 +20,15 @@ export function generateContentPackages(
     const blueprint = CHANNEL_BLUEPRINTS[id]
     const formats = contentFormats ?? [blueprint.format]
     return formats.map((format) => {
-      const formatBlueprint = { ...blueprint, format }
+      const contentForm = blueprint.contentForms.find(candidate => candidate.format === format)!
       const facts = campaign.highlights.map(
         factId => factsById.get(factId)!.text[locale],
       )
-      const title = fitTitle(campaign.topic[locale], formatBlueprint.maxTitleLength)
+      const title = fitTitle(campaign.topic[locale], contentForm.maxTitleLength)
       const tags = campaign.tags.map(tag => `#${tag}`)
       return {
         body: generateBody(
-          formatBlueprint,
+          contentForm,
           locale,
           title,
           project.tagline[locale],
@@ -38,7 +38,7 @@ export function generateContentPackages(
         ),
         campaignId: campaign.campaignId,
         channel: id,
-        delivery: formatBlueprint.delivery,
+        delivery: blueprint.delivery,
         format,
         locale,
         tags,
@@ -50,7 +50,7 @@ export function generateContentPackages(
 }
 
 function generateBody(
-  blueprint: ChannelBlueprint,
+  contentForm: ContentFormBlueprint,
   locale: Locale,
   title: string,
   tagline: string,
@@ -58,13 +58,13 @@ function generateBody(
   targetUrl: string,
   tags: string[],
 ): string {
-  if (blueprint.format === 'article')
-    return fitBody(articleParts(locale, title, tagline, facts, targetUrl, tags), blueprint.maxBodyLength)
-  if (blueprint.format === 'image-text')
-    return fitBody(articleParts(locale, title, tagline, facts, targetUrl, tags), blueprint.maxBodyLength)
-  if (blueprint.format === 'video-metadata')
-    return fitBody(videoParts(locale, tagline, facts, targetUrl, tags), blueprint.maxBodyLength)
-  return fitBody(shortParts(title, tagline, facts, targetUrl, tags), blueprint.maxBodyLength)
+  if (contentForm.format === 'article')
+    return fitBody(articleParts(locale, title, tagline, facts, targetUrl, tags), contentForm.maxBodyLength)
+  if (contentForm.format === 'image-text')
+    return fitBody(articleParts(locale, title, tagline, facts, targetUrl, tags), contentForm.maxBodyLength)
+  if (contentForm.format === 'video-metadata')
+    return fitBody(videoParts(locale, tagline, facts, targetUrl, tags), contentForm.maxBodyLength)
+  return fitBody(shortParts(title, tagline, facts, targetUrl, tags), contentForm.maxBodyLength)
 }
 
 function articleParts(

@@ -4,6 +4,8 @@ import type {
   ChannelContentFormat,
   ChannelId,
   ContentFormat,
+  ContentFormBlueprint,
+  ContentMediaRequirement,
   DeliveryMode,
   ExecutionTask,
   ExecutionTaskEvent,
@@ -63,6 +65,15 @@ export interface ReportProjection {
 }
 
 export type HumanizedChannelContentFormat = '文章' | '图文' | '动态' | '视频'
+
+export interface ChannelContentFormProjection {
+  bodyLimit: number
+  format: ContentFormat
+  isDefault: boolean
+  label: HumanizedChannelContentFormat
+  mediaSummary: string
+  titleLimit: number
+}
 
 function fileName(relativePath: string): string {
   const segments = relativePath.split(/[\\/]/u)
@@ -563,6 +574,7 @@ export interface ChannelProjection {
   alias: string | null
   bodyLimit: number
   channel: ChannelId
+  contentForms?: ChannelContentFormProjection[]
   delivery: '全自动候选' | '人工辅助' | '仅生成内容'
   projectAccountId: string | null
   enabled: boolean
@@ -598,6 +610,7 @@ export interface ChannelAccountProjection {
 export interface CampaignProjection {
   assets: number
   campaignId: string
+  channelContentFormats?: Partial<Record<ChannelId, ContentFormat[]>>
   channels: ChannelId[]
   contentGroups: ContentGroupProjection[]
   executionStatus: CampaignJobStatus
@@ -727,6 +740,57 @@ function formatLabel(format: ContentFormat): ChannelProjection['format'] {
         : '视频信息'
 }
 
+export function humanizeContentFormat(
+  format: ContentFormat,
+): HumanizedChannelContentFormat {
+  return format === 'video-metadata'
+    ? '视频'
+    : format === 'image-text'
+      ? '图文'
+      : format === 'short-post'
+        ? '动态'
+        : '文章'
+}
+
+export function mediaRequirementSummary(
+  media: ContentMediaRequirement,
+): string {
+  if (media.allowedKinds.length === 0)
+    return '无需媒体'
+  const mediaLabel = media.allowedKinds
+    .map(kind => kind === 'image' ? '图片' : '视频')
+    .join('或')
+  const counter = media.allowedKinds.length === 1 && media.allowedKinds[0] === 'image'
+    ? '张'
+    : '个'
+  if (media.minCount === 0) {
+    return media.maxCount === undefined
+      ? `可选${mediaLabel}`
+      : `最多 ${media.maxCount} ${counter}${mediaLabel}`
+  }
+  if (media.maxCount === media.minCount) {
+    return `需要 ${media.minCount} ${counter}${mediaLabel}`
+  }
+  if (media.maxCount !== undefined) {
+    return `需要 ${media.minCount}–${media.maxCount} ${counter}${mediaLabel}`
+  }
+  return `至少 ${media.minCount} ${counter}${mediaLabel}`
+}
+
+function contentFormProjection(
+  form: ContentFormBlueprint,
+  defaultFormat: ContentFormat,
+): ChannelContentFormProjection {
+  return {
+    bodyLimit: form.maxBodyLength,
+    format: form.format,
+    isDefault: form.format === defaultFormat,
+    label: humanizeContentFormat(form.format),
+    mediaSummary: mediaRequirementSummary(form.media),
+    titleLimit: form.maxTitleLength,
+  }
+}
+
 function completeChannelDirectory(
   channels: readonly ChannelProjection[],
 ): ChannelProjection[] {
@@ -737,9 +801,13 @@ function completeChannelDirectory(
     const configured = configuredChannels.get(channelId)
     const blueprint = CHANNEL_BLUEPRINTS[channelId]
     const supportedFormats = blueprint.supportedFormats.map(formatLabel)
+    const contentForms = blueprint.contentForms.map(form =>
+      contentFormProjection(form, blueprint.format),
+    )
     if (configured !== undefined) {
       return {
         ...configured,
+        contentForms,
         supportedFormats: configured.supportedFormats ?? supportedFormats,
       }
     }
@@ -749,6 +817,7 @@ function completeChannelDirectory(
       alias: null,
       bodyLimit: blueprint.maxBodyLength,
       channel: channelId,
+      contentForms,
       delivery: deliveryLabel(blueprint.delivery),
       enabled: false,
       format: formatLabel(blueprint.format),

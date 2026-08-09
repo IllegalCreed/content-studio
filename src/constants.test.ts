@@ -12,6 +12,35 @@ describe('channel blueprints', () => {
       'image-text',
       'short-post',
     ])
+    expect(CHANNEL_BLUEPRINTS.bilibili.contentForms).toEqual([
+      expect.objectContaining({
+        format: 'video-metadata',
+        media: {
+          allowedKinds: ['video'],
+          maxCount: 1,
+          minCount: 1,
+        },
+      }),
+      expect.objectContaining({
+        format: 'image-text',
+        media: {
+          allowedKinds: ['image'],
+          minCount: 1,
+        },
+      }),
+      expect.objectContaining({
+        format: 'short-post',
+        media: {
+          allowedKinds: ['image'],
+          minCount: 0,
+        },
+      }),
+    ])
+    for (const blueprint of Object.values(CHANNEL_BLUEPRINTS)) {
+      expect(blueprint.contentForms.map(form => form.format))
+        .toEqual(blueprint.supportedFormats)
+      expect(blueprint.contentForms[0]?.format).toBe(blueprint.format)
+    }
     expect(CHANNEL_BLUEPRINTS.wechat.delivery).toBe('content-only')
     expect(CHANNEL_BLUEPRINTS.xiaohongshu.delivery).toBe('content-only')
   })

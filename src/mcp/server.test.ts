@@ -219,14 +219,15 @@ describe('content Studio local MCP server', () => {
       },
     })
 
-    await expect(server.handleMessage({
+    const viewResponse = await server.handleMessage({
       jsonrpc: '2.0',
       id: 3,
       method: 'resources/read',
       params: {
         uri: `content-studio://projects/${projectId}/view`,
       },
-    })).resolves.toMatchObject({
+    })
+    expect(viewResponse).toMatchObject({
       result: {
         cacheScope: 'private',
         resultType: 'complete',
@@ -238,6 +239,32 @@ describe('content Studio local MCP server', () => {
         ],
       },
     })
+    const viewText = (viewResponse?.result as {
+      contents: Array<{ text: string }>
+    }).contents[0]?.text
+    expect(viewText).toBeDefined()
+    const viewPayload = JSON.parse(viewText!) as {
+      channelBlueprints: {
+        bilibili: {
+          contentForms: Array<{
+            format: string
+            media: { allowedKinds: string[] }
+          }>
+        }
+      }
+    }
+    expect(viewPayload.channelBlueprints.bilibili.contentForms).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          format: 'image-text',
+          media: expect.objectContaining({ allowedKinds: ['image'] }),
+        }),
+        expect.objectContaining({
+          format: 'short-post',
+          media: expect.objectContaining({ allowedKinds: ['image'] }),
+        }),
+      ]),
+    )
 
     await expect(server.handleMessage({
       jsonrpc: '2.0',

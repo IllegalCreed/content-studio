@@ -4,10 +4,13 @@ import type {
   ExecutionTaskEvent,
 } from '@content-studio/core-types'
 import { describe, expect, it } from 'vitest'
+import { CHANNEL_BLUEPRINTS } from '../../../src/constants'
 import {
   humanizeChannelContentFormat,
+  humanizeContentFormat,
   humanizeTaskEventKind,
   isPublishingAssistantChannel,
+  mediaRequirementSummary,
   recordingReceiptToVideoJob,
   snapshot,
   taskEventSummary,
@@ -35,6 +38,7 @@ function projectView(overrides: Partial<ContentStudioProjectView> = {}): Content
       version: 1,
     }],
     activityArtifacts: [],
+    channelBlueprints: CHANNEL_BLUEPRINTS,
     channelContents: [{
       activityId: 'activity-a',
       artifactIds: [],
@@ -127,6 +131,24 @@ describe('channel delivery projection', () => {
     expect(isPublishingAssistantChannel(ownerAssisted!)).toBe(true)
     expect(snapshot.channels.find(channel => channel.channel === 'bilibili')?.supportedFormats)
       .toEqual(['视频信息', '图文', '短帖'])
+    expect(snapshot.channels.find(channel => channel.channel === 'bilibili')?.contentForms)
+      .toEqual([
+        expect.objectContaining({
+          format: 'video-metadata',
+          label: '视频',
+          mediaSummary: '需要 1 个视频',
+        }),
+        expect.objectContaining({
+          format: 'image-text',
+          label: '图文',
+          mediaSummary: '至少 1 张图片',
+        }),
+        expect.objectContaining({
+          format: 'short-post',
+          label: '动态',
+          mediaSummary: '可选图片',
+        }),
+      ])
     expect(snapshot.channels).toHaveLength(19)
   })
 })
@@ -563,5 +585,34 @@ describe('execution task projection', () => {
     expect(humanizeChannelContentFormat('image-text')).toBe('图文')
     expect(humanizeChannelContentFormat('short-post')).toBe('动态')
     expect(humanizeChannelContentFormat('video')).toBe('视频')
+    expect(humanizeContentFormat('video-metadata')).toBe('视频')
+    expect(humanizeContentFormat('image-text')).toBe('图文')
+  })
+
+  it('summarizes media requirements without hiding optional or bounded counts', () => {
+    expect(mediaRequirementSummary({
+      allowedKinds: [],
+      maxCount: 0,
+      minCount: 0,
+    })).toBe('无需媒体')
+    expect(mediaRequirementSummary({
+      allowedKinds: ['image'],
+      minCount: 0,
+    })).toBe('可选图片')
+    expect(mediaRequirementSummary({
+      allowedKinds: ['video'],
+      maxCount: 2,
+      minCount: 0,
+    })).toBe('最多 2 个视频')
+    expect(mediaRequirementSummary({
+      allowedKinds: ['video'],
+      maxCount: 1,
+      minCount: 1,
+    })).toBe('需要 1 个视频')
+    expect(mediaRequirementSummary({
+      allowedKinds: ['image', 'video'],
+      maxCount: 3,
+      minCount: 1,
+    })).toBe('需要 1–3 个图片或视频')
   })
 })

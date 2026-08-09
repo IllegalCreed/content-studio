@@ -12,6 +12,7 @@ import type {
 } from '../types'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { CHANNEL_BLUEPRINTS } from '../constants'
 import { InMemoryExecutionTaskStore } from '../jobs/task'
 import {
   ContentStudioApplicationService,
@@ -610,6 +611,7 @@ describe('content studio application service', () => {
     expect(service.getProjectView('project-a')).toEqual({
       activities: [activity],
       activityArtifacts: [],
+      channelBlueprints: CHANNEL_BLUEPRINTS,
       channelContents: [],
       compositionReceipts: [],
       contentGroups: [],

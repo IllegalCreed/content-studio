@@ -134,6 +134,24 @@ const selectedChannelReferenceCount = computed(() =>
         <div><span>平台支持的指标</span><strong>{{ selectedMetrics }}</strong></div>
         <div><span>账号/适配器状态</span><strong>{{ selectedAccountAction }}</strong></div>
       </div>
+      <div v-if="props.selectedChannel.contentForms?.length" class="channel-form-specs" data-testid="channel-form-specs">
+        <div class="channel-form-specs-heading">
+          <div>
+            <p class="eyebrow">逐形态规格</p>
+            <strong>按本次活动选择的内容形态准备文字和媒体</strong>
+          </div>
+          <small>这些是本地能力提示；最终发布仍由授权流程复核。</small>
+        </div>
+        <ul class="channel-form-spec-list">
+          <li v-for="form in props.selectedChannel.contentForms" :key="form.format">
+            <div>
+              <strong>{{ form.label }}<span v-if="form.isDefault" class="channel-form-default">默认</span></strong>
+              <small>{{ form.mediaSummary }}</small>
+            </div>
+            <span>标题 {{ form.titleLimit }} 字 · 正文 {{ form.bodyLimit }} 字</span>
+          </li>
+        </ul>
+      </div>
       <p class="channel-boundary-note">{{ isPublishingAssistantChannel(props.selectedChannel) ? `状态来源：${props.selectedChannelAccount?.statusSource === 'marketing-ops' ? 'marketing-ops 只读快照' : '尚未读取该渠道的 marketing-ops 状态'}。` : '该渠道只生成内容，不读取 marketing-ops 账号状态，也不创建发布任务。' }} 这里只展示能力和状态，不保存凭据，也不会因为“已就绪”自动获得发布权限。</p>
     </article>
   </section>

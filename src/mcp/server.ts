@@ -373,7 +373,7 @@ function toolDefinitions(): Array<Record<string, unknown>> {
         openWorldHint: false,
         readOnlyHint: true,
       },
-      description: '读取当前项目的事实、活动、内容、素材和任务快照。不会执行外部发布。',
+      description: '读取当前项目的事实、活动、内容、渠道逐形态规格、素材和任务快照。不会执行外部发布。',
       inputSchema: projectIdSchema(),
       name: 'get_project_view',
       title: '读取项目工作视图',

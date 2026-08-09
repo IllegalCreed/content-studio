@@ -102,7 +102,11 @@ describe('workbench runtime projections', () => {
     const activity: PublishingActivity = {
       activityId: 'activity-a',
       campaignId: 'activity-a',
-      channels: [{ id: 'github', locale: 'en' }],
+      channels: [{
+        contentFormats: ['article'],
+        id: 'github',
+        locale: 'en',
+      }],
       goal: 'education',
       projectId: 'project-a',
       projectSnapshotId: 'snapshot-a',
@@ -155,6 +159,7 @@ describe('workbench runtime projections', () => {
 
     expect(campaign).toMatchObject({
       activityStatus: '已规划',
+      channelContentFormats: { github: ['article'] },
       channels: ['github'],
       contentGroups: [{ contents: [{ accountAlias: '项目账号', title: 'Channel article' }] }],
       handoffs: [{ handoffId: 'handoff-a', status: 'waiting' }],

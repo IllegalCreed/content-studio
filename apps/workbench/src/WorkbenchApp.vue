@@ -39,6 +39,7 @@ import type {
   CreatePublishingActivityInput,
   CreateChannelContentInput,
   CreateContentGroupInput,
+  ContentFormat,
   ActivityArtifact,
   ContentStudioGlobalProjectView,
   ContentStudioGlobalView,
@@ -52,6 +53,7 @@ import type {
 } from '@content-studio/core-types'
 import {
   humanizeActivityStatus,
+  humanizeContentFormat,
   humanizeTaskEventKind,
   humanizeStatus,
   isPublishingAssistantChannel,
@@ -292,6 +294,7 @@ const emptyTask: WorkbenchSnapshot['tasks'][number] = {
 }
 const activityForm = reactive<{
   channels: ChannelId[]
+  contentFormats: Partial<Record<ChannelId, ContentFormat[]>>
   topic: string
   videoEnabled: boolean
   videoFormat: VideoFormat
@@ -299,6 +302,7 @@ const activityForm = reactive<{
   videoWidth: number
 }>({
   channels: ['github'],
+  contentFormats: { github: ['article'] },
   topic: '',
   videoEnabled: false,
   videoFormat: 'landscape',
@@ -325,13 +329,6 @@ const channelBindingForm = reactive<{
 }>({
   accountRef: snapshot.channels[0]?.projectAccountId ?? '',
 })
-
-const contentFormatOptions = [
-  { label: '文章', value: 'article' },
-  { label: '图文', value: 'image-text' },
-  { label: '动态', value: 'short-post' },
-  { label: '视频', value: 'video' },
-]
 
 const contentLocaleOptions = [
   { label: '中文', value: 'zh-CN' },
@@ -416,6 +413,33 @@ const selectedCampaign = computed(() =>
     campaign => campaign.campaignId === selectedCampaignId.value,
   ) ?? snapshot.campaigns[0] ?? emptyCampaign,
 )
+
+function channelContentFormat(format: ContentFormat): ChannelContentFormat {
+  return format === 'video-metadata' ? 'video' : format
+}
+
+function availableCampaignContentFormats(channelId: ChannelId): ContentFormat[] {
+  const selected = selectedCampaign.value.channelContentFormats?.[channelId]
+  if (selected !== undefined)
+    return selected
+  return snapshot.channels
+    .find(channel => channel.channel === channelId)
+    ?.contentForms
+    ?.map(form => form.format) ?? []
+}
+
+const contentFormatOptions = computed(() =>
+  availableCampaignContentFormats(contentForm.channel).map(format => ({
+    label: humanizeContentFormat(format),
+    value: channelContentFormat(format),
+  })),
+)
+
+watch(contentFormatOptions, (options) => {
+  if (options.some(option => option.value === contentForm.format))
+    return
+  contentForm.format = options[0]?.value ?? 'article'
+}, { immediate: true })
 
 const selectedCampaignIsRuntime = computed(() =>
   runtimeActivityIds.value.has(selectedCampaign.value.campaignId),
@@ -1120,8 +1144,23 @@ async function saveChannelBinding(): Promise<void> {
   }
 }
 
+function defaultActivityContentFormats(channel: ChannelProjection): ContentFormat[] {
+  const defaultFormats = channel.contentForms
+    ?.filter(form => form.isDefault)
+    .map(form => form.format) ?? []
+  return defaultFormats.length > 0
+    ? defaultFormats
+    : channel.contentForms?.slice(0, 1).map(form => form.format) ?? []
+}
+
 function openActivityComposer(): void {
   activityForm.channels = enabledChannels.value.slice(0, 1).map(channel => channel.channel)
+  activityForm.contentFormats = Object.fromEntries(
+    enabledChannels.value.map(channel => [
+      channel.channel,
+      defaultActivityContentFormats(channel),
+    ]),
+  )
   activityForm.topic = ''
   activityForm.videoEnabled = false
   activityForm.videoFormat = 'landscape'
@@ -1129,6 +1168,20 @@ function openActivityComposer(): void {
   activityForm.videoWidth = 1920
   activitySaveError.value = null
   activityComposerOpen.value = true
+}
+
+function toggleActivityChannelFormat(
+  channelId: ChannelId,
+  format: ContentFormat,
+): void {
+  const selected = activityForm.contentFormats[channelId] ?? []
+  if (selected.includes(format)) {
+    if (selected.length === 1)
+      return
+    activityForm.contentFormats[channelId] = selected.filter(candidate => candidate !== format)
+    return
+  }
+  activityForm.contentFormats[channelId] = [...selected, format]
 }
 
 function closeActivityComposer(): void {
@@ -1140,7 +1193,7 @@ function openContentComposer(): void {
   contentForm.body = ''
   contentForm.channel = selectedCampaign.value.channels[0] ?? enabledChannels.value[0]?.channel ?? 'github'
   contentForm.coreMessage = selectedCampaign.value.topic
-  contentForm.format = 'article'
+  contentForm.format = contentFormatOptions.value[0]?.value ?? 'article'
   contentForm.locale = 'zh-CN'
   contentForm.title = ''
   contentSaveError.value = null
@@ -1392,6 +1445,13 @@ async function saveActivity(): Promise<void> {
       activitySaveError.value = '至少选择一个项目渠道'
     return
   }
+  const channelWithoutContentFormat = activityForm.channels.find(channel =>
+    (activityForm.contentFormats[channel]?.length ?? 0) === 0,
+  )
+  if (channelWithoutContentFormat !== undefined) {
+    activitySaveError.value = `${channelWithoutContentFormat} 至少选择一种内容形态`
+    return
+  }
   if (activityForm.videoEnabled && projectCaptureFlowIds.value.length === 0) {
     activitySaveError.value = '当前项目没有登记可录制流程，暂时不能创建视频制作计划'
     return
@@ -1402,7 +1462,11 @@ async function saveActivity(): Promise<void> {
   const input: CreatePublishingActivityInput = {
     activityId,
     campaignId: activityId,
-    channels: activityForm.channels.map(channel => ({ id: channel, locale: 'zh-CN' })),
+    channels: activityForm.channels.map(channel => ({
+      contentFormats: [...activityForm.contentFormats[channel]!],
+      id: channel,
+      locale: 'zh-CN',
+    })),
     goal: 'education',
     projectId: snapshot.project.projectId,
     projectSnapshotId: currentSnapshotId.value,
@@ -1713,6 +1777,7 @@ async function openProjectSpace(projectId: string): Promise<void> {
         @save-activity="saveActivity"
         @save-channel-content="saveChannelContent"
         @select-task="selectTask"
+        @toggle-activity-channel-format="toggleActivityChannelFormat"
         />
       </template>
       <template v-else-if="activeModule === 'tasks' || activeModule === 'project-tasks'">
