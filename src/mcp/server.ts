@@ -4,6 +4,7 @@ import type { ContentStudioApplicationService } from '../control-plane/service'
 import type { OwnerTakeoverRegistry } from '../jobs/owner-takeover'
 import type { ProductionWorker, ProductionWorkerJob } from '../jobs/worker'
 import type {
+  CompositionAttemptReceipt,
   CreateActivityContentPackInput,
   ExecutionTask,
   ExecutionTaskEvent,
@@ -281,7 +282,7 @@ function projectResources(projectId: string): Array<Record<string, string>> {
     resource(
       `content-studio://projects/${projectId}/tasks`,
       '执行任务',
-      '项目下制作、发布和监测任务的只读列表。',
+      '项目下制作、发布和监测任务、事件及本地合成回执的只读列表。',
     ),
     resource(
       `content-studio://projects/${projectId}/assets`,
@@ -337,6 +338,7 @@ function readResource(
           }
         : kind === 'tasks'
           ? {
+              compositionReceipts: view.compositionReceipts,
               taskEvents: view.taskEvents,
               tasks: view.tasks,
             }
@@ -1139,7 +1141,11 @@ function confirmOwnerTakeover(
 function getTask(
   input: unknown,
   options: ContentStudioMcpServerOptions,
-): { events: ReturnType<ContentStudioApplicationService['listTaskEvents']>, task: ExecutionTask } {
+): {
+  compositionReceipts: ReturnType<ContentStudioApplicationService['listCompositionReceipts']>
+  events: ReturnType<ContentStudioApplicationService['listTaskEvents']>
+  task: ExecutionTask
+} {
   const value = scopedRecord(input, options.projectId, ['projectId', 'taskId'])
   const taskId = identifierField(value.taskId, 'taskId')
   const view = options.service.getProjectView(value.projectId)
@@ -1147,6 +1153,7 @@ function getTask(
   if (task === undefined)
     throw new RecordNotFoundError('Task', taskId)
   return {
+    compositionReceipts: options.service.listCompositionReceipts(value.projectId, taskId),
     events: options.service.listTaskEvents(value.projectId, taskId),
     task,
   }
@@ -1160,7 +1167,11 @@ function startMcpProductionTask(
   const task = options.service.startProductionTask(handle.projectId, handle.taskId)
   enqueueMcpProductionTask(options, task)
   const events = options.service.listTaskEvents(handle.projectId, handle.taskId)
-  return toMcpTask(task, events)
+  return toMcpTask(
+    task,
+    events,
+    options.service.listCompositionReceipts(handle.projectId, handle.taskId),
+  )
 }
 
 function changeTask(
@@ -1210,7 +1221,11 @@ function getMcpTask(
   const task = requireTask(view.tasks, handle.taskId)
   const events = options.service.listTaskEvents(handle.projectId, handle.taskId)
   return {
-    ...toMcpTask(task, events),
+    ...toMcpTask(
+      task,
+      events,
+      options.service.listCompositionReceipts(handle.projectId, handle.taskId),
+    ),
     resultType: 'complete',
   }
 }
@@ -1301,9 +1316,17 @@ function requireTask(
 function toMcpTask(
   task: ExecutionTask,
   events: ExecutionTaskEvent[],
+  compositionReceipts: CompositionAttemptReceipt[] = [],
 ): Record<string, unknown> {
   const lastEvent = events.at(-1)
   const status = mapTaskStatus(task.status)
+  const compositionEvents = events.filter(event => event.kind.startsWith('composition-'))
+  const composition = compositionEvents.length === 0 && compositionReceipts.length === 0
+    ? undefined
+    : {
+        events: compositionEvents,
+        receipts: compositionReceipts,
+      }
   const base = {
     attempt: task.attempt,
     createdAt: task.createdAt ?? task.updatedAt ?? new Date(0).toISOString(),
@@ -1313,6 +1336,7 @@ function toMcpTask(
     projectId: task.projectId,
     status,
     ...(lastEvent === undefined ? {} : { statusMessage: lastEvent.message }),
+    ...(composition === undefined ? {} : { composition }),
     taskId: task.taskId,
     ttlMs: null,
   }
@@ -1327,7 +1351,10 @@ function toMcpTask(
   if (status === 'completed') {
     return {
       ...base,
-      result: toolResult({ task }),
+      result: toolResult({
+        ...(composition === undefined ? {} : { composition }),
+        task,
+      }),
     }
   }
   if (status === 'failed') {

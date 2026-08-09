@@ -232,6 +232,7 @@ export interface ContentStudioProjectView {
   activities: PublishingActivity[]
   activityArtifacts: ActivityArtifact[]
   channelContents: ChannelContent[]
+  compositionReceipts: CompositionAttemptReceipt[]
   contentGroups: ContentGroup[]
   monitoringObservations: MonitoringObservation[]
   ownerHandoffs: OwnerHandoff[]
@@ -284,6 +285,7 @@ export interface ContentStudioGlobalProjectView {
   activities: PublishingActivity[]
   activityArtifacts: ActivityArtifact[]
   channelContents: ChannelContent[]
+  compositionReceipts: CompositionAttemptReceipt[]
   contentGroups: ContentGroup[]
   ownerHandoffs: OwnerHandoff[]
   project: ProjectRecord
@@ -730,12 +732,20 @@ export interface ExecutionTaskTransitionOptions {
 export type ExecutionTaskEventKind
   = | 'attempt-cancelled'
     | 'attempt-retried'
+    | 'composition-cancelled'
+    | 'composition-completed'
+    | 'composition-cover-ready'
+    | 'composition-failed'
+    | 'composition-gif-ready'
+    | 'composition-started'
+    | 'composition-video-ready'
     | 'stage-skipped'
     | 'status-changed'
     | 'task-created'
 
 export interface ExecutionTaskEvent {
   attempt: number
+  artifact?: CompositionArtifact
   eventId: string
   fromStatus?: ExecutionTaskStatus
   kind: ExecutionTaskEventKind
@@ -751,6 +761,7 @@ export interface ExecutionTaskEvent {
 }
 
 export interface ExecutionTaskStoreState {
+  compositionReceipts: CompositionAttemptReceipt[]
   events: ExecutionTaskEvent[]
   recordingReceipts: RecorderAttemptReceipt[]
   tasks: ExecutionTask[]
@@ -760,14 +771,25 @@ export interface ExecutionTaskStore {
   cancelTask: (projectId: string, taskId: string) => ExecutionTask
   createTask: (input: CreateExecutionTaskInput) => ExecutionTask
   getTask: (projectId: string, taskId: string) => ExecutionTask | undefined
+  listCompositionReceipts: (projectId: string, taskId: string) => CompositionAttemptReceipt[]
   listEvents: (projectId: string, taskId: string) => ExecutionTaskEvent[]
   listRecordingReceipts: (projectId: string, taskId: string) => RecorderAttemptReceipt[]
   listTasks: (projectId?: string) => ExecutionTask[]
+  saveCompositionReceipt: (
+    projectId: string,
+    taskId: string,
+    receipt: CompositionAttemptReceipt,
+  ) => CompositionAttemptReceipt
   saveRecordingReceipt: (
     projectId: string,
     taskId: string,
     receipt: RecorderAttemptReceipt,
   ) => RecorderAttemptReceipt
+  appendCompositionEvent: (
+    projectId: string,
+    taskId: string,
+    input: CompositionTaskEventInput,
+  ) => ExecutionTaskEvent
   retryTask: (projectId: string, taskId: string) => ExecutionTask
   skipStage: (
     projectId: string,
@@ -872,6 +894,53 @@ export interface RecorderAttemptReceipt {
  * artifact directory never crosses the runtime boundary.
  */
 export type RecordingAttemptRecord = Omit<RecorderAttemptReceipt, 'artifactDirectory'>
+
+export type CompositionArtifactKind = 'cover' | 'gif' | 'video'
+
+export interface CompositionArtifact {
+  artifactId: string
+  durationSeconds?: number
+  fps?: number
+  height?: number
+  kind: CompositionArtifactKind
+  relativePath?: string
+  sha256: string
+  sizeBytes: number
+  width?: number
+}
+
+export type CompositionOutcome = 'cancelled' | 'failed' | 'succeeded'
+
+export interface CompositionFailure {
+  code: 'cancelled' | 'runtime-error'
+  message: string
+  retryable: boolean
+}
+
+export interface CompositionAttemptReceipt {
+  artifacts: CompositionArtifact[]
+  attempt: number
+  failure?: CompositionFailure
+  jobId: string
+  outcome: CompositionOutcome
+  projectId: string
+  receiptVersion: 1
+}
+
+export type CompositionTaskEventKind
+  = | 'composition-cancelled'
+    | 'composition-completed'
+    | 'composition-cover-ready'
+    | 'composition-failed'
+    | 'composition-gif-ready'
+    | 'composition-started'
+    | 'composition-video-ready'
+
+export interface CompositionTaskEventInput {
+  artifact?: CompositionArtifact
+  kind: CompositionTaskEventKind
+  message: string
+}
 
 export interface RecordingContext {
   captureMode: ProjectCaptureMode
@@ -989,6 +1058,7 @@ export interface RecordingJobDependencies {
 export interface ComposeProductionInput {
   clipPaths: string[]
   cover?: ProductionCoverSpec
+  emit?: (event: CompositionProgressEvent) => Promise<void> | void
   gif?: ProductionGifSpec
   normalizeLoudness?: boolean
   outputPath: string
@@ -997,11 +1067,14 @@ export interface ComposeProductionInput {
   transitionDurationMs?: number
 }
 
-export interface ComposeProductionResult {
-  artifactPath: string
+export interface ComposeProductionResult extends ProductionVideoResult {
   cover?: ProductionCoverResult
-  durationSeconds: number
   gif?: ProductionGifResult
+}
+
+export interface ProductionVideoResult {
+  artifactPath: string
+  durationSeconds: number
   reencoded: boolean
   sha256: string
   sizeBytes: number
@@ -1038,6 +1111,11 @@ export interface ProductionGifResult {
   sizeBytes: number
   width: number
 }
+
+export type CompositionProgressEvent
+  = | { artifact: ProductionVideoResult, kind: 'video-ready' }
+    | { artifact: ProductionCoverResult, kind: 'cover-ready' }
+    | { artifact: ProductionGifResult, kind: 'gif-ready' }
 
 export type ComposeProduction = (
   input: ComposeProductionInput,

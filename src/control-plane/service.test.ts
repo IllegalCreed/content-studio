@@ -493,6 +493,7 @@ describe('content studio application service', () => {
       activities: [activity],
       activityArtifacts: [],
       channelContents: [],
+      compositionReceipts: [],
       contentGroups: [],
       ownerHandoffs: [],
       publicationPlans: [],
@@ -1341,6 +1342,7 @@ describe('content studio application service', () => {
         subtitle: 'youtube · en',
         title: 'Content',
       },
+      emit: expect.any(Function),
       gif: {
         outputPath: join(
           '/tmp/content-studio-compose-register',
@@ -1371,6 +1373,56 @@ describe('content studio application service', () => {
       relativePath: 'content-studio-compose-register/composed/preview.gif',
       sha256: 'e'.repeat(64),
     })])
+    expect(
+      service.getProjectView('compose-project').compositionReceipts,
+    ).toMatchObject([{
+      artifacts: [
+        expect.objectContaining({
+          artifactId: `composed-${taskId}`,
+          durationSeconds: 3,
+          height: 1080,
+          kind: 'video',
+          relativePath: 'content-studio-compose-register/composed/final.webm',
+          sha256: 'c'.repeat(64),
+          sizeBytes: 7,
+          width: 1920,
+        }),
+        expect.objectContaining({
+          artifactId: `cover-${taskId}`,
+          height: 1080,
+          kind: 'cover',
+          relativePath: 'content-studio-compose-register/composed/cover.svg',
+          sha256: 'd'.repeat(64),
+          sizeBytes: 8,
+          width: 1920,
+        }),
+        expect.objectContaining({
+          artifactId: `gif-${taskId}`,
+          durationSeconds: 3,
+          fps: 10,
+          height: 360,
+          kind: 'gif',
+          relativePath: 'content-studio-compose-register/composed/preview.gif',
+          sha256: 'e'.repeat(64),
+          sizeBytes: 9,
+          width: 640,
+        }),
+      ],
+      attempt: 1,
+      jobId: taskId,
+      outcome: 'succeeded',
+    }])
+    expect(
+      service.listTaskEvents('compose-project', taskId)
+        .filter(event => event.kind.startsWith('composition-'))
+        .map(event => event.kind),
+    ).toEqual([
+      'composition-started',
+      'composition-video-ready',
+      'composition-cover-ready',
+      'composition-gif-ready',
+      'composition-completed',
+    ])
   })
 
   it('cancels before registering media when composition observes an aborted signal', async () => {
@@ -1480,6 +1532,66 @@ describe('content studio application service', () => {
 
     expect(composeSignal).toBe(controller.signal)
     expect(result.task.status).toBe('cancelled')
+    expect(repository.listActivityArtifacts(
+      'cancel-compose-project',
+      activity.activityId,
+    )).toEqual([])
+    expect(service.getProjectView('cancel-compose-project').compositionReceipts)
+      .toMatchObject([{
+        artifacts: [],
+        attempt: 1,
+        failure: {
+          code: 'cancelled',
+        },
+        jobId: taskId,
+        outcome: 'cancelled',
+      }])
+    expect(service.listTaskEvents('cancel-compose-project', taskId)
+      .filter(event => event.kind.startsWith('composition-'))
+      .map(event => event.kind)).toEqual([
+      'composition-started',
+      'composition-video-ready',
+      'composition-cancelled',
+    ])
+
+    expect(service.retryTask('cancel-compose-project', taskId)).toMatchObject({
+      attempt: 2,
+      status: 'queued',
+    })
+    service.startProductionTask('cancel-compose-project', taskId)
+    const failedReceipt: RecorderAttemptReceipt = {
+      ...receipt,
+      artifactDirectory: '/tmp/content-studio-cancel-compose/attempt-2',
+      attempt: 2,
+      previousAttempt: 1,
+    }
+    await expect(service.runActivityProductionTask(
+      'cancel-compose-project',
+      taskId,
+      {
+        baseUrl: 'https://cancel-compose-project.example.com',
+        outputDirectory: '/tmp/content-studio-cancel-compose',
+        projectOrigin: 'https://cancel-compose-project.example.com',
+      },
+      {
+        compose: async () => {
+          throw new Error('Encoder failed on retry')
+        },
+        record: async () => ({ attempts: [failedReceipt], receipt: failedReceipt }),
+      },
+    )).rejects.toThrow(/encoder failed on retry/i)
+
+    expect(service.getProjectView('cancel-compose-project').compositionReceipts)
+      .toMatchObject([
+        { attempt: 1, outcome: 'cancelled' },
+        {
+          attempt: 2,
+          failure: { code: 'runtime-error', retryable: true },
+          outcome: 'failed',
+        },
+      ])
+    expect(service.getProjectView('cancel-compose-project').tasks)
+      .toEqual([expect.objectContaining({ attempt: 2, status: 'failed' })])
     expect(repository.listActivityArtifacts(
       'cancel-compose-project',
       activity.activityId,

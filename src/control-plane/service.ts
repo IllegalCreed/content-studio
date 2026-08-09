@@ -10,6 +10,11 @@ import type {
   ChannelContent,
   ChannelId,
   ComposeProduction,
+  ComposeProductionResult,
+  CompositionArtifact,
+  CompositionAttemptReceipt,
+  CompositionProgressEvent,
+  CompositionTaskEventKind,
   ConfirmActivityVideoPlanInput,
   ContentGroup,
   ContentStudioGlobalProjectView,
@@ -40,6 +45,7 @@ import type {
   RecorderAttemptReceipt,
   RecordingAttemptRecord,
   VideoPlan,
+  VideoViewport,
 } from '../types'
 import { join, relative, resolve } from 'node:path'
 import { runProductionTask as executeProductionTask } from '../jobs/production'
@@ -617,6 +623,9 @@ export class ContentStudioApplicationService {
         this.repository.listChannelContents(projectId),
         content => content.contentId,
       ),
+      compositionReceipts: tasks.flatMap(task =>
+        this.taskStore.listCompositionReceipts(projectId, task.taskId),
+      ),
       contentGroups: latestById(
         this.repository.listContentGroups(projectId),
         group => group.contentGroupId,
@@ -688,6 +697,7 @@ export class ContentStudioApplicationService {
         activities: view.activities,
         activityArtifacts: view.activityArtifacts,
         channelContents: view.channelContents,
+        compositionReceipts: view.compositionReceipts,
         contentGroups: view.contentGroups,
         ownerHandoffs: view.ownerHandoffs,
         project: view.project,
@@ -922,13 +932,30 @@ export class ContentStudioApplicationService {
       : this.repository.getChannelContent(projectId, task.contentId)
     const coverPath = join(input.outputDirectory, 'composed', 'cover.svg')
     const gifPath = join(input.outputDirectory, 'composed', 'preview.gif')
+    const compositionRoot = join(input.outputDirectory, '..')
     const cancelledBeforeCompose = this.cancelProductionIfRequested(
       projectId,
       taskId,
       input.signal,
+      task.attempt,
     )
-    if (cancelledBeforeCompose !== undefined)
+    if (cancelledBeforeCompose !== undefined) {
+      this.recordCompositionCancellation(projectId, taskId, task.attempt)
       return { ...result, task: cancelledBeforeCompose }
+    }
+    this.taskStore.appendCompositionEvent(projectId, taskId, {
+      kind: 'composition-started',
+      message: 'Composition started',
+    })
+    const emittedKinds = new Set<CompositionProgressEvent['kind']>()
+    const emitCompositionProgress = async (event: CompositionProgressEvent): Promise<void> => {
+      emittedKinds.add(event.kind)
+      this.taskStore.appendCompositionEvent(projectId, taskId, {
+        artifact: compositionArtifactFromProgress(taskId, event, plan.recordingConfig.outputSize),
+        kind: compositionEventKind(event.kind),
+        message: compositionProgressMessage(event.kind),
+      })
+    }
     let composed: Awaited<ReturnType<ComposeProduction>>
     try {
       composed = await compose({
@@ -942,21 +969,51 @@ export class ContentStudioApplicationService {
           outputPath: gifPath,
           outputSize: resolveGifOutputSize(plan.recordingConfig.outputSize),
         },
+        emit: emitCompositionProgress,
         normalizeLoudness: true,
         outputPath,
         outputSize: plan.recordingConfig.outputSize,
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       })
+      if (!emittedKinds.has('video-ready')) {
+        await emitCompositionProgress({ artifact: composed, kind: 'video-ready' })
+      }
+      if (composed.cover !== undefined && !emittedKinds.has('cover-ready')) {
+        await emitCompositionProgress({ artifact: composed.cover, kind: 'cover-ready' })
+      }
+      if (composed.gif !== undefined && !emittedKinds.has('gif-ready')) {
+        await emitCompositionProgress({ artifact: composed.gif, kind: 'gif-ready' })
+      }
     }
     catch (error: unknown) {
       const cancelled = this.cancelProductionIfRequested(
         projectId,
         taskId,
         input.signal,
+        task.attempt,
       )
-      if (cancelled !== undefined)
+      if (cancelled !== undefined) {
+        this.recordCompositionCancellation(projectId, taskId, task.attempt)
         return { ...result, task: cancelled }
+      }
       this.taskStore.transitionTask(projectId, taskId, 'failed')
+      this.taskStore.saveCompositionReceipt(projectId, taskId, {
+        artifacts: [],
+        attempt: task.attempt,
+        failure: {
+          code: 'runtime-error',
+          message: error instanceof Error ? error.message : String(error),
+          retryable: true,
+        },
+        jobId: taskId,
+        outcome: 'failed',
+        projectId,
+        receiptVersion: 1,
+      })
+      this.taskStore.appendCompositionEvent(projectId, taskId, {
+        kind: 'composition-failed',
+        message: error instanceof Error ? error.message : String(error),
+      })
       throw error
     }
 
@@ -964,55 +1021,67 @@ export class ContentStudioApplicationService {
       projectId,
       taskId,
       input.signal,
+      task.attempt,
     )
-    if (cancelled !== undefined)
+    if (cancelled !== undefined) {
+      this.recordCompositionCancellation(projectId, taskId, task.attempt)
       return { ...result, task: cancelled }
+    }
 
-    const relativePath = relative(
-      join(input.outputDirectory, '..'),
-      composed.artifactPath,
+    const compositionArtifacts = compositionArtifactsFromResult(
+      taskId,
+      composed,
+      compositionRoot,
+      plan.recordingConfig.outputSize,
     )
+    const videoArtifact = compositionArtifacts.find(artifact => artifact.kind === 'video')!
     this.createActivityArtifact({
       activityId: task.activityId,
-      artifactId: `composed-${taskId}`,
+      artifactId: videoArtifact.artifactId,
       kind: 'video',
       projectId,
-      relativePath,
-      sha256: composed.sha256,
+      relativePath: videoArtifact.relativePath!,
+      sha256: videoArtifact.sha256,
     })
-    if (composed.cover !== undefined) {
-      const coverRelativePath = relative(
-        join(input.outputDirectory, '..'),
-        composed.cover.artifactPath,
-      )
+    const coverArtifact = compositionArtifacts.find(artifact => artifact.kind === 'cover')
+    if (coverArtifact !== undefined) {
       this.createActivityArtifact({
         activityId: task.activityId,
-        artifactId: `cover-${taskId}`,
+        artifactId: coverArtifact.artifactId,
         kind: 'image',
         projectId,
-        relativePath: coverRelativePath,
-        sha256: composed.cover.sha256,
+        relativePath: coverArtifact.relativePath!,
+        sha256: coverArtifact.sha256,
       })
     }
-    if (composed.gif !== undefined) {
-      const gifRelativePath = relative(
-        join(input.outputDirectory, '..'),
-        composed.gif.artifactPath,
-      )
+    const gifArtifact = compositionArtifacts.find(artifact => artifact.kind === 'gif')
+    if (gifArtifact !== undefined) {
       this.createActivityArtifact({
         activityId: task.activityId,
-        artifactId: `gif-${taskId}`,
+        artifactId: gifArtifact.artifactId,
         kind: 'image',
         projectId,
-        relativePath: gifRelativePath,
-        sha256: composed.gif.sha256,
+        relativePath: gifArtifact.relativePath!,
+        sha256: gifArtifact.sha256,
       })
     }
+    this.taskStore.saveCompositionReceipt(projectId, taskId, {
+      artifacts: compositionArtifacts,
+      attempt: task.attempt,
+      jobId: taskId,
+      outcome: 'succeeded',
+      projectId,
+      receiptVersion: 1,
+    })
     const completed = this.taskStore.transitionTask(
       projectId,
       taskId,
       'completed',
     )
+    this.taskStore.appendCompositionEvent(projectId, taskId, {
+      kind: 'composition-completed',
+      message: `Composition completed with ${compositionArtifacts.length} artifacts`,
+    })
     return {
       ...result,
       task: completed,
@@ -1023,13 +1092,50 @@ export class ContentStudioApplicationService {
     projectId: string,
     taskId: string,
     signal: AbortSignal | undefined,
+    expectedAttempt?: number,
   ): ExecutionTask | undefined {
     const current = this.taskStore.getTask(projectId, taskId)
+    if (current !== undefined
+      && expectedAttempt !== undefined
+      && current.attempt !== expectedAttempt) {
+      return current
+    }
     if (current?.status === 'cancelled')
       return current
     if (signal?.aborted !== true || current === undefined)
       return undefined
     return this.taskStore.cancelTask(projectId, taskId)
+  }
+
+  private recordCompositionCancellation(
+    projectId: string,
+    taskId: string,
+    attempt: number,
+  ): void {
+    if (this.taskStore.listCompositionReceipts(projectId, taskId)
+      .some(receipt => receipt.attempt === attempt)) {
+      return
+    }
+    this.taskStore.saveCompositionReceipt(projectId, taskId, {
+      artifacts: [],
+      attempt,
+      failure: {
+        code: 'cancelled',
+        message: 'Composition cancelled',
+        retryable: true,
+      },
+      jobId: taskId,
+      outcome: 'cancelled',
+      projectId,
+      receiptVersion: 1,
+    })
+    const current = this.taskStore.getTask(projectId, taskId)
+    if (current?.attempt === attempt && current.status === 'cancelled') {
+      this.taskStore.appendCompositionEvent(projectId, taskId, {
+        kind: 'composition-cancelled',
+        message: 'Composition cancelled',
+      })
+    }
   }
 
   getActivityVideoPlan(
@@ -1065,6 +1171,14 @@ export class ContentStudioApplicationService {
   listTaskEvents(projectId: string, taskId: string): ExecutionTaskEvent[] {
     this.requireProject(projectId)
     return this.taskStore.listEvents(projectId, taskId)
+  }
+
+  listCompositionReceipts(
+    projectId: string,
+    taskId: string,
+  ): CompositionAttemptReceipt[] {
+    this.requireProject(projectId)
+    return this.taskStore.listCompositionReceipts(projectId, taskId)
   }
 
   getRecordingArtifact(
@@ -1620,6 +1734,101 @@ function toRecordingAttemptRecord(
 ): RecordingAttemptRecord {
   const { artifactDirectory: _artifactDirectory, ...record } = receipt
   return record
+}
+
+function compositionEventKind(
+  kind: CompositionProgressEvent['kind'],
+): CompositionTaskEventKind {
+  return kind === 'video-ready'
+    ? 'composition-video-ready'
+    : kind === 'cover-ready'
+      ? 'composition-cover-ready'
+      : 'composition-gif-ready'
+}
+
+function compositionProgressMessage(
+  kind: CompositionProgressEvent['kind'],
+): string {
+  return kind === 'video-ready'
+    ? 'Final video ready'
+    : kind === 'cover-ready'
+      ? 'Cover ready'
+      : 'GIF preview ready'
+}
+
+function compositionArtifactFromProgress(
+  taskId: string,
+  event: CompositionProgressEvent,
+  outputSize: VideoViewport,
+): CompositionArtifact {
+  if (event.kind === 'video-ready') {
+    return {
+      artifactId: `composed-${taskId}`,
+      durationSeconds: event.artifact.durationSeconds,
+      height: outputSize.height,
+      kind: 'video',
+      sha256: event.artifact.sha256,
+      sizeBytes: event.artifact.sizeBytes,
+      width: outputSize.width,
+    }
+  }
+  if (event.kind === 'cover-ready') {
+    return {
+      artifactId: `cover-${taskId}`,
+      height: event.artifact.height,
+      kind: 'cover',
+      sha256: event.artifact.sha256,
+      sizeBytes: event.artifact.sizeBytes,
+      width: event.artifact.width,
+    }
+  }
+  return {
+    artifactId: `gif-${taskId}`,
+    durationSeconds: event.artifact.durationSeconds,
+    fps: event.artifact.fps,
+    height: event.artifact.height,
+    kind: 'gif',
+    sha256: event.artifact.sha256,
+    sizeBytes: event.artifact.sizeBytes,
+    width: event.artifact.width,
+  }
+}
+
+function compositionArtifactsFromResult(
+  taskId: string,
+  result: ComposeProductionResult,
+  compositionRoot: string,
+  outputSize: VideoViewport,
+): CompositionArtifact[] {
+  const artifacts: CompositionArtifact[] = [{
+    ...compositionArtifactFromProgress(
+      taskId,
+      { artifact: result, kind: 'video-ready' },
+      outputSize,
+    ),
+    relativePath: toPortableRelativePath(relative(compositionRoot, result.artifactPath)),
+  }]
+  if (result.cover !== undefined) {
+    artifacts.push({
+      ...compositionArtifactFromProgress(
+        taskId,
+        { artifact: result.cover, kind: 'cover-ready' },
+        outputSize,
+      ),
+      relativePath: toPortableRelativePath(relative(compositionRoot, result.cover.artifactPath)),
+    })
+  }
+  if (result.gif !== undefined) {
+    artifacts.push({
+      ...compositionArtifactFromProgress(
+        taskId,
+        { artifact: result.gif, kind: 'gif-ready' },
+        outputSize,
+      ),
+      relativePath: toPortableRelativePath(relative(compositionRoot, result.gif.artifactPath)),
+    })
+  }
+  return artifacts
 }
 
 function getScopedRecord<T extends { projectId: string }>(

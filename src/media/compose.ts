@@ -7,7 +7,10 @@ import {
   unlink,
   writeFile,
 } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import {
+  dirname,
+  resolve,
+} from 'node:path'
 import { promisify } from 'node:util'
 import {
   COMPOSITION_AUDIO_CHANNEL_LAYOUT,
@@ -36,6 +39,7 @@ export interface ComposeVideoClipsInput {
   outputPath: string
   outputSize?: VideoViewport
   reencode?: boolean
+  signal?: AbortSignal
   transitionDurationMs?: number
 }
 
@@ -58,6 +62,7 @@ export async function composeVideoClips(
       'At least one composition clip is required',
     )
   }
+  throwIfAborted(input.signal)
   const ffmpegPath = input.ffmpegPath ?? resolveFfmpegPath()
   for (const clip of input.clips) {
     try {
@@ -86,7 +91,14 @@ export async function composeVideoClips(
   }
   const needsTransitions = transitionDurationMs > 0 && input.clips.length >= 2
   const listPath = `${input.outputPath}.concat.txt`
-  await writeFile(listPath, concatListFileContent(input.clips), 'utf8')
+  await writeFile(
+    listPath,
+    concatListFileContent(input.clips),
+    {
+      encoding: 'utf8',
+      ...(input.signal === undefined ? {} : { signal: input.signal }),
+    },
+  )
   const needsFilters = input.outputSize !== undefined
     || input.normalizeLoudness === true
   let reencoded = false
@@ -96,10 +108,12 @@ export async function composeVideoClips(
         await execFile(
           ffmpegPath,
           ['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', input.outputPath],
-          { maxBuffer: 4 * 1024 * 1024 },
+          ffmpegOptions(input.signal),
         )
       }
-      catch {
+      catch (error: unknown) {
+        if (input.signal?.aborted === true)
+          throw error
         reencoded = true
       }
     }
@@ -118,11 +132,14 @@ export async function composeVideoClips(
       await execFile(
         ffmpegPath,
         [...args, input.outputPath],
-        { maxBuffer: 4 * 1024 * 1024 },
+        ffmpegOptions(input.signal),
       )
     }
   }
   catch (error: unknown) {
+    if (input.signal?.aborted === true) {
+      throw new MediaCompositionError('Video composition was cancelled')
+    }
     throw new MediaCompositionError(
       `Video composition failed: ${error instanceof Error ? error.message : String(error)}`,
     )
@@ -131,7 +148,23 @@ export async function composeVideoClips(
     await unlink(listPath).catch(() => {})
   }
 
-  const durationSeconds = await probeMediaDuration(input.outputPath, ffmpegPath)
+  throwIfAborted(input.signal)
+  let durationSeconds: number
+  try {
+    durationSeconds = await probeMediaDuration(
+      input.outputPath,
+      ffmpegPath,
+      input.signal,
+    )
+  }
+  catch (error: unknown) {
+    if (input.signal?.aborted === true)
+      throw new MediaCompositionError('Video composition was cancelled')
+    throw new MediaCompositionError(
+      `Video composition failed: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+  throwIfAborted(input.signal)
   return {
     durationSeconds,
     outputPath: input.outputPath,
@@ -144,12 +177,12 @@ async function transitionCompositionArgs(
   transitionDurationMs: number,
   input: Pick<
     ComposeVideoClipsInput,
-    'normalizeLoudness' | 'outputPath' | 'outputSize'
+    'normalizeLoudness' | 'outputPath' | 'outputSize' | 'signal'
   >,
   ffmpegPath: string,
 ): Promise<string[]> {
   const durations = await Promise.all(
-    clips.map(clip => probeMediaDuration(clip, ffmpegPath)),
+    clips.map(clip => probeMediaDuration(clip, ffmpegPath, input.signal)),
   )
   const transitionSeconds = transitionDurationMs / 1000
   const shortestClip = Math.min(...durations)
@@ -159,7 +192,7 @@ async function transitionCompositionArgs(
     )
   }
   const hasAudio = await Promise.all(
-    clips.map(clip => probeMediaHasAudio(clip, ffmpegPath)),
+    clips.map(clip => probeMediaHasAudio(clip, ffmpegPath, input.signal)),
   )
   const anyAudio = hasAudio.some(Boolean)
   const parts: string[] = []
@@ -262,6 +295,24 @@ function scalePadFilter(size: VideoViewport): string {
 
 function concatListFileContent(clips: string[]): string {
   return `${clips
-    .map(clip => `file '${clip.replace(/'/g, `'\\''`)}'`)
+    .map((clip) => {
+      const absoluteClip = resolve(clip).replaceAll('\\', '/')
+      return `file '${absoluteClip.replace(/'/g, `'\\''`)}'`
+    })
     .join('\n')}\n`
+}
+
+function ffmpegOptions(signal: AbortSignal | undefined): {
+  maxBuffer: number
+  signal?: AbortSignal
+} {
+  return {
+    maxBuffer: 4 * 1024 * 1024,
+    ...(signal === undefined ? {} : { signal }),
+  }
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted === true)
+    throw new MediaCompositionError('Video composition was cancelled')
 }

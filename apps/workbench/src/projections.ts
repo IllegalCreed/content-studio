@@ -685,6 +685,7 @@ export function taskToProjection({
     attempts: lifecycle.attempts,
     detail: lifecycle.detail,
     events: events.map(event => ({
+      ...(event.artifact === undefined ? {} : { artifact: event.artifact }),
       attempt: event.attempt,
       kind: event.kind,
       message: event.message,

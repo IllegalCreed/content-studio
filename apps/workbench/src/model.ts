@@ -324,6 +324,13 @@ export function humanizeTaskEventKind(kind: string): string {
   const labels: Record<string, string> = {
     'attempt-cancelled': '尝试已取消',
     'attempt-retried': '创建重试',
+    'composition-cancelled': '合成已取消',
+    'composition-completed': '合成完成',
+    'composition-cover-ready': '封面已生成',
+    'composition-failed': '合成失败',
+    'composition-gif-ready': 'GIF 已生成',
+    'composition-started': '开始合成',
+    'composition-video-ready': '成片已生成',
     'stage-skipped': '跳过阶段',
     'status-changed': '状态变化',
     'task-created': '任务创建',
@@ -340,9 +347,42 @@ export function taskEventSummary(event: ExecutionTaskEvent): string {
     return `已创建第 ${event.attempt} 次重试`
   if (event.kind === 'attempt-cancelled')
     return `第 ${event.attempt} 次尝试已取消`
+  if (event.kind === 'composition-started')
+    return '开始合成成片、封面和 GIF'
+  if (event.kind === 'composition-video-ready')
+    return compositionArtifactSummary('成片', event)
+  if (event.kind === 'composition-cover-ready')
+    return compositionArtifactSummary('封面', event)
+  if (event.kind === 'composition-gif-ready')
+    return compositionArtifactSummary('GIF', event)
+  if (event.kind === 'composition-completed')
+    return '合成完成'
+  if (event.kind === 'composition-cancelled')
+    return '合成已取消'
+  if (event.kind === 'composition-failed')
+    return event.message === '' ? '合成失败' : `合成失败：${event.message}`
   if (event.fromStatus !== undefined && event.toStatus !== undefined)
     return `任务从${humanizeTaskStatus(event.fromStatus)}进入${humanizeTaskStatus(event.toStatus)}`
   return event.message
+}
+
+function compositionArtifactSummary(
+  label: string,
+  event: ExecutionTaskEvent,
+): string {
+  const artifact = event.artifact
+  if (artifact === undefined)
+    return event.message
+  const dimensions = artifact.width === undefined || artifact.height === undefined
+    ? undefined
+    : `${artifact.width}×${artifact.height}`
+  const details = [
+    dimensions,
+    formatBytes(artifact.sizeBytes),
+  ].filter((value): value is string => value !== undefined)
+  return details.length === 0
+    ? `${label}已生成`
+    : `${label}已生成 · ${details.join(' · ')}`
 }
 
 function taskAttemptProjections(
@@ -474,6 +514,7 @@ export interface TaskProjection {
   detail: string
   attempts: TaskAttemptProjection[]
   events: Array<{
+    artifact?: ExecutionTaskEvent['artifact']
     attempt?: number
     kind: string
     message: string

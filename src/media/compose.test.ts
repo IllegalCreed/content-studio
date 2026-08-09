@@ -4,12 +4,16 @@ import {
 } from 'node:child_process'
 import {
   access,
+  chmod,
   mkdtemp,
   rm,
   writeFile,
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import {
+  join,
+  relative,
+} from 'node:path'
 import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import { composeVideoClips } from './compose'
@@ -112,6 +116,25 @@ describe.skipIf(!ffmpegIsAvailable)('ffmpeg composition engine', () => {
     }
   })
 
+  it('resolves relative clip paths before writing the concat manifest', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
+    try {
+      const absoluteClip = await makeWebmClip(directory, 'relative.webm', 0.5)
+      const outputPath = join(directory, 'relative-output.webm')
+
+      const result = await composeVideoClips({
+        clips: [relative(process.cwd(), absoluteClip)],
+        outputPath,
+      })
+
+      expect(result.reencoded).toBe(false)
+      await expect(access(outputPath)).resolves.toBeUndefined()
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
   it('supports an explicit re-encode request', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
     try {
@@ -126,6 +149,38 @@ describe.skipIf(!ffmpegIsAvailable)('ffmpeg composition engine', () => {
 
       expect(result.reencoded).toBe(true)
       expect(result.durationSeconds).toBeGreaterThan(0.3)
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('cancels an in-flight ffmpeg process and removes its concat manifest', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-'))
+    try {
+      const clip = await makeWebmClip(directory, 'single.webm', 0.5)
+      const outputPath = join(directory, 'cancelled.webm')
+      const slowFfmpegPath = join(directory, 'slow-ffmpeg.mjs')
+      await writeFile(
+        slowFfmpegPath,
+        '#!/usr/bin/env node\nsetTimeout(() => {}, 30_000)\n',
+        'utf8',
+      )
+      await chmod(slowFfmpegPath, 0o755)
+      const controller = new AbortController()
+      const composition = composeVideoClips({
+        clips: [clip],
+        ffmpegPath: slowFfmpegPath,
+        outputPath,
+        reencode: true,
+        signal: controller.signal,
+      })
+      await new Promise(resolve => setTimeout(resolve, 50))
+      controller.abort()
+
+      await expect(composition).rejects.toThrow(/cancel/i)
+      await expect(access(`${outputPath}.concat.txt`)).rejects.toThrow()
+      await expect(access(outputPath)).rejects.toThrow()
     }
     finally {
       await rm(directory, { force: true, recursive: true })
@@ -254,6 +309,68 @@ describe.skipIf(!ffmpegIsAvailable)('ffmpeg composition engine', () => {
     try {
       const clip = await makeWebmClip(directory, 'probe.webm', 0.5)
       expect(await probeMediaDuration(clip)).toBeGreaterThan(0.3)
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('honors cancellation before starting a media probe', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    await expect(probeMediaDuration(
+      '/tmp/content-studio-cancelled-probe.webm',
+      resolveFfmpegPath(),
+      controller.signal,
+    )).rejects.toThrow(/cancel/i)
+  })
+
+  it('accepts successful probe output while carrying a cancellation signal', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-probe-'))
+    try {
+      const probePath = join(directory, 'successful-probe.mjs')
+      await writeFile(
+        probePath,
+        [
+          '#!/usr/bin/env node',
+          `process.stderr.write('Duration: 00:01:02.50\\nStream #0:0: Video: vp9, yuv420p, 640x360\\nStream #0:1: Audio: opus\\n')`,
+        ].join('\n'),
+        'utf8',
+      )
+      await chmod(probePath, 0o755)
+      const signal = new AbortController().signal
+
+      await expect(probeMediaDuration('fixture.webm', probePath, signal))
+        .resolves
+        .toBe(62.5)
+      await expect(probeVideoSize('fixture.webm', probePath, signal))
+        .resolves
+        .toEqual({ height: 360, width: 640 })
+      await expect(probeMediaHasAudio('fixture.webm', probePath, signal))
+        .resolves
+        .toBe(true)
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('cancels an in-flight media probe', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-probe-'))
+    try {
+      const probePath = join(directory, 'slow-probe.mjs')
+      await writeFile(
+        probePath,
+        '#!/usr/bin/env node\nsetTimeout(() => {}, 30_000)\n',
+        'utf8',
+      )
+      await chmod(probePath, 0o755)
+      const controller = new AbortController()
+      const probe = probeVideoSize('fixture.webm', probePath, controller.signal)
+      await new Promise(resolve => setTimeout(resolve, 50))
+      controller.abort()
+
+      await expect(probe).rejects.toThrow(/cancel/i)
     }
     finally {
       await rm(directory, { force: true, recursive: true })

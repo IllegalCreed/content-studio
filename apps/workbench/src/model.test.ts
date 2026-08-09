@@ -5,9 +5,11 @@ import type {
 } from '@content-studio/core-types'
 import { describe, expect, it } from 'vitest'
 import {
+  humanizeTaskEventKind,
   isPublishingAssistantChannel,
   recordingReceiptToVideoJob,
   snapshot,
+  taskEventSummary,
   taskLifecycleProjection,
   videoViewportForFormat,
 } from './model'
@@ -45,6 +47,7 @@ function projectView(overrides: Partial<ContentStudioProjectView> = {}): Content
       title: 'A guide',
       version: 1,
     }],
+    compositionReceipts: [],
     contentGroups: [],
     monitoringObservations: [],
     ownerHandoffs: [],
@@ -522,5 +525,34 @@ describe('execution task projection', () => {
       label: '已完成',
       status: 'done',
     })
+  })
+
+  it('localizes composition progress events with artifact metadata', () => {
+    const event: ExecutionTaskEvent = {
+      artifact: {
+        artifactId: 'gif-task-a',
+        durationSeconds: 4,
+        fps: 10,
+        height: 360,
+        kind: 'gif',
+        sha256: 'a'.repeat(64),
+        sizeBytes: 278766,
+        width: 640,
+      },
+      attempt: 1,
+      eventId: 'task-a:7',
+      kind: 'composition-gif-ready',
+      message: 'GIF preview ready',
+      projectId: 'project-a',
+      sequence: 7,
+      stage: 'composing',
+      status: 'composing',
+      taskId: 'task-a',
+      schemaVersion: 1,
+    }
+
+    expect(humanizeTaskEventKind(event.kind)).toBe('GIF 已生成')
+    expect(taskEventSummary(event)).toContain('640×360')
+    expect(taskEventSummary(event)).toContain('272 KB')
   })
 })

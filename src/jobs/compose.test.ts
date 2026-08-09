@@ -116,6 +116,7 @@ describe.skipIf(!ffmpegIsAvailable)('production video composition', () => {
       const outputPath = join(directory, 'composed', 'final.webm')
       const coverPath = join(directory, 'composed', 'cover.svg')
       const gifPath = join(directory, 'composed', 'preview.gif')
+      const progress: string[] = []
 
       const result = await composeProductionVideoClips({
         clipPaths: [source],
@@ -123,6 +124,9 @@ describe.skipIf(!ffmpegIsAvailable)('production video composition', () => {
           outputPath: coverPath,
           subtitle: 'local fallback',
           title: 'Quick Sort',
+        },
+        emit: (event) => {
+          progress.push(event.kind)
         },
         gif: {
           durationSeconds: 0.4,
@@ -147,6 +151,7 @@ describe.skipIf(!ffmpegIsAvailable)('production video composition', () => {
         width: 160,
       })
       await expect(access(gifPath)).resolves.toBeUndefined()
+      expect(progress).toEqual(['video-ready', 'cover-ready', 'gif-ready'])
     }
     finally {
       await rm(directory, { force: true, recursive: true })

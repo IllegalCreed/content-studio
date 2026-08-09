@@ -1,4 +1,6 @@
 import type {
+  CompositionAttemptReceipt,
+  CompositionTaskEventInput,
   CreateExecutionTaskInput,
   ExecutionTask,
   ExecutionTaskEvent,
@@ -41,6 +43,8 @@ export class TaskStateError extends Error {
 }
 
 export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
+  private readonly compositionReceipts = new Map<string, CompositionAttemptReceipt[]>()
+
   private readonly events = new Map<string, ExecutionTaskEvent[]>()
 
   private readonly recordingReceipts = new Map<string, RecorderAttemptReceipt[]>()
@@ -49,6 +53,9 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
 
   exportState(): ExecutionTaskStoreState {
     return {
+      compositionReceipts: [...this.compositionReceipts.values()]
+        .flatMap(receipts => receipts)
+        .map(clone),
       events: [...this.events.values()].flatMap(events => events).map(clone),
       recordingReceipts: [...this.recordingReceipts.values()]
         .flatMap(receipts => receipts)
@@ -58,6 +65,7 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
   }
 
   restoreState(state: ExecutionTaskStoreState): void {
+    this.compositionReceipts.clear()
     this.events.clear()
     this.recordingReceipts.clear()
     this.tasks.clear()
@@ -70,6 +78,13 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
       this.events.set(key, [
         ...(this.events.get(key) ?? []),
         clone(event),
+      ])
+    }
+    for (const receipt of state.compositionReceipts ?? []) {
+      const key = taskKey(receipt.projectId, receipt.jobId)
+      this.compositionReceipts.set(key, [
+        ...(this.compositionReceipts.get(key) ?? []),
+        clone(receipt),
       ])
     }
     for (const receipt of state.recordingReceipts ?? []) {
@@ -141,12 +156,101 @@ export class InMemoryExecutionTaskStore implements ExecutionTaskStore {
     return clone(this.events.get(taskKey(projectId, taskId)) ?? [])
   }
 
+  listCompositionReceipts(
+    projectId: string,
+    taskId: string,
+  ): CompositionAttemptReceipt[] {
+    this.requireTask(projectId, taskId)
+    return clone(this.compositionReceipts.get(taskKey(projectId, taskId)) ?? [])
+  }
+
   listRecordingReceipts(
     projectId: string,
     taskId: string,
   ): RecorderAttemptReceipt[] {
     this.requireTask(projectId, taskId)
     return clone(this.recordingReceipts.get(taskKey(projectId, taskId)) ?? [])
+  }
+
+  saveCompositionReceipt(
+    projectId: string,
+    taskId: string,
+    receipt: CompositionAttemptReceipt,
+  ): CompositionAttemptReceipt {
+    const task = this.requireTask(projectId, taskId)
+    if (task.kind !== 'production' || task.productionType !== 'video') {
+      throw new TaskStateError('Only video production tasks can save composition receipts')
+    }
+    if (receipt.projectId !== projectId || receipt.jobId !== taskId) {
+      throw new TaskStateError(
+        'Composition receipt must match the project and task that produced it',
+      )
+    }
+    if (!Number.isInteger(receipt.attempt) || receipt.attempt < 1) {
+      throw new TaskStateError('Composition receipt attempt must be a positive integer')
+    }
+    if (receipt.outcome === 'succeeded') {
+      if (receipt.failure !== undefined || receipt.artifacts.length === 0) {
+        throw new TaskStateError(
+          'Succeeded composition receipts require artifacts and no failure',
+        )
+      }
+      for (const artifact of receipt.artifacts) {
+        if (artifact.relativePath === undefined || !isSafeRelativePath(artifact.relativePath)) {
+          throw new TaskStateError('Composition artifact paths must be safe relative paths')
+        }
+      }
+    }
+    else if (receipt.failure === undefined || receipt.artifacts.length > 0) {
+      throw new TaskStateError(
+        'Cancelled or failed composition receipts require a failure and no artifacts',
+      )
+    }
+    const key = taskKey(projectId, taskId)
+    const receipts = this.compositionReceipts.get(key) ?? []
+    if (receipts.some(candidate => candidate.attempt === receipt.attempt)) {
+      throw new TaskStateError(
+        `Composition receipt attempt ${receipt.attempt} already exists for task ${taskId}`,
+      )
+    }
+    this.compositionReceipts.set(key, [...receipts, clone(receipt)])
+    return clone(receipt)
+  }
+
+  appendCompositionEvent(
+    projectId: string,
+    taskId: string,
+    input: CompositionTaskEventInput,
+  ): ExecutionTaskEvent {
+    const task = this.requireTask(projectId, taskId)
+    if (task.kind !== 'production' || task.productionType !== 'video') {
+      throw new TaskStateError('Only video production tasks can append composition events')
+    }
+    const expectedStatus = input.kind === 'composition-started'
+      || input.kind === 'composition-video-ready'
+      || input.kind === 'composition-cover-ready'
+      || input.kind === 'composition-gif-ready'
+      ? 'composing'
+      : input.kind === 'composition-completed'
+        ? 'completed'
+        : input.kind === 'composition-failed'
+          ? 'failed'
+          : 'cancelled'
+    if (task.status !== expectedStatus) {
+      throw new TaskStateError(
+        `Composition event ${input.kind} requires task status ${expectedStatus}`,
+      )
+    }
+    return this.appendEvent(task, {
+      artifact: input.artifact,
+      attempt: task.attempt,
+      kind: input.kind,
+      message: input.message,
+      projectId,
+      stage: 'composing',
+      status: task.status,
+      taskId,
+    })
   }
 
   saveRecordingReceipt(
@@ -368,4 +472,12 @@ function isSkippableStage(stage: ExecutionTaskSkipStage): boolean {
 
 function taskKey(projectId: string, taskId: string): string {
   return `${projectId}:${taskId}`
+}
+
+function isSafeRelativePath(path: string): boolean {
+  const normalized = path.replaceAll('\\', '/')
+  return normalized.trim() !== ''
+    && !normalized.startsWith('/')
+    && !/^[A-Za-z]:\//u.test(normalized)
+    && !normalized.split('/').includes('..')
 }

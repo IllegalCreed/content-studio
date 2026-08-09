@@ -262,6 +262,8 @@ describe('content Studio local MCP server', () => {
       }).contents[0]?.text
       expect(text).toBeDefined()
       const payload = JSON.parse(text!) as Record<string, unknown>
+      if (kind === 'tasks')
+        expect(payload).toEqual({ compositionReceipts: [], taskEvents: {}, tasks: [] })
       if (kind === 'assets')
         expect(payload).toEqual({ activityArtifacts: [], projectAssets: [] })
       if (kind === 'receipts')
@@ -775,7 +777,8 @@ describe('content Studio local MCP server', () => {
   })
 
   it('maps domain tasks to the standard Tasks get, update, and cancel shapes', async () => {
-    const server = createFixture()
+    const taskStore = new InMemoryExecutionTaskStore()
+    const server = createFixture({ taskStore })
     await server.handleMessage({
       jsonrpc: '2.0',
       id: 28,
@@ -1296,6 +1299,77 @@ describe('content Studio local MCP server', () => {
           resultType: 'complete',
         },
         status: 'completed',
+      },
+    })
+
+    const compositionTaskId = 'composition-mcp-task-demo'
+    taskStore.createTask({
+      activityId: 'mcp-task-demo',
+      kind: 'production',
+      productionType: 'video',
+      projectId,
+      taskId: compositionTaskId,
+    })
+    taskStore.transitionTask(projectId, compositionTaskId, 'generating')
+    taskStore.transitionTask(projectId, compositionTaskId, 'recording')
+    taskStore.transitionTask(projectId, compositionTaskId, 'composing')
+    taskStore.appendCompositionEvent(projectId, compositionTaskId, {
+      kind: 'composition-started',
+      message: 'Composition started',
+    })
+    taskStore.saveCompositionReceipt(projectId, compositionTaskId, {
+      artifacts: [{
+        artifactId: `composed-${compositionTaskId}`,
+        height: 1080,
+        kind: 'video',
+        relativePath: 'production/composed/final.webm',
+        sha256: 'a'.repeat(64),
+        sizeBytes: 42,
+        width: 1920,
+      }],
+      attempt: 1,
+      jobId: compositionTaskId,
+      outcome: 'succeeded',
+      projectId,
+      receiptVersion: 1,
+    })
+    taskStore.transitionTask(projectId, compositionTaskId, 'completed')
+    taskStore.appendCompositionEvent(projectId, compositionTaskId, {
+      kind: 'composition-completed',
+      message: 'Composition completed',
+    })
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 34.1,
+      method: 'tasks/get',
+      params: { _meta: requestMeta(true), taskId: compositionTaskId },
+    })).resolves.toMatchObject({
+      result: {
+        composition: {
+          events: expect.arrayContaining([
+            expect.objectContaining({ kind: 'composition-started' }),
+            expect.objectContaining({ kind: 'composition-completed' }),
+          ]),
+          receipts: [expect.objectContaining({
+            outcome: 'succeeded',
+          })],
+        },
+        internalStatus: 'completed',
+      },
+    })
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 34.2,
+      method: 'tools/call',
+      params: {
+        arguments: { projectId, taskId: compositionTaskId },
+        name: 'get_task',
+      },
+    })).resolves.toMatchObject({
+      result: {
+        structuredContent: {
+          compositionReceipts: [expect.objectContaining({ outcome: 'succeeded' })],
+        },
       },
     })
 

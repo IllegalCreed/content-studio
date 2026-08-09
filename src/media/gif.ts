@@ -121,6 +121,7 @@ export async function generateDeterministicGif(
     const actualDurationSeconds = await probeMediaDuration(
       temporaryOutputPath,
       ffmpegPath,
+      input.signal,
     )
     throwIfAborted(input.signal)
     await rename(temporaryOutputPath, input.outputPath)

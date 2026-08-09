@@ -31,21 +31,26 @@ export function resolveFfmpegPath(): string {
 export async function probeMediaDuration(
   filePath: string,
   ffmpegPath = resolveFfmpegPath(),
+  signal?: AbortSignal,
 ): Promise<number> {
+  throwIfAborted(signal)
   let stderr = ''
   try {
     const result = await execFile(
       ffmpegPath,
       ['-i', filePath, '-f', 'null', '-'],
-      { maxBuffer: 4 * 1024 * 1024 },
+      ffmpegOptions(signal),
     )
     stderr = String(result.stderr)
   }
   catch (error: unknown) {
+    if (signal?.aborted === true)
+      throw new Error('Media probe was cancelled')
     stderr = error instanceof Error && 'stderr' in error
       ? String((error as { stderr: string | Buffer }).stderr)
       : ''
   }
+  throwIfAborted(signal)
   const match = /Duration: (\d{2}):(\d{2}):(\d{2}\.\d+)/u.exec(stderr)
   if (match === null)
     throw new Error(`Could not probe media duration for ${filePath}`)
@@ -60,21 +65,26 @@ export interface ProbedVideoSize {
 export async function probeVideoSize(
   filePath: string,
   ffmpegPath = resolveFfmpegPath(),
+  signal?: AbortSignal,
 ): Promise<ProbedVideoSize> {
+  throwIfAborted(signal)
   let stderr = ''
   try {
     const result = await execFile(
       ffmpegPath,
       ['-i', filePath, '-f', 'null', '-'],
-      { maxBuffer: 4 * 1024 * 1024 },
+      ffmpegOptions(signal),
     )
     stderr = String(result.stderr)
   }
   catch (error: unknown) {
+    if (signal?.aborted === true)
+      throw new Error('Media probe was cancelled')
     stderr = error instanceof Error && 'stderr' in error
       ? String((error as { stderr: string | Buffer }).stderr)
       : ''
   }
+  throwIfAborted(signal)
   const match = /Stream #0:0: Video: .*?,\s*(\d+)x(\d+)/u.exec(stderr)
   if (match === null)
     throw new Error(`Could not probe video size for ${filePath}`)
@@ -87,20 +97,40 @@ export async function probeVideoSize(
 export async function probeMediaHasAudio(
   filePath: string,
   ffmpegPath = resolveFfmpegPath(),
+  signal?: AbortSignal,
 ): Promise<boolean> {
+  throwIfAborted(signal)
   let stderr = ''
   try {
     const result = await execFile(
       ffmpegPath,
       ['-i', filePath, '-f', 'null', '-'],
-      { maxBuffer: 4 * 1024 * 1024 },
+      ffmpegOptions(signal),
     )
     stderr = String(result.stderr)
   }
   catch (error: unknown) {
+    if (signal?.aborted === true)
+      throw new Error('Media probe was cancelled')
     stderr = error instanceof Error && 'stderr' in error
       ? String((error as { stderr: string | Buffer }).stderr)
       : ''
   }
+  throwIfAborted(signal)
   return /Stream #.*: Audio:/u.test(stderr)
+}
+
+function ffmpegOptions(signal: AbortSignal | undefined): {
+  maxBuffer: number
+  signal?: AbortSignal
+} {
+  return {
+    maxBuffer: 4 * 1024 * 1024,
+    ...(signal === undefined ? {} : { signal }),
+  }
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted === true)
+    throw new Error('Media probe was cancelled')
 }

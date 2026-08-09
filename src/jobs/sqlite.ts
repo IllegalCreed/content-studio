@@ -1,6 +1,8 @@
 // @env node
 
 import type {
+  CompositionAttemptReceipt,
+  CompositionTaskEventInput,
   CreateExecutionTaskInput,
   ExecutionTask,
   ExecutionTaskEvent,
@@ -25,6 +27,10 @@ interface PersistedTaskEventRow {
 }
 
 interface PersistedRecordingReceiptRow {
+  payload: string
+}
+
+interface PersistedCompositionReceiptRow {
   payload: string
 }
 
@@ -66,6 +72,13 @@ export class SqliteExecutionTaskStore implements ExecutionTaskStore {
         payload TEXT NOT NULL,
         PRIMARY KEY (project_id, task_id, attempt)
       );
+      CREATE TABLE IF NOT EXISTS content_studio_task_composition_receipts (
+        project_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        attempt INTEGER NOT NULL,
+        payload TEXT NOT NULL,
+        PRIMARY KEY (project_id, task_id, attempt)
+      );
     `)
     this.loadState()
   }
@@ -88,11 +101,38 @@ export class SqliteExecutionTaskStore implements ExecutionTaskStore {
     return this.memory.listEvents(projectId, taskId)
   }
 
+  listCompositionReceipts(
+    projectId: string,
+    taskId: string,
+  ): CompositionAttemptReceipt[] {
+    return this.memory.listCompositionReceipts(projectId, taskId)
+  }
+
   listRecordingReceipts(
     projectId: string,
     taskId: string,
   ): RecorderAttemptReceipt[] {
     return this.memory.listRecordingReceipts(projectId, taskId)
+  }
+
+  saveCompositionReceipt(
+    projectId: string,
+    taskId: string,
+    receipt: CompositionAttemptReceipt,
+  ): CompositionAttemptReceipt {
+    const saved = this.memory.saveCompositionReceipt(projectId, taskId, receipt)
+    this.persistState()
+    return saved
+  }
+
+  appendCompositionEvent(
+    projectId: string,
+    taskId: string,
+    input: CompositionTaskEventInput,
+  ): ExecutionTaskEvent {
+    const event = this.memory.appendCompositionEvent(projectId, taskId, input)
+    this.persistState()
+    return event
   }
 
   saveRecordingReceipt(
@@ -155,7 +195,11 @@ export class SqliteExecutionTaskStore implements ExecutionTaskStore {
     const recordingReceipts = this.database
       .prepare('SELECT payload FROM content_studio_task_recording_receipts ORDER BY project_id, task_id, attempt')
       .all() as unknown as PersistedRecordingReceiptRow[]
+    const compositionReceipts = this.database
+      .prepare('SELECT payload FROM content_studio_task_composition_receipts ORDER BY project_id, task_id, attempt')
+      .all() as unknown as PersistedCompositionReceiptRow[]
     this.memory.restoreState({
+      compositionReceipts: compositionReceipts.map(row => JSON.parse(row.payload) as CompositionAttemptReceipt),
       events: events.map(row => JSON.parse(row.payload) as ExecutionTaskEvent),
       recordingReceipts: recordingReceipts.map(row => JSON.parse(row.payload) as RecorderAttemptReceipt),
       tasks: tasks.map(row => JSON.parse(row.payload) as ExecutionTask),
@@ -167,7 +211,7 @@ export class SqliteExecutionTaskStore implements ExecutionTaskStore {
     const state: ExecutionTaskStoreState = this.memory.exportState()
     this.database.exec('BEGIN')
     try {
-      this.database.exec('DELETE FROM content_studio_tasks; DELETE FROM content_studio_task_events; DELETE FROM content_studio_task_recording_receipts;')
+      this.database.exec('DELETE FROM content_studio_tasks; DELETE FROM content_studio_task_events; DELETE FROM content_studio_task_recording_receipts; DELETE FROM content_studio_task_composition_receipts;')
       const taskStatement = this.database.prepare(`
         INSERT INTO content_studio_tasks (project_id, task_id, payload)
         VALUES (?, ?, ?)
@@ -188,6 +232,13 @@ export class SqliteExecutionTaskStore implements ExecutionTaskStore {
       `)
       for (const receipt of state.recordingReceipts)
         receiptStatement.run(receipt.projectId, receipt.jobId, receipt.attempt, JSON.stringify(receipt))
+      const compositionReceiptStatement = this.database.prepare(`
+        INSERT INTO content_studio_task_composition_receipts
+          (project_id, task_id, attempt, payload)
+        VALUES (?, ?, ?, ?)
+      `)
+      for (const receipt of state.compositionReceipts)
+        compositionReceiptStatement.run(receipt.projectId, receipt.jobId, receipt.attempt, JSON.stringify(receipt))
       this.database.exec('COMMIT')
     }
     catch (error: unknown) {

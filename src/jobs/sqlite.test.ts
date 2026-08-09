@@ -1,6 +1,9 @@
 // @env node
 
-import type { RecorderAttemptReceipt } from '../types'
+import type {
+  CompositionAttemptReceipt,
+  RecorderAttemptReceipt,
+} from '../types'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -94,6 +97,51 @@ describe('sqlite execution task store', () => {
 
     const second = new SqliteExecutionTaskStore(databasePath)
     expect(second.listRecordingReceipts('project-a', 'task-a')).toEqual([receipt])
+    second.close()
+  })
+
+  it('restores composition receipts and progress events after reopening', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-task-store-'))
+    temporaryDirectories.push(directory)
+    const databasePath = join(directory, 'tasks.sqlite')
+    const first = new SqliteExecutionTaskStore(databasePath)
+    first.createTask({
+      activityId: 'activity-a',
+      kind: 'production',
+      productionType: 'video',
+      projectId: 'project-a',
+      taskId: 'task-a',
+    })
+    first.transitionTask('project-a', 'task-a', 'generating')
+    first.transitionTask('project-a', 'task-a', 'recording')
+    first.transitionTask('project-a', 'task-a', 'composing')
+    first.appendCompositionEvent('project-a', 'task-a', {
+      kind: 'composition-started',
+      message: 'Composition started',
+    })
+    const receipt: CompositionAttemptReceipt = {
+      artifacts: [],
+      attempt: 1,
+      failure: {
+        code: 'cancelled',
+        message: 'Composition cancelled',
+        retryable: true,
+      },
+      jobId: 'task-a',
+      outcome: 'cancelled',
+      projectId: 'project-a',
+      receiptVersion: 1,
+    }
+    first.saveCompositionReceipt('project-a', 'task-a', receipt)
+    first.close()
+
+    const second = new SqliteExecutionTaskStore(databasePath)
+    expect(second.listCompositionReceipts('project-a', 'task-a'))
+      .toEqual([receipt])
+    expect(second.listEvents('project-a', 'task-a').at(-1)).toMatchObject({
+      kind: 'composition-started',
+      message: 'Composition started',
+    })
     second.close()
   })
 
