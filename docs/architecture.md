@@ -454,7 +454,9 @@ Content Studio 的 transport-neutral 发布包以发布安排为稳定 package I
 `artifactId`、sha256、版本、类型和语言，不包含 `relativePath`；renderer 的格式、链接、
 规范 origin 和媒体类型在本地 fail closed 后形成稳定内容哈希。当前 `marketing-ops` v3
 仍按渠道限制一个包，且人工辅助媒体缺少已验证 asset-reference，因此这份包先作为下一版
-互操作契约，不直接触发外部写入。
+互操作契约，不直接触发外部写入。应用服务提供的准备操作按发布安排解析这些锁定记录，并
+从当前项目渠道绑定读取不透明账号引用；HTTP/MCP 输入不能自行选择账号或本地路径，返回值
+明确标记 `prepare-only` 与 `externalWrite: false`，不改变任务、不创建授权或发布回执。
 
 素材只有两个当前作用域：
 

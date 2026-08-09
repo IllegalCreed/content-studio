@@ -6,7 +6,9 @@ import type {
   ContentFormat,
   ContentFormBlueprint,
   ContentMediaRequirement,
+  MarketingOpsMediaKind,
   MarketingOpsPackageFormat,
+  MarketingOpsUtmMedium,
   StorageRetentionPolicy,
   VideoFormat,
   VideoViewport,
@@ -94,6 +96,25 @@ export const MARKETING_OPS_PACKAGE_FORMATS = {
   'youtube': 'manual-package',
   'zhihu': 'manual-package',
 } as const satisfies Record<ChannelId, MarketingOpsPackageFormat>
+
+export const MARKETING_OPS_PACKAGE_FORMAT_VALUES = [
+  'article',
+  'manual-package',
+  'post',
+  'release',
+  'status',
+] as const satisfies readonly MarketingOpsPackageFormat[]
+
+export const MARKETING_OPS_MEDIA_KINDS = [
+  'gif',
+  'image',
+  'video',
+] as const satisfies readonly MarketingOpsMediaKind[]
+
+export const MARKETING_OPS_UTM_MEDIUM_VALUES = [
+  'community',
+  'social',
+] as const satisfies readonly MarketingOpsUtmMedium[]
 
 export const DEFAULT_ACTION_DURATION_MS = {
   'capture': 2000,

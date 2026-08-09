@@ -344,18 +344,42 @@ describe('content Studio local MCP server', () => {
       method: 'tools/list',
     })
     const listedTools = (toolsResponse?.result as {
-      tools: Array<{ inputSchema: unknown, name: string }>
+      tools: Array<{
+        annotations: Record<string, boolean>
+        inputSchema: unknown
+        name: string
+      }>
     }).tools
     expect(listedTools.map(tool => tool.name)).toEqual(expect.arrayContaining([
       'create_owner_handoff',
       'create_publication_plan',
       'create_publishing_activity',
       'get_activity_video_plan',
+      'prepare_marketing_ops_package',
       'promote_activity_artifact',
       'register_activity_artifact',
       'revise_channel_content_media',
       'retry_task',
     ]))
+    const preparePackageTool = listedTools.find(tool =>
+      tool.name === 'prepare_marketing_ops_package',
+    )
+    expect(preparePackageTool).toMatchObject({
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: true,
+      },
+      inputSchema: {
+        additionalProperties: false,
+        properties: {
+          projectId: { type: 'string' },
+          publicationId: { type: 'string' },
+          renderer: { additionalProperties: false, type: 'object' },
+        },
+      },
+    })
+    expect(JSON.stringify(preparePackageTool?.inputSchema)).not.toContain('accountRef')
     const createActivityTool = listedTools.find(tool => tool.name === 'create_publishing_activity')
     expect(createActivityTool).toBeDefined()
     expect(createActivityTool?.inputSchema).toMatchObject({
@@ -1414,7 +1438,7 @@ describe('content Studio local MCP server', () => {
           contentGroupId: 'content-pack-core',
           contents: [{
             artifactIds: ['content-pack-cover'],
-            body: 'An AI-written, reviewable article draft.',
+            body: 'An AI-written, reviewable article draft: https://example.com/content-pack-demo/',
             channel: 'github',
             contentId: 'content-pack-github-en',
             format: 'article',
@@ -1481,6 +1505,44 @@ describe('content Studio local MCP server', () => {
           channel: 'github',
           contentId: 'content-pack-github-en',
           publicationId: 'content-pack-publication',
+        },
+      },
+    })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 40.1,
+      method: 'tools/call',
+      params: {
+        name: 'prepare_marketing_ops_package',
+        arguments: {
+          projectId,
+          publicationId: 'content-pack-publication',
+          renderer: {
+            canonicalUrl: 'https://example.com/content-pack-demo/',
+            format: 'release',
+            links: ['https://example.com/content-pack-demo/'],
+            media: ['image'],
+            utmMedium: 'community',
+          },
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          externalWrite: false,
+          mode: 'prepare-only',
+          package: {
+            artifactRefs: [{
+              artifactId: 'content-pack-cover',
+              mediaKind: 'image',
+            }],
+            channel: 'github',
+            contentId: 'content-pack-github-en',
+            packageId: 'content-pack-publication',
+            projectId,
+          },
         },
       },
     })

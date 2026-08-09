@@ -87,6 +87,12 @@ Content Studio 可以保存账号引用和脱敏投影，但不能保存或转�
 同一渠道出现不同语言或形态的多个包，并用稳定内容哈希锁定输入。GitHub 英文文章和
 Bilibili 中文图文/GIF fixture 已覆盖该边界；它尚未调用真实 `publish_campaign`。
 
+同日补齐了本地准备入口：应用服务按 `publicationId` 解析锁定的内容、活动快照和产物，
+再从当前启用的项目渠道绑定解析不透明账号引用；HTTP 与 MCP 调用方只提供受限 renderer
+元数据，不能提交账号引用或路径。返回值显式标记 `prepare-only` 和
+`externalWrite: false`，不会创建授权、任务状态变化或发布回执。这个入口仍只是本地契约
+验证，不会把草案包伪装成当前 v3 `publish_campaign` 输入。
+
 这份新包是下一版互操作契约草案，不冒充当前 v3 MCP 输入。接入写入前，`marketing-ops`
 仍需先支持稳定 package/publication ID、同渠道多包以及带校验和的素材引用；在此之前，
 含媒体的人工辅助包保持 blocked，不能通过删除 `media` 降级为“已就绪”。

@@ -4,7 +4,10 @@ export {
   DEFAULT_STORAGE_RETENTION_POLICY,
   defaultContentMediaRequirement,
   GIF_LIMITS,
+  MARKETING_OPS_MEDIA_KINDS,
+  MARKETING_OPS_PACKAGE_FORMAT_VALUES,
   MARKETING_OPS_PACKAGE_FORMATS,
+  MARKETING_OPS_UTM_MEDIUM_VALUES,
 } from './constants'
 export { generateContentPackages } from './content/generate'
 export {

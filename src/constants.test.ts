@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { CHANNEL_BLUEPRINTS } from './constants'
+import {
+  CHANNEL_BLUEPRINTS,
+  MARKETING_OPS_PACKAGE_FORMAT_VALUES,
+  MARKETING_OPS_PACKAGE_FORMATS,
+} from './constants'
 
 describe('channel blueprints', () => {
   it('covers the 19-channel content inventory without widening publishing authority', () => {
@@ -43,5 +47,10 @@ describe('channel blueprints', () => {
     }
     expect(CHANNEL_BLUEPRINTS.wechat.delivery).toBe('content-only')
     expect(CHANNEL_BLUEPRINTS.xiaohongshu.delivery).toBe('content-only')
+  })
+
+  it('keeps the marketing-ops renderer format enum aligned with channel mappings', () => {
+    expect(new Set(Object.values(MARKETING_OPS_PACKAGE_FORMATS)))
+      .toEqual(new Set(MARKETING_OPS_PACKAGE_FORMAT_VALUES))
   })
 })

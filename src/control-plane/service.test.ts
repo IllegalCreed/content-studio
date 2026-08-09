@@ -714,6 +714,144 @@ describe('content studio application service', () => {
     })).toThrow(/artifact.*locale/i)
   })
 
+  it('prepares a path-free marketing-ops package without external writes', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    const projectId = 'package-preparation-project'
+    const canonicalLink = `https://${projectId}.example.com/guide/`
+    registerProject(service, projectId)
+    service.bindProjectChannel({
+      accountRef: 'github-account-ref',
+      channel: 'github',
+      delivery: 'automatic-candidate',
+      enabled: true,
+      projectId,
+    })
+    const activity = service.createActivity({
+      activityId: 'package-preparation-activity',
+      campaignId: 'package-preparation-campaign',
+      channels: [{ contentFormats: ['article'], id: 'github', locale: 'en' }],
+      goal: 'launch',
+      projectId,
+      projectSnapshotId: `${projectId}-snapshot-1`,
+      status: 'draft',
+      targetUrl: canonicalLink,
+      topic: { 'en': 'Package preparation', 'zh-CN': '发布包准备' },
+    })
+    const group = service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'package-preparation-group',
+      coreMessage: 'Prepare a release package',
+      projectId,
+      title: 'Package preparation',
+    })
+    const artifact = service.createActivityArtifact({
+      activityId: activity.activityId,
+      artifactId: 'package-preparation-article',
+      kind: 'article-version',
+      locale: 'en',
+      projectId,
+      relativePath: 'articles/release.md',
+      sha256: 'a'.repeat(64),
+    })
+    const content = service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: [artifact.artifactId],
+      body: `Read the release guide at ${canonicalLink}`,
+      channel: 'github',
+      contentGroupId: group.contentGroupId,
+      contentId: 'package-preparation-content',
+      format: 'article',
+      locale: 'en',
+      projectId,
+      title: 'Package preparation release',
+    })
+    const publication = service.createPublicationPlan({
+      activityId: activity.activityId,
+      channel: 'github',
+      contentId: content.contentId,
+      projectId,
+      publicationId: 'package-preparation-publication',
+    })
+    const before = service.getProjectView(projectId)
+
+    const prepared = service.prepareMarketingOpsPublicationPackage({
+      projectId,
+      publicationId: publication.publicationId,
+      renderer: {
+        canonicalUrl: canonicalLink,
+        format: 'release',
+        links: [canonicalLink],
+        media: [],
+        utmMedium: 'community',
+      },
+    })
+
+    expect(prepared).toMatchObject({
+      externalWrite: false,
+      mode: 'prepare-only',
+      package: {
+        accountRef: 'github-account-ref',
+        activityId: activity.activityId,
+        artifactRefs: [{
+          artifactId: artifact.artifactId,
+          kind: 'article-version',
+          locale: 'en',
+          sha256: 'a'.repeat(64),
+          version: 1,
+        }],
+        channel: 'github',
+        contentId: content.contentId,
+        locale: 'en',
+        packageId: publication.publicationId,
+        projectId,
+        publicationId: publication.publicationId,
+      },
+    })
+    expect(prepared.package.artifactRefs[0]).not.toHaveProperty('relativePath')
+    const after = service.getProjectView(projectId)
+    expect(after.tasks).toEqual(before.tasks)
+    expect(after.publicationReceipts).toEqual([])
+
+    service.updateProjectChannelBinding({
+      accountRef: 'github-account-ref',
+      channel: 'github',
+      delivery: 'content-only',
+      enabled: true,
+      projectId,
+    })
+    expect(() => service.prepareMarketingOpsPublicationPackage({
+      projectId,
+      publicationId: publication.publicationId,
+      renderer: {
+        canonicalUrl: canonicalLink,
+        format: 'release',
+        links: [canonicalLink],
+        media: [],
+        utmMedium: 'community',
+      },
+    })).toThrow(/content-only channel/i)
+
+    service.updateProjectChannelBinding({
+      accountRef: 'github-account-ref',
+      channel: 'github',
+      delivery: 'automatic-candidate',
+      enabled: false,
+      projectId,
+    })
+    expect(() => service.prepareMarketingOpsPublicationPackage({
+      projectId,
+      publicationId: publication.publicationId,
+      renderer: {
+        canonicalUrl: canonicalLink,
+        format: 'release',
+        links: [canonicalLink],
+        media: [],
+        utmMedium: 'community',
+      },
+    })).toThrow(/enabled channel/i)
+  })
+
   it('applies different readiness requirements to Bilibili image-text and short-post content', () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)

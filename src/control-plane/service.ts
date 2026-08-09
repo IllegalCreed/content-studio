@@ -36,8 +36,10 @@ import type {
   ExecutionTaskKind,
   ExecutionTaskStore,
   Locale,
+  MarketingOpsPublicationPackagePreparation,
   MonitoringObservation,
   OwnerHandoff,
+  PrepareMarketingOpsPublicationPackageInput,
   ProjectAsset,
   ProjectChannelBinding,
   ProjectRecord,
@@ -61,6 +63,7 @@ import {
 import { runProductionTask as executeProductionTask } from '../jobs/production'
 import { InMemoryExecutionTaskStore } from '../jobs/task'
 import { assertMatchingMarketingOpsReceipt } from '../marketing-ops/client'
+import { compileMarketingOpsPublicationPackage } from '../marketing-ops/package'
 import { resolveGifOutputSize } from '../media/gif'
 import { compileVideoPlan } from '../video/compile'
 import { validateVideoRecordingProfile } from '../video/recording-config'
@@ -1521,6 +1524,58 @@ export class ContentStudioApplicationService {
     const plan = this.repository.savePublicationPlan(input)
     this.createPublicationTask(plan)
     return plan
+  }
+
+  prepareMarketingOpsPublicationPackage(
+    input: PrepareMarketingOpsPublicationPackageInput,
+  ): MarketingOpsPublicationPackagePreparation {
+    const publication = this.requirePublicationPlan(
+      input.projectId,
+      input.publicationId,
+    )
+    const content = this.repository.getChannelContent(
+      input.projectId,
+      publication.contentId,
+    )
+    if (content === undefined)
+      throw new RecordNotFoundError('Channel content', publication.contentId)
+    const activity = this.requireActivity(input.projectId, publication.activityId)
+    const snapshot = this.requireSnapshot(
+      input.projectId,
+      activity.projectSnapshotId,
+    )
+    const binding = this.repository
+      .listProjectChannelBindings(input.projectId)
+      .find(candidate => candidate.channel === publication.channel)
+    if (binding?.enabled !== true) {
+      throw new Error(
+        `Activity can only target enabled channel: ${publication.channel}`,
+      )
+    }
+    if (binding.delivery === 'content-only') {
+      throw new Error(
+        `Content-only channel does not support publication plans: ${publication.channel}`,
+      )
+    }
+
+    return {
+      externalWrite: false,
+      mode: 'prepare-only',
+      package: compileMarketingOpsPublicationPackage({
+        ...(binding.accountRef === undefined
+          ? {}
+          : { accountRef: binding.accountRef }),
+        activity,
+        artifacts: this.repository.listActivityArtifacts(
+          input.projectId,
+          activity.activityId,
+        ),
+        content,
+        publication,
+        renderer: input.renderer,
+        snapshot,
+      }),
+    }
   }
 
   recordPublicationReceipt(

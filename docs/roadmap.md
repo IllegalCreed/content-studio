@@ -654,7 +654,9 @@ viewport≠outputSize 的成品尺寸偏差。新增 `probeVideoSize` 探测成�
 把发布安排固定为 `channel + locale + contentFormat + contentVersion` 包，只输出窄
 artifact ID、sha256、版本和语言，不输出本地路径；英文 GitHub 文章与中文 Bilibili
 图文/GIF fixture 已验证 renderer 链接、origin、媒体和稳定内容哈希。批量编译允许同一渠道
-存在多语言/多形态包，但尚未接入仍按渠道唯一且缺少媒体 asset-reference 的
+存在多语言/多形态包。应用服务、本地 HTTP 和只读 MCP 工具现已能按发布安排解析版本化
+内容、素材、项目快照和当前渠道绑定，返回明确标记 `prepare-only`、`externalWrite: false`
+的包，不创建回执或改变任务；它仍未接入按渠道唯一且缺少媒体 asset-reference 的
 `marketing-ops` v3 写入接口。
 
 V0.4 的完成标准是：一个视频渠道内容可以从脚本和录制片段生成最终资源变体，
@@ -681,8 +683,10 @@ core 或 Vue。详细的 M0—M6 子路线、当前“项目每渠道唯一账�
 - [x] 用 transport-neutral 编译器把文章、图文、动态、视频和资源变体锁定为项目范围、
       语言感知且版本化的发布包；同一渠道可保留多个语言/形态。
 - [x] 使用校验和、窄素材 ID 和 renderer 产物，不传递任意文件路径。
-- [ ] 把已编译包接入应用服务和下一版 `marketing-ops` asset-reference 契约；当前 v3
-      不支持同渠道多包，人工辅助媒体也不能把类型声明当作已解析素材。
+- [x] 把已编译包接入应用服务、本地 HTTP 和只读 MCP 准备入口；账号引用从当前项目绑定
+      解析，调用输入不接受账号引用或路径，准备不会创建授权、渠道调用或回执。
+- [ ] 接入下一版 `marketing-ops` asset-reference 契约；当前 v3 不支持同渠道多包，
+      人工辅助媒体也不能把类型声明当作已解析素材。
 
 ### 人工接管、回执与报告
 

@@ -22,6 +22,7 @@ import {
   parseCreateActivityInput,
   parseCreateChannelContentInput,
   parseCreateOwnerHandoffInput,
+  parsePrepareMarketingOpsPublicationPackageInput,
   parsePromoteActivityArtifactInput,
   parseRecordMonitoringObservationInput,
   parseRecordPublicationReceiptInput,
@@ -410,6 +411,87 @@ describe('content studio local application server', () => {
     }, 'project-a', 'youtube')).toThrow(/unsupported/i)
   })
 
+  it('parses a bounded, path-free marketing-ops package preparation request', () => {
+    const input = {
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+      renderer: {
+        canonicalUrl: 'https://project-a.example.com/guide/',
+        format: 'release',
+        links: ['https://project-a.example.com/guide/'],
+        media: [],
+        utmMedium: 'community',
+      },
+    }
+    expect(parsePrepareMarketingOpsPublicationPackageInput(
+      input,
+      'project-a',
+      'publication-a',
+    )).toEqual(input)
+    expect(() => parsePrepareMarketingOpsPublicationPackageInput({
+      ...input,
+      accountRef: 'must-be-resolved-from-binding',
+    }, 'project-a', 'publication-a')).toThrow(/unsupported field.*accountRef/i)
+    expect(() => parsePrepareMarketingOpsPublicationPackageInput({
+      ...input,
+      renderer: {
+        ...input.renderer,
+        links: ['http://project-a.example.com/guide/'],
+      },
+    }, 'project-a', 'publication-a')).toThrow(/HTTPS/i)
+    expect(() => parsePrepareMarketingOpsPublicationPackageInput({
+      ...input,
+      renderer: {
+        ...input.renderer,
+        relativePath: '.content-studio/release.md',
+      },
+    }, 'project-a', 'publication-a')).toThrow(/unsupported field.*relativePath/i)
+    expect(() => parsePrepareMarketingOpsPublicationPackageInput({
+      ...input,
+      projectId: 'project-b',
+    }, 'project-a', 'publication-a')).toThrow(/projectId must match/i)
+    expect(() => parsePrepareMarketingOpsPublicationPackageInput({
+      ...input,
+      publicationId: 'publication-b',
+    }, 'project-a', 'publication-a')).toThrow(/publicationId must match/i)
+    expect(() => parsePrepareMarketingOpsPublicationPackageInput({
+      ...input,
+      renderer: { ...input.renderer, format: 'thread' },
+    }, 'project-a', 'publication-a')).toThrow(/renderer format/i)
+    expect(() => parsePrepareMarketingOpsPublicationPackageInput({
+      ...input,
+      renderer: {
+        ...input.renderer,
+        links: Array.from(
+          { length: 11 },
+          (_, index) => `https://project-a.example.com/guide/${index}`,
+        ),
+      },
+    }, 'project-a', 'publication-a')).toThrow(/at most 10/i)
+    expect(() => parsePrepareMarketingOpsPublicationPackageInput({
+      ...input,
+      renderer: {
+        ...input.renderer,
+        links: [
+          'https://project-a.example.com:443/guide/',
+          'https://project-a.example.com/guide/',
+        ],
+      },
+    }, 'project-a', 'publication-a')).toThrow(/duplicates/i)
+    expect(() => parsePrepareMarketingOpsPublicationPackageInput({
+      ...input,
+      renderer: { ...input.renderer, media: ['image', 'image'] },
+    }, 'project-a', 'publication-a')).toThrow(/media.*duplicates/i)
+    expect(() => parsePrepareMarketingOpsPublicationPackageInput({
+      ...input,
+      renderer: { ...input.renderer, media: ['document'] },
+    }, 'project-a', 'publication-a')).toThrow(/media kind/i)
+    expect(() => parsePrepareMarketingOpsPublicationPackageInput({
+      ...input,
+      renderer: { ...input.renderer, utmMedium: 'email' },
+    }, 'project-a', 'publication-a')).toThrow(/UTM medium/i)
+  })
+
   it('parses a pending owner handoff without accepting unsafe or completed state', () => {
     const baseHandoff = {
       activityId: 'activity-a',
@@ -771,7 +853,7 @@ describe('content studio local application server', () => {
         {
           body: JSON.stringify({
             activityId: 'activity-a',
-            body: 'A short explanation of partitioning.',
+            body: 'A short explanation of partitioning: https://project-a.example.com/guide',
             channel: 'github',
             contentGroupId: 'group-a',
             contentId: 'content-a',
@@ -903,6 +985,47 @@ describe('content studio local application server', () => {
         channel: 'github',
         contentId: 'content-a',
         publicationId: 'publication-a',
+      })
+
+      const packagePreparationResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/publication-plans/publication-a/package-preparation`,
+        {
+          body: JSON.stringify({
+            projectId: 'project-a',
+            publicationId: 'publication-a',
+            renderer: {
+              canonicalUrl: 'https://project-a.example.com/guide',
+              format: 'release',
+              links: ['https://project-a.example.com/guide'],
+              media: ['image'],
+              utmMedium: 'community',
+            },
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      const packagePreparationBody = await packagePreparationResponse.json()
+      expect({
+        body: packagePreparationBody,
+        status: packagePreparationResponse.status,
+      }).toMatchObject({
+        body: {
+          externalWrite: false,
+          mode: 'prepare-only',
+          package: {
+            artifactRefs: [{
+              artifactId: 'image-a',
+              mediaKind: 'image',
+            }],
+            channel: 'github',
+            contentId: 'content-a',
+            packageId: 'publication-a',
+            projectId: 'project-a',
+            publicationId: 'publication-a',
+          },
+        },
+        status: 200,
       })
 
       const handoffResponse = await fetch(

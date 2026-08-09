@@ -26,10 +26,14 @@ import type {
   ExecutionTask,
   ExecutionTaskStore,
   Locale,
+  MarketingOpsMediaKind,
+  MarketingOpsPackageFormat,
+  MarketingOpsUtmMedium,
   MonitoringObservation,
   ObservationMetric,
   ObservationSource,
   OwnerHandoff,
+  PrepareMarketingOpsPublicationPackageInput,
   ProjectAssetKind,
   ProjectChannelBinding,
   ProjectRecord,
@@ -54,7 +58,13 @@ import { createHash } from 'node:crypto'
 import { readFile, realpath, stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
-import { CHANNEL_BLUEPRINTS, DEFAULT_STORAGE_RETENTION_POLICY } from '../constants'
+import {
+  CHANNEL_BLUEPRINTS,
+  DEFAULT_STORAGE_RETENTION_POLICY,
+  MARKETING_OPS_MEDIA_KINDS,
+  MARKETING_OPS_PACKAGE_FORMAT_VALUES,
+  MARKETING_OPS_UTM_MEDIUM_VALUES,
+} from '../constants'
 import {
   ContentStudioApplicationService,
   ProjectScopeError,
@@ -159,6 +169,15 @@ const PROJECT_ASSET_KINDS = new Set<ProjectAssetKind>([
   'template',
   'video',
 ])
+const MARKETING_OPS_PACKAGE_FORMAT_SET = new Set<MarketingOpsPackageFormat>(
+  MARKETING_OPS_PACKAGE_FORMAT_VALUES,
+)
+const MARKETING_OPS_MEDIA_KIND_SET = new Set<MarketingOpsMediaKind>(
+  MARKETING_OPS_MEDIA_KINDS,
+)
+const MARKETING_OPS_UTM_MEDIUM_SET = new Set<MarketingOpsUtmMedium>(
+  MARKETING_OPS_UTM_MEDIUM_VALUES,
+)
 
 export interface ContentStudioServerOptions {
   additionalProjects?: Array<{
@@ -891,6 +910,36 @@ async function handleRequest(
 
     if (
       request.method === 'POST'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'publication-plans'
+      && segments[6] === 'package-preparation'
+    ) {
+      const projectId = identifierField(
+        decodeSegment(segments[3]!),
+        'projectId',
+      )
+      const publicationId = identifierField(
+        decodeSegment(segments[5]!),
+        'publicationId',
+      )
+      const input = parsePrepareMarketingOpsPublicationPackageInput(
+        await readJsonBody(request),
+        projectId,
+        publicationId,
+      )
+      sendJson(
+        response,
+        200,
+        service.prepareMarketingOpsPublicationPackage(input),
+      )
+      return
+    }
+
+    if (
+      request.method === 'POST'
       && segments.length === 9
       && segments[0] === 'api'
       && segments[1] === 'v1'
@@ -1560,6 +1609,82 @@ export function parseCreatePublicationPlanInput(
   }
 }
 
+export function parsePrepareMarketingOpsPublicationPackageInput(
+  input: unknown,
+  projectId: string,
+  publicationId: string,
+): PrepareMarketingOpsPublicationPackageInput {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'marketingOpsPackagePreparation')
+  const supportedKeys = new Set(['projectId', 'publicationId', 'renderer'])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key)) {
+      throw new RequestError(
+        400,
+        `marketingOpsPackagePreparation contains unsupported field: ${key}`,
+      )
+    }
+  }
+  const inputProjectId = identifierField(value.projectId, 'projectId')
+  if (inputProjectId !== projectId)
+    throw new RequestError(400, 'projectId must match the URL')
+  const inputPublicationId = identifierField(
+    value.publicationId,
+    'publicationId',
+  )
+  if (inputPublicationId !== publicationId)
+    throw new RequestError(400, 'publicationId must match the URL')
+
+  const renderer = asRecord(value.renderer, 'renderer')
+  const rendererKeys = new Set([
+    'canonicalUrl',
+    'format',
+    'links',
+    'media',
+    'utmMedium',
+  ])
+  for (const key of Object.keys(renderer)) {
+    if (!rendererKeys.has(key))
+      throw new RequestError(400, `renderer contains unsupported field: ${key}`)
+  }
+  const format = stringField(renderer.format, 'renderer.format')
+  if (!MARKETING_OPS_PACKAGE_FORMAT_SET.has(format as MarketingOpsPackageFormat)) {
+    throw new RequestError(
+      400,
+      `Unsupported marketing-ops renderer format: ${format}`,
+    )
+  }
+  const links = stringListField(renderer.links, 'renderer.links')
+    .map((link, index) => httpsUrlField(link, `renderer.links[${index}]`))
+  if (links.length > 10)
+    throw new RequestError(400, 'renderer.links must contain at most 10 URLs')
+  if (new Set(links).size !== links.length)
+    throw new RequestError(400, 'renderer.links must not contain duplicates')
+  const media = marketingOpsMediaKindsField(renderer.media)
+  const utmMedium = stringField(renderer.utmMedium, 'renderer.utmMedium')
+  if (!MARKETING_OPS_UTM_MEDIUM_SET.has(utmMedium as MarketingOpsUtmMedium)) {
+    throw new RequestError(
+      400,
+      `Unsupported marketing-ops UTM medium: ${utmMedium}`,
+    )
+  }
+
+  return {
+    projectId,
+    publicationId,
+    renderer: {
+      canonicalUrl: httpsUrlField(
+        renderer.canonicalUrl,
+        'renderer.canonicalUrl',
+      ),
+      format: format as MarketingOpsPackageFormat,
+      links,
+      media,
+      utmMedium: utmMedium as MarketingOpsUtmMedium,
+    },
+  }
+}
+
 export function parseCreateOwnerHandoffInput(
   input: unknown,
   projectId: string,
@@ -1969,6 +2094,26 @@ function stringListField(input: unknown, name: string): string[] {
   if (new Set(values).size !== values.length)
     throw new RequestError(400, `${name} must not contain duplicates`)
   return values
+}
+
+function marketingOpsMediaKindsField(input: unknown): MarketingOpsMediaKind[] {
+  if (!Array.isArray(input) || input.length > MARKETING_OPS_MEDIA_KIND_SET.size)
+    throw new RequestError(400, 'renderer.media must contain at most three media kinds')
+  const values = input.map((item, index) =>
+    stringField(item, `renderer.media[${index}]`),
+  )
+  if (new Set(values).size !== values.length)
+    throw new RequestError(400, 'renderer.media must not contain duplicates')
+  const unsupported = values.find(value =>
+    !MARKETING_OPS_MEDIA_KIND_SET.has(value as MarketingOpsMediaKind),
+  )
+  if (unsupported !== undefined) {
+    throw new RequestError(
+      400,
+      `Unsupported marketing-ops media kind: ${unsupported}`,
+    )
+  }
+  return values as MarketingOpsMediaKind[]
 }
 
 function relativePathField(input: unknown): string {

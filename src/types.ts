@@ -675,6 +675,18 @@ export interface MarketingOpsPublicationPackageInput {
   snapshot: ProjectSnapshot
 }
 
+export interface PrepareMarketingOpsPublicationPackageInput {
+  projectId: string
+  publicationId: string
+  renderer: MarketingOpsRendererOutput
+}
+
+export interface MarketingOpsPublicationPackagePreparation {
+  externalWrite: false
+  mode: 'prepare-only'
+  package: MarketingOpsPublicationPackage
+}
+
 export type OwnerHandoffStatus = 'cancelled' | 'completed' | 'expired' | 'pending'
 
 export interface OwnerHandoff {

@@ -161,6 +161,13 @@ draft → planned → active → completed → archived
 最终媒体引用，保留文章版本、音频、录制片段等其他引用；版本过期、跨活动产物或已建立
 `PublicationPlan` 都会被拒绝。
 
+发布安排建立后，应用服务可以只读准备 transport-neutral 的 Marketing Ops 包。HTTP 入口为
+`POST /api/v1/projects/:projectId/publication-plans/:publicationId/package-preparation`，
+MCP 工具为 `prepare_marketing_ops_package`。调用方只提交项目、发布安排和受限的 renderer
+元数据；应用服务从版本化活动记录解析内容、活动产物和项目快照，并从当前启用的项目渠道
+绑定解析不透明账号引用。输入不接受账号引用或本地路径，操作不改变任务、不创建授权或
+发布回执，也不调用当前 `marketing-ops` v3 写入接口。
+
 ### 项目素材、活动产物和资源变体
 
 当前阶段不设置全局素材库。

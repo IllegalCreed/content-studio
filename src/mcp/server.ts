@@ -11,7 +11,13 @@ import type {
   ExecutionTaskStatus,
 } from '../types'
 import { createInterface } from 'node:readline'
-import { MCP_LIST_TTL_MS, MCP_RESOURCE_TTL_MS } from '../constants'
+import {
+  MARKETING_OPS_MEDIA_KINDS,
+  MARKETING_OPS_PACKAGE_FORMAT_VALUES,
+  MARKETING_OPS_UTM_MEDIUM_VALUES,
+  MCP_LIST_TTL_MS,
+  MCP_RESOURCE_TTL_MS,
+} from '../constants'
 import {
   ProjectScopeError,
   RecordConflictError,
@@ -29,6 +35,7 @@ import {
   parseCreateContentGroupInput,
   parseCreateOwnerHandoffInput,
   parseCreatePublicationPlanInput,
+  parsePrepareMarketingOpsPublicationPackageInput,
   parsePromoteActivityArtifactInput,
   parseReviseChannelContentMediaInput,
 } from '../runtime/server'
@@ -509,6 +516,17 @@ function toolDefinitions(): Array<Record<string, unknown>> {
       annotations: {
         destructiveHint: false,
         openWorldHint: false,
+        readOnlyHint: true,
+      },
+      description: '根据项目内发布安排、版本化素材和当前渠道绑定准备并校验 marketing-ops 包。只返回本地结果，不调用渠道、不创建授权或发布回执。',
+      inputSchema: marketingOpsPackagePreparationSchema(),
+      name: 'prepare_marketing_ops_package',
+      title: '准备 Marketing Ops 发布包',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
         readOnlyHint: false,
       },
       description: '为发布安排准备人工确认包，只保存校验和、清单和官方页面地址，不保存凭据。',
@@ -787,6 +805,47 @@ function publicationPlanSchema(): Record<string, unknown> {
   }
 }
 
+function marketingOpsPackagePreparationSchema(): Record<string, unknown> {
+  return {
+    additionalProperties: false,
+    properties: {
+      projectId: { type: 'string' },
+      publicationId: { type: 'string' },
+      renderer: {
+        additionalProperties: false,
+        properties: {
+          canonicalUrl: { format: 'uri', pattern: '^https://', type: 'string' },
+          format: {
+            enum: [...MARKETING_OPS_PACKAGE_FORMAT_VALUES],
+            type: 'string',
+          },
+          links: {
+            items: { format: 'uri', pattern: '^https://', type: 'string' },
+            maxItems: 10,
+            minItems: 1,
+            type: 'array',
+            uniqueItems: true,
+          },
+          media: {
+            items: { enum: [...MARKETING_OPS_MEDIA_KINDS], type: 'string' },
+            maxItems: 3,
+            type: 'array',
+            uniqueItems: true,
+          },
+          utmMedium: {
+            enum: [...MARKETING_OPS_UTM_MEDIUM_VALUES],
+            type: 'string',
+          },
+        },
+        required: ['canonicalUrl', 'format', 'links', 'media', 'utmMedium'],
+        type: 'object',
+      },
+    },
+    required: ['projectId', 'publicationId', 'renderer'],
+    type: 'object',
+  }
+}
+
 function ownerHandoffSchema(): Record<string, unknown> {
   return {
     properties: {
@@ -1019,6 +1078,23 @@ function executeTool(
       const activityId = identifierField(value.activityId, 'activityId')
       return options.service.createPublicationPlan(
         parseCreatePublicationPlanInput(value, projectId, activityId),
+      )
+    }
+    case 'prepare_marketing_ops_package': {
+      const value = asRecord(input, 'marketingOpsPackagePreparation')
+      assertKeys(
+        value,
+        ['projectId', 'publicationId', 'renderer'],
+        'marketingOpsPackagePreparation',
+      )
+      const projectId = scopedId(value.projectId, options.projectId, 'projectId')
+      const publicationId = identifierField(value.publicationId, 'publicationId')
+      return options.service.prepareMarketingOpsPublicationPackage(
+        parsePrepareMarketingOpsPublicationPackageInput(
+          value,
+          projectId,
+          publicationId,
+        ),
       )
     }
     case 'create_owner_handoff': {
