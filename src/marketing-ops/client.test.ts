@@ -194,6 +194,55 @@ describe('marketing-ops client boundary', () => {
     })
   })
 
+  it('preserves a validated opaque account reference from a status response', async () => {
+    const client = createMarketingOpsStatusClient({
+      transport: {
+        getChannelsStatus: async () => ({
+          channels: [{
+            accountRef: 'account.github.main',
+            adapterReady: true,
+            alias: '@renamed-release-bot',
+            channel: 'github',
+            health: 'ready',
+            nextAction: null,
+          }],
+          contractVersion: 3,
+          projectId: 'project-a',
+        }),
+        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.1.0' }),
+      },
+    })
+
+    await expect(client.getChannelsStatus('project-a')).resolves.toMatchObject({
+      channels: [{
+        accountRef: 'account.github.main',
+        accountAlias: '@renamed-release-bot',
+      }],
+    })
+  })
+
+  it('rejects malformed opaque account references', async () => {
+    const client = createMarketingOpsStatusClient({
+      transport: {
+        getChannelsStatus: async () => ({
+          channels: [{
+            accountRef: 'account/ref with spaces',
+            adapterReady: true,
+            alias: '@release-bot',
+            channel: 'github',
+            health: 'ready',
+            nextAction: null,
+          }],
+          contractVersion: 3,
+          projectId: 'project-a',
+        }),
+        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.1.0' }),
+      },
+    })
+
+    await expect(client.getChannelsStatus('project-a')).rejects.toThrow(/opaque account reference/i)
+  })
+
   it('rejects incompatible or malformed status data without exposing unknown fields', async () => {
     let statusCalls = 0
     const incompatible = createMarketingOpsStatusClient({

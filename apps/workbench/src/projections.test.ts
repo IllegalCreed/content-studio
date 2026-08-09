@@ -160,6 +160,126 @@ describe('workbench runtime projections', () => {
     expect(JSON.stringify(projected)).not.toContain('marketing-ops setup')
   })
 
+  it('优先用稳定 accountRef 匹配项目账号，不受 alias 改名影响', () => {
+    const channels: ChannelProjection[] = [{
+      accounts: [{
+        accountId: 'account.github.main',
+        adapterReady: false,
+        alias: '@old-release-bot',
+        assignedProjects: ['project-a'],
+        channel: 'github',
+        health: '未查询',
+        isDefault: true,
+        nextAction: '尚未读取该账号的 marketing-ops 状态',
+        statusSource: '项目配置',
+      }],
+      adapterReady: false,
+      alias: '@old-release-bot',
+      bodyLimit: 12000,
+      channel: 'github',
+      delivery: '全自动候选',
+      enabled: true,
+      format: '文章',
+      health: '未查询',
+      metrics: [],
+      nextAction: '尚未读取该渠道的 marketing-ops 状态',
+      projectAccountId: 'account.github.main',
+      statusSource: '项目配置',
+      titleLimit: 128,
+    }]
+    const status: MarketingOpsChannelsStatusSnapshot = {
+      authorizesExternalWrite: false,
+      channels: [{
+        accountRef: 'account.github.main',
+        accountAlias: '@renamed-release-bot',
+        adapterReady: true,
+        channel: 'github',
+        health: 'ready',
+        nextStep: 'ready',
+      }],
+      contractVersion: 3,
+      expiresAt: '2099-01-01T00:01:00.000Z',
+      observedAt: '2099-01-01T00:00:00.000Z',
+      projectId: 'project-a',
+      runtimeVersion: '0.1.0',
+    }
+
+    const [projected] = projectMarketingOpsChannels(channels, status)
+
+    expect(projected).toMatchObject({
+      alias: '@renamed-release-bot',
+      adapterReady: true,
+      health: '已就绪',
+      statusSource: 'marketing-ops',
+      accounts: [{
+        accountId: 'account.github.main',
+        adapterReady: true,
+        alias: '@old-release-bot',
+        health: '已就绪',
+        statusSource: 'marketing-ops',
+      }],
+    })
+  })
+
+  it('fails closed when a live accountRef does not match the project binding', () => {
+    const channels: ChannelProjection[] = [{
+      accounts: [{
+        accountId: 'account.github.main',
+        adapterReady: false,
+        alias: '@project-a',
+        assignedProjects: ['project-a'],
+        channel: 'github',
+        health: '未查询',
+        isDefault: true,
+        nextAction: '尚未读取该账号的 marketing-ops 状态',
+        statusSource: '项目配置',
+      }],
+      adapterReady: false,
+      alias: '@project-a',
+      bodyLimit: 12000,
+      channel: 'github',
+      delivery: '全自动候选',
+      enabled: true,
+      format: '文章',
+      health: '未查询',
+      metrics: [],
+      nextAction: '尚未读取该渠道的 marketing-ops 状态',
+      projectAccountId: 'account.github.main',
+      statusSource: '项目配置',
+      titleLimit: 128,
+    }]
+    const status: MarketingOpsChannelsStatusSnapshot = {
+      authorizesExternalWrite: false,
+      channels: [{
+        accountRef: 'account.github.other',
+        accountAlias: '@other-account',
+        adapterReady: true,
+        channel: 'github',
+        health: 'ready',
+        nextStep: 'ready',
+      }],
+      contractVersion: 3,
+      expiresAt: '2099-01-01T00:01:00.000Z',
+      observedAt: '2099-01-01T00:00:00.000Z',
+      projectId: 'project-a',
+      runtimeVersion: '0.1.0',
+    }
+
+    const [projected] = projectMarketingOpsChannels(channels, status)
+
+    expect(projected).toMatchObject({
+      adapterReady: false,
+      health: '未查询',
+      statusSource: '项目配置',
+      accounts: [{
+        adapterReady: false,
+        health: '未查询',
+        statusSource: '项目配置',
+      }],
+    })
+    expect(JSON.stringify(projected)).not.toContain('@other-account')
+  })
+
   it('将缺失或不可用的 live status 重置为未查询，保留内容生产能力投影', () => {
     const channels: ChannelProjection[] = [{
       accounts: [],

@@ -25,8 +25,11 @@ Content Studio 负责项目、发布活动、内容、素材、制作任务和�
 当前公开 MCP 接口可以确认：
 
 - 调用按稳定 `projectId` 隔离；写入前要先读取该项目的渠道状态。
-- `channels_status` 返回脱敏的渠道健康、适配器状态、账号别名和下一步建议。
-- 当前公共状态面按渠道暴露一个可见 `alias`；它还不是统一的跨项目账号目录接口。
+- `channels_status` 返回脱敏的渠道健康、适配器状态、账号别名和下一步建议；已解析的本地
+  账号还可以带由当前已校验公开身份导出的确定性、不透明 `accountRef`，不返回平台 ID
+  或任何秘密。
+- 当前公共状态面每个渠道仍只暴露一个已解析身份；它还不是统一的跨项目账号目录接口，
+  也不能选择或配置多个账号。
 - `publish_campaign` 的发布包没有 `channelAccountRef`/`accountId` 选择字段。
 - 当前 v3 发布包按 `channel` 唯一，不能在同一请求中表达同一渠道的多语言或多内容
   形态；人工辅助确认仍只接受文本，`image`/`gif`/`video` 类型本身不是已解析素材。
@@ -125,6 +128,11 @@ MCP client 和关闭回调，关闭操作幂等；`runCli` 会在命令结束时
 `channels_status`，收到 contract v3、5 个渠道状态、4 个就绪适配器，并确认
 `authorizesExternalWrite: false`；未调用任何写工具。该结果是手工环境证据，不替代 CI
 或安装器发布验收，也不表示渠道已获得本次活动授权。
+
+同日开始 M1 的只读身份切片：已配置的 GitHub、Bluesky、DEV 和 Mastodon 账号会在
+`channels_status` 中返回由其公开、已校验身份导出的 opaque `accountRef`，不返回原始
+稳定 ID；Content Studio 先按该引用匹配项目绑定，引用不匹配就清除 live 状态，只有旧 v3
+未带引用的响应才临时回退到 alias。它不提供账号目录、账号选择、发布包账号字段或写入权。
 
 这份新包是下一版互操作契约草案，不冒充当前 v3 MCP 输入。接入写入前，`marketing-ops`
 仍需先支持稳定 package/publication ID、同渠道多包以及带校验和的素材引用；在此之前，

@@ -700,6 +700,8 @@ export type MarketingOpsChannelNextStep
     | 'reauthorize'
 
 export interface MarketingOpsChannelStatus {
+  /** Opaque account identity; aliases are display-only and may change. */
+  accountRef?: string
   accountAlias?: string
   adapterReady: boolean
   channel: ChannelId

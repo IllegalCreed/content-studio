@@ -305,7 +305,7 @@ function parseChannelStatus(input: unknown, index: number): MarketingOpsChannelS
   const value = asRecord(input, `marketing-ops channels[${index}]`)
   assertSupportedKeys(
     value,
-    ['adapterReady', 'alias', 'channel', 'health', 'nextAction'],
+    ['accountRef', 'adapterReady', 'alias', 'channel', 'health', 'nextAction'],
     `marketing-ops channels[${index}]`,
   )
   const channel = stringField(
@@ -329,12 +329,16 @@ function parseChannelStatus(input: unknown, index: number): MarketingOpsChannelS
     `marketing-ops channels[${index}].alias`,
     128,
   )
+  const accountRef = value.accountRef === undefined
+    ? undefined
+    : opaqueAccountReference(value.accountRef, `marketing-ops channels[${index}].accountRef`)
   nullableStringField(
     value.nextAction,
     `marketing-ops channels[${index}].nextAction`,
     256,
   )
   return {
+    ...(accountRef === undefined ? {} : { accountRef }),
     ...(accountAlias === undefined ? {} : { accountAlias }),
     adapterReady: value.adapterReady,
     channel: channel as ChannelId,
@@ -344,6 +348,13 @@ function parseChannelStatus(input: unknown, index: number): MarketingOpsChannelS
       value.adapterReady,
     ),
   }
+}
+
+function opaqueAccountReference(input: unknown, name: string): string {
+  const value = stringField(input, name, 128)
+  if (!/^\w[\w.:-]{0,127}$/u.test(value))
+    throw new Error(`${name} must be an opaque account reference`)
+  return value
 }
 
 function channelNextStep(

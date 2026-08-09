@@ -151,13 +151,24 @@ function applyMarketingOpsChannelStatus(
   channel: ChannelProjection,
   status: MarketingOpsChannelsStatusSnapshot['channels'][number],
 ): ChannelProjection {
+  if (
+    status.accountRef !== undefined
+    && channel.projectAccountId !== null
+    && status.accountRef !== channel.projectAccountId
+  ) {
+    return resetMarketingOpsChannel(channel)
+  }
   const health = marketingOpsHealthLabels[status.health]
   const nextAction = marketingOpsNextStepLabels[status.nextStep]
   const accountAlias = status.accountAlias
+  const accountRef = status.accountRef
   return {
     ...channel,
     accounts: channel.accounts.map((account) => {
-      if (accountAlias !== undefined && account.alias === accountAlias) {
+      const matchesAccount = accountRef !== undefined
+        ? account.accountId === accountRef
+        : accountAlias !== undefined && account.alias === accountAlias
+      if (matchesAccount) {
         return {
           ...account,
           adapterReady: status.adapterReady,
