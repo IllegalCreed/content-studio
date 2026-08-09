@@ -186,6 +186,14 @@ async function dispatchRequest(
         resultType: 'complete',
         ttlMs: MCP_LIST_TTL_MS,
       })
+    case 'resources/templates/list':
+      assertMetadataParams(request.params, 'resources/templates/list params')
+      return success(request.id!, {
+        cacheScope: 'private',
+        resourceTemplates: [],
+        resultType: 'complete',
+        ttlMs: MCP_LIST_TTL_MS,
+      })
     case 'resources/read':
       return success(request.id!, {
         ...readResource(request.params, options),

@@ -378,8 +378,9 @@ AI 创作层在此基础上增加内容修订和非确定性产物，但必须�
 ### 录制器配置与分辨率
 
 当前 `VideoPlan.recordingConfig` 由活动视频格式编译得到，Playwright 使用其中的
-`viewport` 设置目标网站 CSS viewport；页面达到首个语义就绪点后再启动场景 screencast，
-避免把导航白帧带进片段和转场。`outputSize` 在后续合成阶段统一缩放，并应用
+`viewport` 设置目标网站 CSS viewport；页面达到首个语义就绪点后，若后续有状态变更动作，
+则完成该动作后再启动场景 screencast，否则在就绪探针完成后启动。这样可避免
+把导航白帧或待处理提示带进片段和转场。`outputSize` 在后续合成阶段统一缩放，并应用
 `deviceScaleFactor`、`locale` 和 `colorScheme`。默认预设为横屏 1920×1080、
 竖屏 1080×1920、方形 1080×1080；活动视频计划也可以指定经过边长、像素总量、比例和
 画幅方向校验的自定义宽高。

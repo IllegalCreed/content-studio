@@ -349,8 +349,9 @@ export function resolvePlaywrightRecordingContextOptions(
 
 /**
  * Starts page screencast capture only after a scene reaches a semantic ready
- * point. Context-level recordVideo starts before navigation and can leave a
- * blank lead-in that also becomes a blank crossfade source.
+ * point and, when applicable, its first state-changing action. Context-level
+ * recordVideo starts before navigation and can leave a blank or transient
+ * lead-in that also becomes a crossfade source.
  */
 class PlaywrightRecordingSession implements RecordingSession {
   private readonly actionTimeoutMs: number
@@ -516,17 +517,21 @@ class PlaywrightRecordingSession implements RecordingSession {
       )
       await waitForVisibleLocator(locator, action.durationMs, actionContext.signal)
       await this.assertPolicy()
-      await this.ensureScreencastSegment(actionContext.sceneIndex)
+      // A ready probe on its own is enough to establish the first useful
+      // frame. If a later state-changing action is scheduled, defer capture
+      // until that action completes so transient prompts are never recorded.
+      if (!this.hasPendingStateChange(actionContext.actionIndex))
+        await this.ensureScreencastSegment(actionContext.sceneIndex)
       return {}
     }
-
-    await this.ensureScreencastSegment(actionContext.sceneIndex)
 
     if (action.kind === 'press') {
       await withAbort(
         page.keyboard.press(action.key),
         actionContext.signal,
       )
+      await this.assertPolicy()
+      await this.ensureScreencastSegment(actionContext.sceneIndex)
       await abortableDelay(action.durationMs, actionContext.signal)
       await this.assertPolicy()
       return {}
@@ -549,6 +554,8 @@ class PlaywrightRecordingSession implements RecordingSession {
         actionContext.signal,
       )
     }
+    await this.assertPolicy()
+    await this.ensureScreencastSegment(actionContext.sceneIndex)
     await abortableDelay(action.durationMs, actionContext.signal)
     await this.assertPolicy()
     return {}
@@ -718,6 +725,12 @@ class PlaywrightRecordingSession implements RecordingSession {
     const firstFrame = new Promise<void>((resolve) => {
       resolveFirstFrame = resolve
     })
+    // Force the compositor to flush the post-action DOM state before CDP
+    // starts delivering frames. Without this, a synchronous dismissal can
+    // leave one stale pre-action frame at the head of the segment.
+    await page.screenshot({
+      animations: 'disabled',
+    })
     await page.screencast.start({
       onFrame: () => resolveFirstFrame?.(),
       path: segmentPath,
@@ -751,6 +764,16 @@ class PlaywrightRecordingSession implements RecordingSession {
   private async ensureScreencastSegment(sceneIndex: number): Promise<void> {
     if (!this.screencastActive)
       await this.startScreencastSegment(sceneIndex)
+  }
+
+  private hasPendingStateChange(actionIndex: number): boolean {
+    return this.currentScene?.actions
+      .slice(actionIndex + 1)
+      .some(action =>
+        action.kind === 'click'
+        || action.kind === 'fill'
+        || action.kind === 'press',
+      ) ?? false
   }
 
   private async stopScreencastSegment(discard = false): Promise<void> {

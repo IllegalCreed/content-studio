@@ -271,6 +271,25 @@ describe('content Studio local MCP server', () => {
     }
   })
 
+  it('returns an empty resource template list for standard MCP hosts', async () => {
+    const server = createFixture()
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'resource-templates-1',
+      method: 'resources/templates/list',
+    })).resolves.toMatchObject({
+      id: 'resource-templates-1',
+      jsonrpc: '2.0',
+      result: {
+        cacheScope: 'private',
+        resourceTemplates: [],
+        resultType: 'complete',
+        ttlMs: 60_000,
+      },
+    })
+  })
+
   it('describes the available tools and reports protocol errors', async () => {
     const server = createFixture()
 
