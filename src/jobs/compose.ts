@@ -12,6 +12,7 @@ import {
 } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { composeVideoClips } from '../media/compose'
+import { generateDeterministicCover } from '../media/cover'
 
 /**
  * Default composition for a production task: crossfades the scene clips of a
@@ -37,10 +38,19 @@ export async function composeProductionVideoClips(
     outputPath: input.outputPath,
     transitionDurationMs: input.transitionDurationMs ?? 400,
   })
+  const cover = input.cover === undefined
+    ? undefined
+    : await generateDeterministicCover({
+        ...input.cover,
+        outputSize: input.outputSize ?? { height: 1080, width: 1920 },
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+        sourcePath: input.outputPath,
+      })
   const info = await stat(input.outputPath)
   const sha256 = await hashFile(input.outputPath)
   return {
     artifactPath: input.outputPath,
+    ...(cover === undefined ? {} : { cover }),
     durationSeconds: composed.durationSeconds,
     reencoded: composed.reencoded,
     sha256,

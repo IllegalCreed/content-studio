@@ -915,24 +915,52 @@ export class ContentStudioApplicationService {
       task.activityId,
       task.channel,
     )
+    const activity = this.requireActivity(projectId, task.activityId)
+    const content = task.contentId === undefined
+      ? undefined
+      : this.repository.getChannelContent(projectId, task.contentId)
+    const coverPath = join(input.outputDirectory, 'composed', 'cover.svg')
+    const cancelledBeforeCompose = this.cancelProductionIfRequested(
+      projectId,
+      taskId,
+      input.signal,
+    )
+    if (cancelledBeforeCompose !== undefined)
+      return { ...result, task: cancelledBeforeCompose }
     let composed: Awaited<ReturnType<ComposeProduction>>
     try {
       composed = await compose({
         clipPaths,
+        cover: {
+          outputPath: coverPath,
+          subtitle: `${task.channel ?? 'local'} · ${plan.recordingConfig.locale}`,
+          title: content?.title ?? activity.topic[plan.recordingConfig.locale],
+        },
         normalizeLoudness: true,
         outputPath,
         outputSize: plan.recordingConfig.outputSize,
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
       })
     }
     catch (error: unknown) {
+      const cancelled = this.cancelProductionIfRequested(
+        projectId,
+        taskId,
+        input.signal,
+      )
+      if (cancelled !== undefined)
+        return { ...result, task: cancelled }
       this.taskStore.transitionTask(projectId, taskId, 'failed')
       throw error
     }
 
-    if (input.signal?.aborted === true) {
-      const cancelled = this.taskStore.cancelTask(projectId, taskId)
+    const cancelled = this.cancelProductionIfRequested(
+      projectId,
+      taskId,
+      input.signal,
+    )
+    if (cancelled !== undefined)
       return { ...result, task: cancelled }
-    }
 
     const relativePath = relative(
       join(input.outputDirectory, '..'),
@@ -946,6 +974,20 @@ export class ContentStudioApplicationService {
       relativePath,
       sha256: composed.sha256,
     })
+    if (composed.cover !== undefined) {
+      const coverRelativePath = relative(
+        join(input.outputDirectory, '..'),
+        composed.cover.artifactPath,
+      )
+      this.createActivityArtifact({
+        activityId: task.activityId,
+        artifactId: `cover-${taskId}`,
+        kind: 'image',
+        projectId,
+        relativePath: coverRelativePath,
+        sha256: composed.cover.sha256,
+      })
+    }
     const completed = this.taskStore.transitionTask(
       projectId,
       taskId,
@@ -955,6 +997,19 @@ export class ContentStudioApplicationService {
       ...result,
       task: completed,
     }
+  }
+
+  private cancelProductionIfRequested(
+    projectId: string,
+    taskId: string,
+    signal: AbortSignal | undefined,
+  ): ExecutionTask | undefined {
+    const current = this.taskStore.getTask(projectId, taskId)
+    if (current?.status === 'cancelled')
+      return current
+    if (signal?.aborted !== true || current === undefined)
+      return undefined
+    return this.taskStore.cancelTask(projectId, taskId)
   }
 
   getActivityVideoPlan(

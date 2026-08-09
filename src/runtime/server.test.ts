@@ -1239,6 +1239,11 @@ describe('content studio local application server', () => {
       project.projectId,
       'activities/activity-a/article.md',
     )
+    const coverPath = join(
+      productionOutputRoot,
+      project.projectId,
+      'activities/activity-a/cover.svg',
+    )
     const assetPath = join(
       productionOutputRoot,
       project.projectId,
@@ -1247,6 +1252,7 @@ describe('content studio local application server', () => {
     await mkdir(join(productionOutputRoot, project.projectId, 'activities/activity-a'), { recursive: true })
     await mkdir(join(productionOutputRoot, project.projectId, 'assets'), { recursive: true })
     await writeFile(artifactPath, '# Preview article')
+    await writeFile(coverPath, '<svg xmlns="http://www.w3.org/2000/svg" />')
     await writeFile(assetPath, 'fake-png')
     const handle = createContentStudioServer({
       productionOutputRoot,
@@ -1275,6 +1281,14 @@ describe('content studio local application server', () => {
       relativePath: 'activities/activity-a/article.md',
       sha256: 'a'.repeat(64),
     })
+    handle.service.createActivityArtifact({
+      activityId: 'activity-a',
+      artifactId: 'cover-artifact',
+      kind: 'image',
+      projectId: project.projectId,
+      relativePath: 'activities/activity-a/cover.svg',
+      sha256: 'c'.repeat(64),
+    })
     handle.repository.saveProjectAsset({
       assetId: 'logo-asset',
       kind: 'logo',
@@ -1293,6 +1307,14 @@ describe('content studio local application server', () => {
       expect(artifactResponse.headers.get('content-type')).toBe('text/markdown; charset=utf-8')
       expect(await artifactResponse.text()).toBe('# Preview article')
       expect(artifactResponse.headers.get('x-content-studio-sha256')).toBe('a'.repeat(64))
+
+      const coverResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/${project.projectId}/activity-artifacts/cover-artifact/preview`,
+      )
+      expect(coverResponse.status).toBe(200)
+      expect(coverResponse.headers.get('content-type')).toBe('image/svg+xml')
+      expect(await coverResponse.text()).toContain('<svg')
+      expect(coverResponse.headers.get('x-content-studio-sha256')).toBe('c'.repeat(64))
 
       const assetResponse = await fetch(
         `${running.baseUrl}/api/v1/projects/${project.projectId}/project-assets/logo-asset/preview`,

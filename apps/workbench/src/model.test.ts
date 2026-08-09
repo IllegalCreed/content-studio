@@ -290,6 +290,14 @@ describe('runtime report projection', () => {
         relativePath: '.content-studio/activity-a/clip.webm',
         sha256: 'a'.repeat(64),
         version: 2,
+      }, {
+        activityId: 'activity-a',
+        artifactId: 'cover-a',
+        kind: 'image',
+        projectId: 'project-a',
+        relativePath: '.content-studio/activity-a/cover.svg',
+        sha256: 'c'.repeat(64),
+        version: 1,
       }],
       channelContents: [{
         activityId: 'activity-a',
@@ -323,6 +331,16 @@ describe('runtime report projection', () => {
       previewKind: 'video',
       previewUrl: '/api/v1/projects/project-a/activity-artifacts/artifact-a/preview',
       checksum: 'a'.repeat(64),
+      size: '未记录',
+      status: '已登记',
+    }, {
+      activityId: 'activity-a',
+      artifactId: 'cover-a',
+      kind: '图片',
+      name: 'cover.svg',
+      previewKind: 'image',
+      previewUrl: '/api/v1/projects/project-a/activity-artifacts/cover-a/preview',
+      checksum: 'c'.repeat(64),
       size: '未记录',
       status: '已登记',
     }])

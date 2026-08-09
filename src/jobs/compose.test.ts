@@ -108,4 +108,34 @@ describe.skipIf(!ffmpegIsAvailable)('production video composition', () => {
       await rm(directory, { force: true, recursive: true })
     }
   })
+
+  it('creates a deterministic cover alongside the final video', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'content-studio-compose-prod-'))
+    try {
+      const source = await makeClip(directory, 'source.webm', 0.5)
+      const outputPath = join(directory, 'composed', 'final.webm')
+      const coverPath = join(directory, 'composed', 'cover.svg')
+
+      const result = await composeProductionVideoClips({
+        clipPaths: [source],
+        cover: {
+          outputPath: coverPath,
+          subtitle: 'local fallback',
+          title: 'Quick Sort',
+        },
+        outputPath,
+        outputSize: { height: 240, width: 320 },
+      })
+
+      expect(result.cover).toMatchObject({
+        artifactPath: coverPath,
+        height: 240,
+        width: 320,
+      })
+      await expect(access(coverPath)).resolves.toBeUndefined()
+    }
+    finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
 })

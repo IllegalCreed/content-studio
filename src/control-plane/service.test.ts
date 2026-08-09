@@ -1292,6 +1292,17 @@ describe('content studio application service', () => {
               'composed',
               'final.webm',
             ),
+            cover: {
+              artifactPath: join(
+                '/tmp/content-studio-compose-register',
+                'composed',
+                'cover.svg',
+              ),
+              height: 1080,
+              sha256: 'd'.repeat(64),
+              sizeBytes: 8,
+              width: 1920,
+            },
             durationSeconds: 3,
             reencoded: false,
             sha256: 'c'.repeat(64),
@@ -1308,6 +1319,15 @@ describe('content studio application service', () => {
       clipPaths: [
         resolve('/tmp/content-studio-compose-register/attempt-1', 'clips/scene-001.webm'),
       ],
+      cover: {
+        outputPath: join(
+          '/tmp/content-studio-compose-register',
+          'composed',
+          'cover.svg',
+        ),
+        subtitle: 'youtube · en',
+        title: 'Content',
+      },
       normalizeLoudness: true,
       outputPath: join('/tmp/content-studio-compose-register', 'composed', 'final.webm'),
       outputSize: { height: 1080, width: 1920 },
@@ -1319,7 +1339,125 @@ describe('content studio application service', () => {
       kind: 'video',
       relativePath: 'content-studio-compose-register/composed/final.webm',
       sha256: 'c'.repeat(64),
+    }), expect.objectContaining({
+      artifactId: `cover-${taskId}`,
+      kind: 'image',
+      relativePath: 'content-studio-compose-register/composed/cover.svg',
+      sha256: 'd'.repeat(64),
     })])
+  })
+
+  it('cancels before registering media when composition observes an aborted signal', async () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(
+      repository,
+      new InMemoryExecutionTaskStore(),
+    )
+    registerProject(
+      service,
+      'cancel-compose-project',
+      [{
+        id: 'quick-sort',
+        startPath: '/quick-sort',
+        steps: [{ durationMs: 100, kind: 'capture', label: 'algorithm' }],
+        title: {
+          'en': 'Quick sort',
+          'zh-CN': '快速排序',
+        },
+      }],
+    )
+    enableYouTube(service, 'cancel-compose-project')
+    const activity = service.createActivity({
+      activityId: 'cancel-compose-activity',
+      campaignId: 'cancel-compose-campaign',
+      channels: [{ id: 'youtube', locale: 'en' }],
+      goal: 'education',
+      projectId: 'cancel-compose-project',
+      projectSnapshotId: 'cancel-compose-project-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://cancel-compose-project.example.com/quick-sort',
+      topic: {
+        'en': 'Quick sort',
+        'zh-CN': '快速排序',
+      },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        planVersion: 1,
+      },
+    })
+    const contentId = createProductionContent(service, activity)
+    const taskId = `production-${contentId}`
+    service.startProductionTask('cancel-compose-project', taskId)
+    const receipt: RecorderAttemptReceipt = {
+      artifactDirectory: '/tmp/content-studio-cancel-compose/attempt-1',
+      artifacts: [{
+        id: 'clip-1',
+        kind: 'video-clip',
+        relativePath: 'clips/scene-001.webm',
+        sceneId: 'quick-sort',
+        sha256: 'a'.repeat(64),
+        sizeBytes: 42,
+      }],
+      attempt: 1,
+      campaignId: activity.campaignId,
+      completedActions: 1,
+      completedScenes: 1,
+      jobId: taskId,
+      logs: {
+        consoleErrors: 0,
+        consoleWarnings: 0,
+        entries: [],
+        pageErrors: 0,
+      },
+      outcome: 'succeeded',
+      planSha256: 'cancel-compose-plan',
+      projectId: 'cancel-compose-project',
+      recordingConfig: {
+        colorScheme: 'dark',
+        deviceScaleFactor: 1,
+        format: 'landscape',
+        locale: 'en',
+        outputSize: { height: 1080, width: 1920 },
+        viewport: { height: 1080, width: 1920 },
+      },
+      receiptVersion: 1,
+      totalActions: 1,
+      totalScenes: 1,
+    }
+    const controller = new AbortController()
+    let composeSignal: AbortSignal | undefined
+    const result = await service.runActivityProductionTask(
+      'cancel-compose-project',
+      taskId,
+      {
+        baseUrl: 'https://cancel-compose-project.example.com',
+        outputDirectory: '/tmp/content-studio-cancel-compose',
+        projectOrigin: 'https://cancel-compose-project.example.com',
+        signal: controller.signal,
+      },
+      {
+        compose: async (input) => {
+          composeSignal = input.signal
+          controller.abort()
+          return {
+            artifactPath: '/tmp/content-studio-cancel-compose/composed/final.webm',
+            durationSeconds: 1,
+            reencoded: false,
+            sha256: 'b'.repeat(64),
+            sizeBytes: 7,
+          }
+        },
+        record: async () => ({ attempts: [receipt], receipt }),
+      },
+    )
+
+    expect(composeSignal).toBe(controller.signal)
+    expect(result.task.status).toBe('cancelled')
+    expect(repository.listActivityArtifacts(
+      'cancel-compose-project',
+      activity.activityId,
+    )).toEqual([])
   })
 
   it('normalizes stored artifact relative paths to portable forward slashes', () => {

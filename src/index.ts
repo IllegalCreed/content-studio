@@ -74,6 +74,11 @@ export {
   MediaCompositionError,
 } from './media/compose'
 export {
+  generateDeterministicCover,
+  type GenerateDeterministicCoverInput,
+  MediaCoverError,
+} from './media/cover'
+export {
   probeMediaDuration,
   probeVideoSize,
   resolveFfmpegPath,

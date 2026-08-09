@@ -988,18 +988,35 @@ export interface RecordingJobDependencies {
 
 export interface ComposeProductionInput {
   clipPaths: string[]
+  cover?: ProductionCoverSpec
   normalizeLoudness?: boolean
   outputPath: string
   outputSize?: VideoViewport
+  signal?: AbortSignal
   transitionDurationMs?: number
 }
 
 export interface ComposeProductionResult {
   artifactPath: string
+  cover?: ProductionCoverResult
   durationSeconds: number
   reencoded: boolean
   sha256: string
   sizeBytes: number
+}
+
+export interface ProductionCoverSpec {
+  outputPath: string
+  subtitle?: string
+  title: string
+}
+
+export interface ProductionCoverResult {
+  artifactPath: string
+  height: number
+  sha256: string
+  sizeBytes: number
+  width: number
 }
 
 export type ComposeProduction = (
