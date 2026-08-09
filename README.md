@@ -107,6 +107,11 @@ V0.2 通用 Playwright 录制器已经完成：
 保存内容组和多个渠道版本，再用 `start_production_task` 启动本地制作的生成阶段；这些
 工具不会执行真实渠道发布。
 
+本地 Plugin 运行时同时支持当前 Codex stdio 客户端的标准 `initialize`/
+`notifications/initialized` 握手，以及目标 `2026-07-28` 的无状态
+`server/discover` 路径。两条入口复用同一组项目范围工具和资源；兼容握手不会创建协议
+会话，也不会扩大工具权限。
+
 AI 创作是目标产品的核心能力，目前的确定性编译器是安全基础，MCP 是 AI 宿主接入
 应用服务的第一步，文章/图片/视频方案生成和后台 AI 执行器按路线图继续实现。
 
@@ -228,6 +233,10 @@ node dist/cli.mjs mcp --stdio \
 `--campaign` 只用于把发布活动中使用的渠道绑定到这个项目；MCP 工具仍会再次校验
 项目范围和渠道是否启用。`stdio` 不占用端口，协议输出只写到标准输出，诊断信息不混入
 协议流。
+
+随本地 Plugin 启动时可分别用 `CONTENT_STUDIO_PROJECT`、
+`CONTENT_STUDIO_CAMPAIGN` 和 `CONTENT_STUDIO_DB` 传入同三条 Owner 控制的绝对路径；
+插件包只声明变量名，不包含路径内容或任何凭据。
 
 需要 HTTP 传输的本地宿主可以使用同一个项目范围启动无状态 MCP 端点：
 

@@ -21,7 +21,9 @@ plugin/
 
 这个目录目前不是“一装即用”的公开发行物。使用前必须先从源码构建并让
 `content-studio` 可执行文件位于宿主的 `PATH`，再由项目所有者把
-`CONTENT_STUDIO_PROJECT` 设置为已确认的 `project.json` 绝对路径：
+`CONTENT_STUDIO_PROJECT` 设置为已确认的 `project.json` 绝对路径。需要渠道绑定和
+制作任务时，再显式设置活动简报和状态库路径；这些变量都只是 Owner 控制的本地路径，
+不是凭据：
 
 ```bash
 corepack enable
@@ -29,6 +31,8 @@ pnpm install
 pnpm build
 pnpm link --global
 export CONTENT_STUDIO_PROJECT=/absolute/path/to/project.json
+export CONTENT_STUDIO_CAMPAIGN=/absolute/path/to/campaign.json
+export CONTENT_STUDIO_DB=/absolute/path/to/.content-studio/content-studio.sqlite
 content-studio doctor --project "$CONTENT_STUDIO_PROJECT"
 ```
 
@@ -36,8 +40,15 @@ MCP 宿主只转发变量名，不把项目清单、凭据或渠道授权写进�
 配置，显式运行：
 
 ```bash
-content-studio mcp --stdio --project /absolute/path/to/project.json
+content-studio mcp --stdio \
+  --project /absolute/path/to/project.json \
+  --campaign /absolute/path/to/campaign.json \
+  --db /absolute/path/to/.content-studio/content-studio.sqlite
 ```
+
+`CONTENT_STUDIO_PROJECT` 是必需的项目范围；`CONTENT_STUDIO_CAMPAIGN` 只登记该项目
+已启用的渠道，`CONTENT_STUDIO_DB` 固定跨宿主会话复用的本地状态位置。缺少 campaign
+时只读项目事实仍可用，但需要渠道绑定的内容与制作工具会 fail closed。
 
 项目清单可由下面两条命令起草；登记或使用前仍须由项目所有者确认：
 
@@ -55,4 +66,5 @@ content-studio project init --name "My Site" --project-id my-site \
 - 插件安装不会授予渠道发布权限。
 - Content Studio 不读取或传递 token、cookie、密码、浏览器配置或支付数据。
 - 外部写入仍由独立、匹配授权的 `marketing-ops` 运行时负责。
-- `${CONTENT_STUDIO_PROJECT}` 只指向项目所有者明确确认的本地清单。
+- `${CONTENT_STUDIO_PROJECT}`、`${CONTENT_STUDIO_CAMPAIGN}` 和
+  `${CONTENT_STUDIO_DB}` 只指向项目所有者明确确认的本地路径。

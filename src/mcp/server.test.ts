@@ -99,6 +99,51 @@ function createFixture(options: {
 }
 
 describe('content Studio local MCP server', () => {
+  it('initializes a standard MCP client before exposing tools and resources', async () => {
+    const server = createFixture()
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'initialize-1',
+      method: 'initialize',
+      params: {
+        capabilities: {},
+        clientInfo: {
+          name: 'codex-host-test',
+          version: '1.0.0',
+        },
+        protocolVersion: '2025-11-25',
+      },
+    })).resolves.toMatchObject({
+      id: 'initialize-1',
+      jsonrpc: '2.0',
+      result: {
+        capabilities: {
+          resources: {},
+          tools: {},
+        },
+        protocolVersion: '2025-11-25',
+        serverInfo: {
+          name: 'content-studio',
+          version: '0.1.0',
+        },
+      },
+    })
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+    })).resolves.toBeUndefined()
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'ping-1',
+      method: 'ping',
+    })).resolves.toEqual({
+      id: 'ping-1',
+      jsonrpc: '2.0',
+      result: {},
+    })
+  })
+
   it('discovers a project-scoped, stateless server', async () => {
     const server = createFixture()
 

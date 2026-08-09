@@ -89,6 +89,12 @@ Content Studio 的项目、活动和素材交给 `marketing-ops` 管理。随附
 Content Studio 的远程 MCP Server 以 `2026-07-28` 为首选协议版本，并为实际需要
 的旧客户端提供明确、经过测试的兼容策略。
 
+当前 Codex 的本地 bundled stdio 宿主仍先发送标准 `initialize`，随后发送
+`notifications/initialized`。本地适配器会回传宿主请求的协议版本、`tools`/
+`resources` 能力和项目范围元数据，再继续使用同一套无凭据工具；目标远程入口仍以
+`server/discover` 为主。2026-08-09 已通过安装到个人 marketplace 后的新 Codex 会话
+验证技能发现、MCP 握手和 `get_project_view` 实际调用。
+
 [MCP 2026-07-28 变更说明](https://modelcontextprotocol.io/specification/2026-07-28/changelog)
 确认了以下基础变化：
 
@@ -239,6 +245,8 @@ get_content_studio_task(taskId)
 - [ ] 完成域名验证、TLS、健康检查、限流和审计。
 - [ ] 实现公共服务的 `server/discover` 和 `2026-07-28` 无状态请求路径。
       本地 `content-studio mcp --stdio` 已完成第一条项目范围切片，公共入口仍待实现。
+- [x] 本地 Plugin 兼容当前 Codex 的标准 `initialize` 握手，并在全新宿主会话中验证
+      工具发现和项目范围只读调用。
 - [ ] 工具名、描述、输入/输出 schema 和实际行为一致。
 - [ ] 为每个工具准确标注 `readOnlyHint`、`openWorldHint` 和
       `destructiveHint`。

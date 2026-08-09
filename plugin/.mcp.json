@@ -7,7 +7,9 @@
         "--stdio"
       ],
       "env_vars": [
-        "CONTENT_STUDIO_PROJECT"
+        "CONTENT_STUDIO_PROJECT",
+        "CONTENT_STUDIO_CAMPAIGN",
+        "CONTENT_STUDIO_DB"
       ]
     }
   }

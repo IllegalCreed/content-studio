@@ -82,12 +82,15 @@ describe('content studio agent plugin package', () => {
   it('declares the local runtime as a bundled stdio MCP server', async () => {
     const config = await readJson('.mcp.json')
     expect(Object.keys(config)).toEqual(['mcpServers'])
-    const servers = config.mcpServers as Record<string, Record<string, unknown>>
-    expect(servers['content-studio']).toBeDefined()
-    const server = servers['content-studio']
+    const servers = config.mcpServers as Record<string, unknown>
+    const server = servers['content-studio'] as Record<string, unknown>
     expect(server.command).toBe('content-studio')
     expect(server.args).toEqual(['mcp', '--stdio'])
-    expect(server.env_vars).toEqual(['CONTENT_STUDIO_PROJECT'])
+    expect(server.env_vars).toEqual([
+      'CONTENT_STUDIO_PROJECT',
+      'CONTENT_STUDIO_CAMPAIGN',
+      'CONTENT_STUDIO_DB',
+    ])
   })
 
   it('ships the planned usage skills as immediate skill directories', async () => {

@@ -144,6 +144,14 @@ async function dispatchRequest(
   options: ContentStudioMcpServerOptions,
 ): Promise<McpJsonRpcResponse> {
   switch (request.method) {
+    case 'initialize':
+      return success(
+        request.id!,
+        initializeStandardClient(request.params, options.projectId),
+      )
+    case 'ping':
+      assertMetadataParams(request.params, 'ping params')
+      return success(request.id!, {})
     case 'server/discover':
       assertMetadataParams(request.params, 'server/discover params')
       return success(request.id!, {
@@ -202,6 +210,46 @@ async function dispatchRequest(
       return success(request.id!, cancelMcpTask(request.params, options))
     default:
       return protocolError(request.id!, -32601, `Method not found: ${request.method}`)
+  }
+}
+
+function initializeStandardClient(
+  params: unknown,
+  projectId: string,
+): Record<string, unknown> {
+  const value = asRecord(params, 'initialize params')
+  assertKeys(
+    value,
+    ['_meta', 'capabilities', 'clientInfo', 'protocolVersion'],
+    'initialize params',
+  )
+  const protocolVersion = stringField(
+    value.protocolVersion,
+    'initialize protocolVersion',
+  )
+  asRecord(value.capabilities, 'initialize capabilities')
+  const clientInfo = asRecord(value.clientInfo, 'initialize clientInfo')
+  stringField(clientInfo.name, 'initialize clientInfo name')
+  stringField(clientInfo.version, 'initialize clientInfo version')
+
+  return {
+    capabilities: {
+      resources: {},
+      tools: {},
+    },
+    instructions: 'Use explicit project-scoped handles. Content Studio prepares local content and handoffs but never grants channel publishing authority.',
+    protocolVersion,
+    serverInfo: {
+      name: 'content-studio',
+      version: '0.1.0',
+    },
+    _meta: {
+      'io.content-studio/project': {
+        mode: 'local',
+        projectId,
+        scope: 'project',
+      },
+    },
   }
 }
 

@@ -214,8 +214,9 @@ V0.3.1 的第一条内存任务切片已落地：视频、文章和导入素材�
 - [x] 暴露素材、回执和报告资源；通过项目范围的只读资源切片读取。
 - [x] 暴露创建活动、保存内容版本、读取任务、启动生成阶段和取消/重试任务等高层工具；
       本地 Runtime 已接入真实录制路由和单并发异步 Worker 调度。
-- [x] 实现 MCP `2026-07-28` 的 `server/discover`、显式项目句柄和项目范围校验；缓存
-      元数据仍待实现。
+- [x] 实现 MCP `2026-07-28` 的 `server/discover`、显式项目句柄和项目范围校验，并为
+      当前 Codex bundled stdio 宿主保留经过测试的标准 `initialize` 兼容握手；缓存元数据
+      仍待实现。
 - [x] 将长调用映射到 MCP Tasks 的 `tasks/get`、`tasks/update`、`tasks/cancel`，并保留
       领域级任务查询和轮询回退。
 - [x] MCP 工具不接收任意路径、脚本、选择器、凭据或模型 API Key。
@@ -229,6 +230,14 @@ V0.3.1 的第一条内存任务切片已落地：视频、文章和导入素材�
 内容组、渠道内容会落到同一个本地应用服务与 SQLite，任务取消/重试仍沿用已有事件和
 尝试历史。测试覆盖跨项目拒绝、敏感字段拒绝、stdio 协议纯输出和未知工具错误。当前
 MCP 不启动浏览器、不执行渠道写入，不接收凭据、任意路径、脚本或选择器。
+
+2026-08-09 真实 Codex 宿主验证补齐：Content Studio 已通过个人 marketplace 安装到
+全新的 Codex CLI 会话。首次运行暴露出 stdio 客户端会先发送标准 `initialize`，兼容适配
+补齐后，宿主成功发现 `get_project_view` 并返回 `algorithm-visualizer`。Plugin 还可通过
+`CONTENT_STUDIO_CAMPAIGN` 和 `CONTENT_STUDIO_DB` 显式绑定渠道简报与跨会话状态库；三项
+环境变量都只转发 Owner 控制的本地路径，不包含凭据或发布授权。随后用同一安装版
+Plugin 完成了一次真实本地视频任务，事件顺序为 `queued → generating → recording →
+composing → completed`；生成的 1920×1080 成片首帧、过程帧和尾帧抽检通过，未执行发布。
 
 2026-08-04 MCP 只读资源切片已补齐：项目句柄现在还可以分别读取 `/assets`、`/receipts`
 和 `/reports`，分别返回项目素材与活动产物、发布安排与可信发布回执、监测观测与报告。
@@ -401,8 +410,9 @@ Runtime 同一套接管控制器与可见窗口约束；通过 MCP 取消任务�
       动态参数和语言根路径，浅路径优先，与 README 内链去重合并。
 - [x] 登记端点支持同项目重导入：清单内容不变时幂等；内容变化时递增快照版本
       （`-snapshot-N`）并更新项目记录，索引与项目视图立即反映新快照。
-- [x] 本地开发插件通过 `CONTENT_STUDIO_PROJECT` 绑定用户确认后的项目清单，
-      `.mcp.json` 只转发变量名；正式安装器仍属于待交付项。
+- [x] 本地开发插件通过 `CONTENT_STUDIO_PROJECT` 绑定用户确认后的项目清单，并可选用
+      `CONTENT_STUDIO_CAMPAIGN`、`CONTENT_STUDIO_DB` 固定渠道简报与状态库；`.mcp.json`
+      只转发变量名，正式安装器仍属于待交付项。
 
 2026-08-07 项目导入与登记切片已完成：CLI 起草、Runtime 登记端点和工作台导入页共用
 同一条“草稿 → 确认 → 登记”链；`GET /api/v1/projects` 索引在登记后立即可见。导入

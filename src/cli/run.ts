@@ -138,6 +138,7 @@ export async function runCli(
   }
   const serveCampaignPath = command === 'serve' || isMcp || command === 'doctor'
     ? options.get('campaign')
+    ?? (isMcp ? runtime.env?.CONTENT_STUDIO_CAMPAIGN : undefined)
     : requireOption(options, 'campaign')
   const project = validateProjectManifest(
     await readJsonFile(projectPath, runtime.cwd),
@@ -404,7 +405,13 @@ function createMcpExecutionRuntime(
   runtime: CliRuntime,
   services: CliServices,
 ): McpExecutionRuntime {
-  const applicationOptions = createApplicationOptions(project, campaign, options, runtime)
+  const applicationOptions = createApplicationOptions(
+    project,
+    campaign,
+    options,
+    runtime,
+    runtime.env?.CONTENT_STUDIO_DB,
+  )
   const handle = createContentStudioApplication(applicationOptions)
   const ownerTakeovers = new OwnerTakeoverRegistry(handle.taskStore)
   const outputRoot = join(
@@ -494,6 +501,7 @@ function createApplicationOptions(
   campaign: CampaignSpec | undefined,
   options: Map<string, string>,
   runtime: CliRuntime,
+  environmentDatabasePath?: string,
 ): Parameters<typeof createContentStudioServer>[0] {
   const snapshot: ProjectSnapshot = {
     manifest: project,
@@ -513,7 +521,9 @@ function createApplicationOptions(
   return {
     databasePath: resolve(
       runtime.cwd,
-      options.get('db') ?? '.content-studio/content-studio.sqlite',
+      options.get('db')
+      ?? environmentDatabasePath
+      ?? '.content-studio/content-studio.sqlite',
     ),
     project: projectRecord,
     projectChannelBindings,

@@ -504,6 +504,66 @@ describe('content-studio CLI', () => {
     }
   })
 
+  it('binds plugin campaign and state paths through explicit MCP environment variables', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
+    const projectPath = join(temporaryDirectory, 'project.json')
+    const campaignPath = join(temporaryDirectory, 'campaign.json')
+    const databasePath = join(temporaryDirectory, 'plugin-state.sqlite')
+    const output: string[] = []
+    const outputStream = new Writable({
+      write(chunk, _encoding, callback) {
+        output.push(String(chunk))
+        callback()
+      },
+    })
+
+    try {
+      await writeFile(projectPath, JSON.stringify(project), 'utf8')
+      await writeFile(campaignPath, JSON.stringify(campaign), 'utf8')
+      await expect(runCli(
+        ['mcp', '--stdio'],
+        {
+          cwd: temporaryDirectory,
+          env: {
+            CONTENT_STUDIO_CAMPAIGN: campaignPath,
+            CONTENT_STUDIO_DB: databasePath,
+            CONTENT_STUDIO_PROJECT: projectPath,
+          },
+          input: Readable.from([
+            `${JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'tools/call',
+              params: {
+                arguments: { projectId: 'algorithm-visualizer' },
+                name: 'get_project_view',
+              },
+            })}\n`,
+          ]),
+          output: outputStream,
+          write: () => undefined,
+        },
+      )).resolves.toBe(0)
+      expect(JSON.parse(output[0]!).result.structuredContent)
+        .toMatchObject({
+          projectChannelBindings: [
+            {
+              channel: 'github',
+              enabled: true,
+              projectId: 'algorithm-visualizer',
+            },
+          ],
+        })
+      await expect(access(databasePath)).resolves.toBeUndefined()
+    }
+    finally {
+      await rm(temporaryDirectory, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
+
   it('starts the local MCP Streamable HTTP runtime on the dedicated MCP port', async () => {
     const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-cli-'))
     const projectPath = join(temporaryDirectory, 'project.json')
