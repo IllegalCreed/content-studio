@@ -9,6 +9,7 @@ import type {
   ActivityRevisionInput,
   ChannelContent,
   ChannelContentFormat,
+  ChannelContentMediaRevisionInput,
   ChannelContentReadiness,
   ChannelId,
   ComposeProduction,
@@ -1320,6 +1321,79 @@ export class ContentStudioApplicationService {
     return content
   }
 
+  reviseChannelContentMedia(
+    input: ChannelContentMediaRevisionInput,
+  ): ChannelContent {
+    this.requireProject(input.projectId)
+    if (input.mode !== 'append' && input.mode !== 'replace')
+      throw new Error('Channel content media revision mode must be append or replace')
+    const current = this.repository.getChannelContent(
+      input.projectId,
+      input.contentId,
+    )
+    if (current === undefined)
+      throw new RecordNotFoundError('Channel content', input.contentId)
+    if (current.version !== input.baseVersion) {
+      throw new Error(
+        `Channel content ${input.contentId} has moved past version ${input.baseVersion}`,
+      )
+    }
+    const existingPlan = this.repository.listPublicationPlans(input.projectId)
+      .find(plan => plan.contentId === input.contentId)
+    if (existingPlan !== undefined) {
+      throw new Error(
+        `Channel content ${input.contentId} cannot be revised after publication plan ${existingPlan.publicationId}`,
+      )
+    }
+    this.assertChannelContentArtifacts(
+      input.projectId,
+      current.activityId,
+      current.artifactIds,
+    )
+    this.assertChannelContentMediaArtifacts(
+      input.projectId,
+      current.activityId,
+      input.artifactIds,
+    )
+    const currentMediaArtifactIds = current.artifactIds.filter((artifactId) => {
+      const artifact = this.repository.getActivityArtifact(
+        input.projectId,
+        artifactId,
+      )
+      return artifact !== undefined && isFinalMediaArtifactKind(artifact.kind)
+    })
+    const currentMediaIds = new Set(currentMediaArtifactIds)
+    const requestedMediaIds = [...new Set(input.artifactIds)]
+    if (
+      input.mode === 'replace'
+      && requestedMediaIds.length === currentMediaArtifactIds.length
+      && requestedMediaIds.every((artifactId, index) =>
+        artifactId === currentMediaArtifactIds[index],
+      )
+    ) {
+      return current
+    }
+    const nextArtifactIds = input.mode === 'append'
+      ? [...new Set([...current.artifactIds, ...requestedMediaIds])]
+      : [
+          ...current.artifactIds.filter(artifactId => !currentMediaIds.has(artifactId)),
+          ...requestedMediaIds,
+        ]
+    if (
+      nextArtifactIds.length === current.artifactIds.length
+      && nextArtifactIds.every((artifactId, index) =>
+        artifactId === current.artifactIds[index],
+      )
+    ) {
+      return current
+    }
+    return this.repository.saveChannelContent({
+      ...current,
+      artifactIds: nextArtifactIds,
+      version: current.version + 1,
+    })
+  }
+
   saveActivityContentPack(
     input: CreateActivityContentPackInput,
   ): ActivityContentPack {
@@ -1723,6 +1797,22 @@ export class ContentStudioApplicationService {
     }
   }
 
+  private assertChannelContentMediaArtifacts(
+    projectId: string,
+    activityId: string,
+    artifactIds: readonly string[],
+  ): void {
+    this.assertChannelContentArtifacts(projectId, activityId, artifactIds)
+    for (const artifactId of artifactIds) {
+      const artifact = this.repository.getActivityArtifact(projectId, artifactId)
+      if (artifact !== undefined && !isFinalMediaArtifactKind(artifact.kind)) {
+        throw new Error(
+          'Channel content media references must use final image/video artifacts',
+        )
+      }
+    }
+  }
+
   private assertChannelContentPublicationReadiness(
     content: ChannelContent,
   ): void {
@@ -1889,6 +1979,12 @@ function compositionProgressMessage(
     : kind === 'cover-ready'
       ? 'Cover ready'
       : 'GIF preview ready'
+}
+
+function isFinalMediaArtifactKind(
+  kind: ActivityArtifact['kind'],
+): boolean {
+  return kind === 'image' || kind === 'video'
 }
 
 function compositionArtifactFromProgress(

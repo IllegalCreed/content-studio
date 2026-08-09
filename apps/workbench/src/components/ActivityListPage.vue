@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type {
   ChannelContentFormat,
+  ChannelContentMediaRevisionMode,
   ChannelId,
   ContentFormat,
   VideoFormat,
@@ -50,6 +52,11 @@ const props = defineProps<{
   canPublishContent: (channel: ChannelId) => boolean
   enabledChannels: ChannelProjection[]
   hasPublicationTask: (contentId: string) => boolean
+  mediaRevisionArtifactIds: readonly string[]
+  mediaRevisionContent: ChannelContentProjection | null
+  mediaRevisionError: string | null
+  mediaRevisionMode: ChannelContentMediaRevisionMode
+  mediaRevisionPending: boolean
   projectAccountAlias: (channel: ChannelProjection) => string | undefined
   selectedCampaign: CampaignProjection
   selectedCampaignChannelOptions: readonly { label: string, value: string }[]
@@ -85,15 +92,26 @@ const emit = defineEmits<{
   'close-activity-composer': []
   'close-content-composer': []
   'confirm-video-plan': []
+  'close-media-revision': []
   'create-publication-plan': [content: ChannelContentProjection]
   'open-activity-detail': [activityId: string]
   'open-content-composer': []
+  'open-media-revision': [content: ChannelContentProjection]
   'revise-video-plan': []
   'save-activity': []
   'save-channel-content': []
+  'save-media-revision': []
+  'set-media-revision-mode': [mode: ChannelContentMediaRevisionMode]
   'select-task': [taskId: string]
+  'toggle-media-revision-artifact': [artifactId: string]
   'toggle-activity-channel-format': [channelId: ChannelId, format: ContentFormat]
 }>()
+
+const finalMediaArtifacts = computed(() =>
+  props.selectedCampaign.activityArtifacts.filter(artifact =>
+    artifact.kind === '图片' || artifact.kind === '视频',
+  ),
+)
 </script>
 
 <template>
@@ -362,6 +380,72 @@ const emit = defineEmits<{
             </div>
             <p v-if="props.selectedCampaign.contentGroups.length === 0" class="empty-state">当前活动还没有内容版本。可以先保存一条手动测试内容，之后由 AI/MCP 复用同一个内容接口。</p>
             <p v-if="props.publicationPlanActionError" class="form-error" aria-live="polite">{{ props.publicationPlanActionError }}</p>
+            <form
+              v-if="props.mediaRevisionContent"
+              class="content-media-revision"
+              data-testid="content-media-revision"
+              @submit.prevent="emit('save-media-revision')"
+            >
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">渠道内容 / 最终媒体</p>
+                  <h3>{{ props.mediaRevisionContent.title }}</h3>
+                </div>
+                <span>第 {{ props.mediaRevisionContent.version ?? '—' }} 版</span>
+              </div>
+              <p>只允许选择当前活动已登记的最终图片或视频；替换时会保留文章、音频和中间证据引用。</p>
+              <fieldset class="content-media-mode">
+                <legend>修订方式</legend>
+                <label>
+                  <input
+                    :checked="props.mediaRevisionMode === 'append'"
+                    name="content-media-revision-mode"
+                    type="radio"
+                    value="append"
+                    @change="emit('set-media-revision-mode', 'append')"
+                  />
+                  追加媒体
+                </label>
+                <label>
+                  <input
+                    :checked="props.mediaRevisionMode === 'replace'"
+                    name="content-media-revision-mode"
+                    type="radio"
+                    value="replace"
+                    @change="emit('set-media-revision-mode', 'replace')"
+                  />
+                  替换现有最终媒体
+                </label>
+              </fieldset>
+              <fieldset class="content-media-options">
+                <legend>当前活动的最终媒体</legend>
+                <label v-for="artifact in finalMediaArtifacts" :key="artifact.artifactId">
+                  <input
+                    :checked="props.mediaRevisionArtifactIds.includes(artifact.artifactId)"
+                    name="content-media-artifact"
+                    type="checkbox"
+                    :value="artifact.artifactId"
+                    @change="emit('toggle-media-revision-artifact', artifact.artifactId)"
+                  />
+                  <span>
+                    <strong>{{ artifact.name }}</strong>
+                    <small>{{ artifact.kind }} · {{ artifact.artifactId }}{{ props.mediaRevisionContent.artifactIds?.includes(artifact.artifactId) ? ' · 当前已引用' : '' }}</small>
+                  </span>
+                </label>
+                <p v-if="finalMediaArtifacts.length === 0" class="empty-state">当前活动还没有最终图片或视频。请先由 MCP 主机登记最终媒体产物。</p>
+              </fieldset>
+              <p v-if="props.mediaRevisionError" class="form-error" aria-live="polite">{{ props.mediaRevisionError }}</p>
+              <div class="form-actions">
+                <button type="button" :disabled="props.mediaRevisionPending" @click="emit('close-media-revision')">取消</button>
+                <button
+                  type="submit"
+                  class="primary-button"
+                  :disabled="props.mediaRevisionPending || (props.mediaRevisionMode === 'append' && props.mediaRevisionArtifactIds.length === 0)"
+                >
+                  {{ props.mediaRevisionPending ? '保存中…' : '保存媒体修订' }}
+                </button>
+              </div>
+            </form>
             <div class="content-group-list">
               <article v-for="group in props.selectedCampaign.contentGroups" :key="group.contentGroupId" class="content-group-card">
                 <strong>{{ group.title }}</strong>
@@ -383,6 +467,15 @@ const emit = defineEmits<{
                       <summary>查看文字预览</summary>
                       <pre>{{ content.body }}</pre>
                     </details>
+                    <button
+                      v-if="props.selectedCampaignIsRuntime"
+                      type="button"
+                      class="content-media-action-button"
+                      :disabled="!props.snapshot.runtimeConnected || props.hasPublicationTask(content.contentId) || props.mediaRevisionPending"
+                      @click="emit('open-media-revision', content)"
+                    >
+                      {{ props.hasPublicationTask(content.contentId) ? '发布安排建立后不可修改媒体' : '管理最终媒体' }}
+                    </button>
                     <button
                       type="button"
                       class="content-action-button"

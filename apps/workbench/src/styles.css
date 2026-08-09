@@ -3707,7 +3707,8 @@ footer {
   line-height: 1.45;
 }
 
-.content-action-button {
+.content-action-button,
+.content-media-action-button {
   margin-top: 0.55rem;
   padding: 0.4rem 0.55rem;
   color: var(--muted);
@@ -3717,14 +3718,100 @@ footer {
   cursor: pointer;
 }
 
-.content-action-button:not(:disabled):hover {
+.content-action-button:not(:disabled):hover,
+.content-media-action-button:not(:disabled):hover {
   color: var(--ink);
   border-color: #657042;
 }
 
-.content-action-button:disabled {
+.content-action-button:disabled,
+.content-media-action-button:disabled {
   cursor: not-allowed;
   opacity: 0.65;
+}
+
+.content-media-revision {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 0.75rem;
+  padding: 0.9rem;
+  border: 1px solid #657042;
+  background: #11140f;
+}
+
+.content-media-revision .section-heading {
+  margin: 0;
+}
+
+.content-media-revision > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.55;
+}
+
+.content-media-mode,
+.content-media-options {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.content-media-mode {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.content-media-mode legend,
+.content-media-options legend {
+  grid-column: 1 / -1;
+  margin-bottom: 0.15rem;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.58rem;
+  text-transform: uppercase;
+}
+
+.content-media-mode label,
+.content-media-options label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.65rem;
+  border: 1px solid var(--stroke);
+  background: #151713;
+  cursor: pointer;
+}
+
+.content-media-mode input,
+.content-media-options input {
+  margin-top: 0.08rem;
+  accent-color: var(--acid);
+}
+
+.content-media-options label span,
+.content-media-options label strong,
+.content-media-options label small {
+  display: block;
+}
+
+.content-media-options label strong {
+  color: var(--ink);
+  font-size: 0.68rem;
+}
+
+.content-media-options label small {
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.55rem;
+}
+
+@media (max-width: 640px) {
+  .content-media-mode {
+    grid-template-columns: 1fr;
+  }
 }
 
 .content-group-card ul {

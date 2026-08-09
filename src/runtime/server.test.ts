@@ -26,6 +26,7 @@ import {
   parseRecordMonitoringObservationInput,
   parseRecordPublicationReceiptInput,
   parseReviseActivityInput,
+  parseReviseChannelContentMediaInput,
   parseUpdateProjectChannelBindingInput,
 } from './server'
 
@@ -330,6 +331,29 @@ describe('content studio local application server', () => {
       'activity-a',
       'group-a',
     )).toThrow(/Duplicate artifactId/i)
+  })
+
+  it('parses a versioned channel media revision with append/replace modes', () => {
+    expect(parseReviseChannelContentMediaInput({
+      artifactIds: ['final-image'],
+      baseVersion: 2,
+      contentId: 'content-a',
+      mode: 'replace',
+      projectId: 'project-a',
+    }, 'project-a', 'content-a')).toEqual({
+      artifactIds: ['final-image'],
+      baseVersion: 2,
+      contentId: 'content-a',
+      mode: 'replace',
+      projectId: 'project-a',
+    })
+    expect(() => parseReviseChannelContentMediaInput({
+      artifactIds: [],
+      baseVersion: 2,
+      contentId: 'content-a',
+      mode: 'merge',
+      projectId: 'project-a',
+    }, 'project-a', 'content-a')).toThrow(/append or replace/i)
   })
 
   it('parses a project channel binding update without accepting credentials or unknown fields', () => {
@@ -779,6 +803,44 @@ describe('content studio local application server', () => {
         version: 1,
       })
 
+      const imageArtifactResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/activities/activity-a/artifacts`,
+        {
+          body: JSON.stringify({
+            activityId: 'activity-a',
+            artifactId: 'image-a',
+            kind: 'image',
+            projectId: 'project-a',
+            relativePath: '.content-studio/activity-a/cover.png',
+            sha256: 'b'.repeat(64),
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(imageArtifactResponse.status).toBe(201)
+
+      const mediaRevisionResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/channel-contents/content-a/media`,
+        {
+          body: JSON.stringify({
+            artifactIds: ['image-a'],
+            baseVersion: 1,
+            contentId: 'content-a',
+            mode: 'replace',
+            projectId: 'project-a',
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(mediaRevisionResponse.status).toBe(200)
+      expect(await mediaRevisionResponse.json()).toMatchObject({
+        artifactIds: ['image-a'],
+        contentId: 'content-a',
+        version: 2,
+      })
+
       const promoteResponse = await fetch(
         `${running.baseUrl}/api/v1/projects/project-a/activity-artifacts/artifact-a/promote`,
         {
@@ -913,7 +975,10 @@ describe('content studio local application server', () => {
       ).then(response => response.json())
       expect(contentView.contentGroups).toMatchObject([{ contentGroupId: 'group-a' }])
       expect(contentView.channelContents).toMatchObject([{ contentId: 'content-a' }])
-      expect(contentView.activityArtifacts).toMatchObject([{ artifactId: 'artifact-a' }])
+      expect(contentView.activityArtifacts).toEqual(expect.arrayContaining([
+        expect.objectContaining({ artifactId: 'artifact-a' }),
+        expect.objectContaining({ artifactId: 'image-a', kind: 'image' }),
+      ]))
       expect(contentView.projectAssets).toMatchObject([{ assetId: 'asset-a' }])
 
       const taskResponse = await fetch(

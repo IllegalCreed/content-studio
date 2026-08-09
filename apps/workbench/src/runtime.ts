@@ -2,6 +2,7 @@ import type {
   ActivityArtifact,
   ActivityRevisionInput,
   ChannelContent,
+  ChannelContentMediaRevisionInput,
   ContentGroup,
   ContentStudioGlobalView,
   ContentStudioProjectIndex,
@@ -66,6 +67,7 @@ export interface WorkbenchRuntime {
     baseVersion: number,
   ) => Promise<PublishingActivity>
   createChannelContent: (input: CreateChannelContentInput) => Promise<ChannelContent>
+  reviseChannelContentMedia: (input: ChannelContentMediaRevisionInput) => Promise<ChannelContent>
   createContentGroup: (input: CreateContentGroupInput) => Promise<ContentGroup>
   createActivity: (input: CreatePublishingActivityInput) => Promise<PublishingActivity>
   createActivityArtifact: (input: CreateActivityArtifactInput) => Promise<ActivityArtifact>
@@ -140,6 +142,13 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
     ),
     createChannelContent: input => request<ChannelContent>(
       `/projects/${encodeURIComponent(input.projectId)}/activities/${encodeURIComponent(input.activityId)}/content-groups/${encodeURIComponent(input.contentGroupId)}/contents`,
+      {
+        body: JSON.stringify(input),
+        method: 'POST',
+      },
+    ),
+    reviseChannelContentMedia: input => request<ChannelContent>(
+      `/projects/${encodeURIComponent(input.projectId)}/channel-contents/${encodeURIComponent(input.contentId)}/media`,
       {
         body: JSON.stringify(input),
         method: 'POST',

@@ -30,6 +30,7 @@ import {
   parseCreateOwnerHandoffInput,
   parseCreatePublicationPlanInput,
   parsePromoteActivityArtifactInput,
+  parseReviseChannelContentMediaInput,
 } from '../runtime/server'
 import { assertNoSensitiveKeys } from '../validation'
 
@@ -563,6 +564,17 @@ function toolDefinitions(): Array<Record<string, unknown>> {
       annotations: {
         destructiveHint: false,
         openWorldHint: false,
+        readOnlyHint: false,
+      },
+      description: '为已有渠道内容追加或替换最终 image/video 引用，保留正文版本并要求匹配当前 content version；不会发布到渠道。',
+      inputSchema: channelContentMediaRevisionSchema(),
+      name: 'revise_channel_content_media',
+      title: '修订渠道内容媒体',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
         readOnlyHint: true,
       },
       description: '列出项目下的制作、发布和监测任务。',
@@ -837,6 +849,24 @@ function channelContentSchema(): Record<string, unknown> {
   }
 }
 
+function channelContentMediaRevisionSchema(): Record<string, unknown> {
+  return {
+    properties: {
+      artifactIds: {
+        description: '最终 image/video 活动产物 ID；replace 只替换媒体引用并保留文章、音频等非媒体引用。',
+        items: { type: 'string' },
+        type: 'array',
+      },
+      baseVersion: { minimum: 1, type: 'integer' },
+      contentId: { type: 'string' },
+      mode: { enum: ['append', 'replace'], type: 'string' },
+      projectId: { type: 'string' },
+    },
+    required: ['artifactIds', 'baseVersion', 'contentId', 'mode', 'projectId'],
+    type: 'object',
+  }
+}
+
 function activityContentPackSchema(): Record<string, unknown> {
   return {
     properties: {
@@ -1103,6 +1133,21 @@ function executeTool(
       const contentGroupId = identifierField(value.contentGroupId, 'contentGroupId')
       return options.service.createChannelContent(
         parseCreateChannelContentInput(value, projectId, activityId, contentGroupId),
+      )
+    }
+    case 'revise_channel_content_media': {
+      const value = asRecord(input, 'channelContentMediaRevision')
+      assertKeys(value, [
+        'artifactIds',
+        'baseVersion',
+        'contentId',
+        'mode',
+        'projectId',
+      ], 'channelContentMediaRevision')
+      const projectId = scopedId(value.projectId, options.projectId, 'projectId')
+      const contentId = identifierField(value.contentId, 'contentId')
+      return options.service.reviseChannelContentMedia(
+        parseReviseChannelContentMediaInput(value, projectId, contentId),
       )
     }
     case 'list_project_tasks': {

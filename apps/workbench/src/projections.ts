@@ -594,6 +594,7 @@ export function activityToCampaign({
                 }),
             status: '已生成',
             title: content.title,
+            version: content.version,
           }
         }),
       coreMessage: group.coreMessage,

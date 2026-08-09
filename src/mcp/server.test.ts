@@ -353,6 +353,7 @@ describe('content Studio local MCP server', () => {
       'get_activity_video_plan',
       'promote_activity_artifact',
       'register_activity_artifact',
+      'revise_channel_content_media',
       'retry_task',
     ]))
     const createActivityTool = listedTools.find(tool => tool.name === 'create_publishing_activity')
@@ -788,6 +789,105 @@ describe('content Studio local MCP server', () => {
               ready: false,
             },
           },
+        },
+      },
+    })
+  })
+
+  it('revises an existing channel content media reference through MCP', async () => {
+    const server = createFixture()
+
+    await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'media-revision-activity',
+      method: 'tools/call',
+      params: {
+        arguments: {
+          activityId: 'media-revision-demo',
+          campaignId: 'media-revision-demo',
+          channels: [{ id: 'github', locale: 'en' }],
+          goal: 'education',
+          projectId,
+          projectSnapshotId: snapshot.snapshotId,
+          status: 'draft',
+          targetUrl: 'https://example.com/media-revision-demo/',
+          topic: { 'en': 'Media revision', 'zh-CN': '媒体修订' },
+        },
+        name: 'create_publishing_activity',
+      },
+    })
+    await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'media-revision-group',
+      method: 'tools/call',
+      params: {
+        arguments: {
+          activityId: 'media-revision-demo',
+          contentGroupId: 'media-revision-group',
+          coreMessage: 'Attach a final image after drafting.',
+          projectId,
+          title: 'Media revision',
+        },
+        name: 'create_content_group',
+      },
+    })
+    await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'media-revision-content',
+      method: 'tools/call',
+      params: {
+        arguments: {
+          activityId: 'media-revision-demo',
+          artifactIds: [],
+          body: 'Article body',
+          channel: 'github',
+          contentGroupId: 'media-revision-group',
+          contentId: 'media-revision-content',
+          format: 'article',
+          locale: 'en',
+          projectId,
+          title: 'Article',
+        },
+        name: 'save_channel_content',
+      },
+    })
+    await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'media-revision-artifact',
+      method: 'tools/call',
+      params: {
+        arguments: {
+          activityId: 'media-revision-demo',
+          artifactId: 'media-revision-image',
+          kind: 'image',
+          projectId,
+          relativePath: 'media/cover.png',
+          sha256: 'c'.repeat(64),
+        },
+        name: 'register_activity_artifact',
+      },
+    })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'media-revision-call',
+      method: 'tools/call',
+      params: {
+        arguments: {
+          artifactIds: ['media-revision-image'],
+          baseVersion: 1,
+          contentId: 'media-revision-content',
+          mode: 'replace',
+          projectId,
+        },
+        name: 'revise_channel_content_media',
+      },
+    })).resolves.toMatchObject({
+      result: {
+        structuredContent: {
+          artifactIds: ['media-revision-image'],
+          contentId: 'media-revision-content',
+          version: 2,
         },
       },
     })

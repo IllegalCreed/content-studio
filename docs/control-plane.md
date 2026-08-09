@@ -154,6 +154,13 @@ draft → planned → active → completed → archived
 `PublicationPlan`，因此也不会创建发布任务。readiness 只证明本地资源完整，不代表账号
 健康、渠道策略允许或已经取得外部写入授权。
 
+图片等最终媒体晚于正文生成时，不需要重建渠道内容。应用服务提供版本化媒体修订：调用方
+提交 `contentId`、`baseVersion`、`append`/`replace` 和最终媒体 artifact ID；HTTP 入口为
+`POST /api/v1/projects/:projectId/channel-contents/:contentId/media`，MCP 工具为
+`revise_channel_content_media`。输入只接受同活动的最终 `image`/`video`。`replace` 仅替换
+最终媒体引用，保留文章版本、音频、录制片段等其他引用；版本过期、跨活动产物或已建立
+`PublicationPlan` 都会被拒绝。
+
 ### 项目素材、活动产物和资源变体
 
 当前阶段不设置全局素材库。

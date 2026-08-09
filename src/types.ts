@@ -413,6 +413,16 @@ export interface ChannelContent {
 
 export type CreateChannelContentInput = Omit<ChannelContent, 'version'>
 
+export type ChannelContentMediaRevisionMode = 'append' | 'replace'
+
+export interface ChannelContentMediaRevisionInput {
+  artifactIds: string[]
+  baseVersion: number
+  contentId: string
+  mode: ChannelContentMediaRevisionMode
+  projectId: string
+}
+
 export interface CreateActivityContentPackInput {
   activityId: string
   contentGroupId: string

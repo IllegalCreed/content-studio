@@ -350,6 +350,41 @@ describe('workbench runtime client', () => {
     )
   })
 
+  it('revises channel content media through a versioned scoped route', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        artifactIds: ['article-draft', 'final-image'],
+        contentId: 'content-a',
+        version: 2,
+      }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const runtime = createWorkbenchRuntime('/api/v1')
+    const result = await runtime.reviseChannelContentMedia({
+      artifactIds: ['final-image'],
+      baseVersion: 1,
+      contentId: 'content-a',
+      mode: 'replace',
+      projectId: 'project-a',
+    })
+
+    expect(result).toMatchObject({ version: 2, artifactIds: ['article-draft', 'final-image'] })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/project-a/channel-contents/content-a/media',
+      expect.objectContaining({
+        body: JSON.stringify({
+          artifactIds: ['final-image'],
+          baseVersion: 1,
+          contentId: 'content-a',
+          mode: 'replace',
+          projectId: 'project-a',
+        }),
+        method: 'POST',
+      }),
+    )
+  })
+
   it('registers an activity artifact and promotes it only through explicit runtime calls', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ artifactId: 'artifact-a' }), { status: 201 }))

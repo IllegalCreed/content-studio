@@ -712,6 +712,186 @@ describe('content studio application service', () => {
     })).toMatchObject({ publicationId: 'bilibili-short-post-publication' })
   })
 
+  it('revises existing channel media with optimistic versions and preserves non-media references', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'media-revision-project')
+    service.bindProjectChannel({
+      channel: 'bilibili',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId: 'media-revision-project',
+    })
+    const activity = service.createActivity({
+      activityId: 'media-revision-activity',
+      campaignId: 'media-revision-campaign',
+      channels: [{
+        contentFormats: ['image-text'],
+        id: 'bilibili',
+        locale: 'en',
+      }],
+      goal: 'education',
+      projectId: 'media-revision-project',
+      projectSnapshotId: 'media-revision-project-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://media-revision-project.example.com/',
+      topic: { 'en': 'A topic', 'zh-CN': '主题' },
+    })
+    const group = service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'media-revision-group',
+      coreMessage: 'Attach the final image',
+      projectId: activity.projectId,
+      title: 'Media revision',
+    })
+    for (const [artifactId, kind] of [
+      ['article-draft', 'article-version'],
+      ['old-image', 'image'],
+      ['new-image', 'image'],
+      ['recording-clip', 'video-clip'],
+    ] as const) {
+      service.createActivityArtifact({
+        activityId: activity.activityId,
+        artifactId,
+        kind,
+        projectId: activity.projectId,
+        relativePath: `activity/${artifactId}`,
+        sha256: 'a'.repeat(64),
+      })
+    }
+    const content = service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: ['article-draft', 'old-image'],
+      body: 'Image text body',
+      channel: 'bilibili',
+      contentGroupId: group.contentGroupId,
+      contentId: 'media-revision-content',
+      format: 'image-text',
+      locale: 'en',
+      projectId: activity.projectId,
+      title: 'Image text',
+    })
+    const existingMediaFirst = service.createChannelContent({
+      ...content,
+      artifactIds: ['old-image', 'article-draft'],
+      contentId: 'existing-media-first-content',
+    })
+    expect(service.reviseChannelContentMedia({
+      artifactIds: ['old-image'],
+      baseVersion: existingMediaFirst.version,
+      contentId: existingMediaFirst.contentId,
+      mode: 'append',
+      projectId: activity.projectId,
+    })).toEqual(existingMediaFirst)
+    expect(service.reviseChannelContentMedia({
+      artifactIds: ['old-image'],
+      baseVersion: existingMediaFirst.version,
+      contentId: existingMediaFirst.contentId,
+      mode: 'replace',
+      projectId: activity.projectId,
+    })).toEqual(existingMediaFirst)
+
+    const appended = service.reviseChannelContentMedia({
+      artifactIds: ['new-image'],
+      baseVersion: content.version,
+      contentId: content.contentId,
+      mode: 'append',
+      projectId: activity.projectId,
+    })
+    expect(appended).toMatchObject({
+      artifactIds: ['article-draft', 'old-image', 'new-image'],
+      version: 2,
+    })
+    expect(service.getProjectView(activity.projectId).channelContentReadiness[content.contentId])
+      .toMatchObject({
+        matchingArtifactIds: ['old-image', 'new-image'],
+        ready: true,
+      })
+
+    const replaced = service.reviseChannelContentMedia({
+      artifactIds: ['new-image'],
+      baseVersion: appended.version,
+      contentId: content.contentId,
+      mode: 'replace',
+      projectId: activity.projectId,
+    })
+    expect(replaced).toMatchObject({
+      artifactIds: ['article-draft', 'new-image'],
+      version: 3,
+    })
+    expect(service.getProjectView(activity.projectId).channelContentReadiness[content.contentId])
+      .toMatchObject({
+        matchingArtifactIds: ['new-image'],
+        ready: true,
+      })
+    expect(() => service.reviseChannelContentMedia({
+      artifactIds: ['old-image'],
+      baseVersion: 1,
+      contentId: content.contentId,
+      mode: 'append',
+      projectId: activity.projectId,
+    })).toThrow(/moved past version 1/i)
+    expect(() => service.reviseChannelContentMedia({
+      artifactIds: ['recording-clip'],
+      baseVersion: replaced.version,
+      contentId: content.contentId,
+      mode: 'append',
+      projectId: activity.projectId,
+    })).toThrow(/final image\/video/i)
+    const cleared = service.reviseChannelContentMedia({
+      artifactIds: [],
+      baseVersion: replaced.version,
+      contentId: content.contentId,
+      mode: 'replace',
+      projectId: activity.projectId,
+    })
+    expect(cleared).toMatchObject({
+      artifactIds: ['article-draft'],
+      version: 4,
+    })
+    const restored = service.reviseChannelContentMedia({
+      artifactIds: ['new-image'],
+      baseVersion: cleared.version,
+      contentId: content.contentId,
+      mode: 'append',
+      projectId: activity.projectId,
+    })
+    const mediaOnlyGroup = service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'media-only-group',
+      coreMessage: 'Clear the selected final image',
+      projectId: activity.projectId,
+      title: 'Media only',
+    })
+    const mediaOnlyContent = service.createChannelContent({
+      ...content,
+      artifactIds: ['old-image'],
+      contentGroupId: mediaOnlyGroup.contentGroupId,
+      contentId: 'media-only-content',
+    })
+    expect(service.reviseChannelContentMedia({
+      artifactIds: [],
+      baseVersion: mediaOnlyContent.version,
+      contentId: mediaOnlyContent.contentId,
+      mode: 'replace',
+      projectId: activity.projectId,
+    })).toMatchObject({ artifactIds: [], version: 2 })
+    service.createPublicationPlan({
+      activityId: activity.activityId,
+      channel: 'bilibili',
+      contentId: content.contentId,
+      projectId: activity.projectId,
+      publicationId: 'media-revision-publication',
+    })
+    expect(() => service.reviseChannelContentMedia({
+      artifactIds: [],
+      baseVersion: restored.version,
+      contentId: content.contentId,
+      mode: 'replace',
+      projectId: activity.projectId,
+    })).toThrow(/cannot be revised after publication plan/i)
+  })
+
   it('does not create a publication task for a content-only channel', () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)

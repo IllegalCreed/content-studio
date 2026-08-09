@@ -494,6 +494,7 @@ export interface ChannelContentProjection {
   publicationReady?: boolean
   status: '草稿' | '已生成' | '制作中' | '待审核' | '已完成'
   title: string
+  version?: number
 }
 
 export interface ContentGroupProjection {

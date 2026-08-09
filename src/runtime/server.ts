@@ -12,6 +12,7 @@ import type {
   ActivityArtifact,
   ActivityRevisionInput,
   ChannelContentFormat,
+  ChannelContentMediaRevisionInput,
   ChannelId,
   ContentFormat,
   ContentStudioGlobalView,
@@ -791,6 +792,32 @@ async function handleRequest(
       && segments[0] === 'api'
       && segments[1] === 'v1'
       && segments[2] === 'projects'
+      && segments[4] === 'channel-contents'
+      && segments[6] === 'media'
+    ) {
+      const projectId = identifierField(
+        decodeSegment(segments[3]!),
+        'projectId',
+      )
+      const contentId = identifierField(
+        decodeSegment(segments[5]!),
+        'contentId',
+      )
+      const input = parseReviseChannelContentMediaInput(
+        await readJsonBody(request),
+        projectId,
+        contentId,
+      )
+      sendJson(response, 200, service.reviseChannelContentMedia(input))
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
       && segments[4] === 'activities'
       && segments[6] === 'artifacts'
     ) {
@@ -1352,6 +1379,42 @@ export function parseCreateChannelContentInput(
     locale: locale as Locale,
     projectId,
     title: stringField(value.title, 'title'),
+  }
+}
+
+export function parseReviseChannelContentMediaInput(
+  input: unknown,
+  projectId: string,
+  contentId: string,
+): ChannelContentMediaRevisionInput {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'channelContentMediaRevision')
+  const supportedKeys = new Set([
+    'artifactIds',
+    'baseVersion',
+    'contentId',
+    'mode',
+    'projectId',
+  ])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key))
+      throw new RequestError(400, `channelContentMediaRevision contains unsupported field: ${key}`)
+  }
+  const inputProjectId = stringField(value.projectId, 'projectId')
+  if (inputProjectId !== projectId)
+    throw new RequestError(400, 'projectId must match the URL')
+  const inputContentId = identifierField(value.contentId, 'contentId')
+  if (inputContentId !== contentId)
+    throw new RequestError(400, 'contentId must match the URL')
+  const mode = stringField(value.mode, 'mode')
+  if (mode !== 'append' && mode !== 'replace')
+    throw new RequestError(400, 'mode must be append or replace')
+  return {
+    artifactIds: artifactIdsField(value.artifactIds),
+    baseVersion: positiveIntegerField(value.baseVersion, 'baseVersion'),
+    contentId,
+    mode,
+    projectId,
   }
 }
 

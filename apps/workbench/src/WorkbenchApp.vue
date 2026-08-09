@@ -36,6 +36,7 @@ import type {
 import type {
   ChannelId,
   ChannelContentFormat,
+  ChannelContentMediaRevisionMode,
   CreatePublishingActivityInput,
   CreateChannelContentInput,
   CreateContentGroupInput,
@@ -225,6 +226,11 @@ const contentSaving = ref(false)
 const contentSaveError = ref<string | null>(null)
 const publicationPlanActionError = ref<string | null>(null)
 const publicationPlanActionPending = ref<string | null>(null)
+const mediaRevisionArtifactIds = ref<string[]>([])
+const mediaRevisionContent = ref<ChannelContentProjection | null>(null)
+const mediaRevisionError = ref<string | null>(null)
+const mediaRevisionMode = ref<ChannelContentMediaRevisionMode>('append')
+const mediaRevisionPending = ref(false)
 const assetPromotionError = ref<string | null>(null)
 const assetPromotionPending = ref<string | null>(null)
 const storagePreviewOpen = ref(false)
@@ -863,6 +869,7 @@ function queryValues(value: unknown): string[] {
 }
 
 async function openActivityDetail(campaignId: string, projectId = snapshot.project.projectId): Promise<void> {
+  closeChannelContentMediaRevision()
   await router.push(`/project/${encodeURIComponent(projectId)}/activities/${encodeURIComponent(campaignId)}`)
   uiStore.selectCampaign(campaignId)
 }
@@ -1205,6 +1212,86 @@ function openContentComposer(): void {
 function closeContentComposer(): void {
   if (!contentSaving.value)
     contentComposerOpen.value = false
+}
+
+function openChannelContentMediaRevision(content: ChannelContentProjection): void {
+  if (!runtimeConnected.value || !selectedCampaignIsRuntime.value || content.version === undefined)
+    return
+  mediaRevisionArtifactIds.value = []
+  mediaRevisionContent.value = content
+  mediaRevisionError.value = null
+  mediaRevisionMode.value = 'append'
+}
+
+function closeChannelContentMediaRevision(): void {
+  if (mediaRevisionPending.value)
+    return
+  mediaRevisionArtifactIds.value = []
+  mediaRevisionContent.value = null
+  mediaRevisionError.value = null
+  mediaRevisionMode.value = 'append'
+}
+
+function currentChannelContentMediaIds(content: ChannelContentProjection): string[] {
+  const finalMediaIds = new Set(
+    selectedCampaign.value.activityArtifacts
+      .filter(artifact => artifact.kind === '图片' || artifact.kind === '视频')
+      .map(artifact => artifact.artifactId),
+  )
+  return (content.artifactIds ?? []).filter(artifactId => finalMediaIds.has(artifactId))
+}
+
+function setChannelContentMediaRevisionMode(
+  mode: ChannelContentMediaRevisionMode,
+): void {
+  mediaRevisionMode.value = mode
+  mediaRevisionArtifactIds.value = mode === 'replace' && mediaRevisionContent.value !== null
+    ? currentChannelContentMediaIds(mediaRevisionContent.value)
+    : []
+}
+
+function toggleChannelContentMediaRevisionArtifact(artifactId: string): void {
+  const selected = new Set(mediaRevisionArtifactIds.value)
+  if (selected.has(artifactId))
+    selected.delete(artifactId)
+  else
+    selected.add(artifactId)
+  mediaRevisionArtifactIds.value = [...selected]
+}
+
+async function saveChannelContentMediaRevision(): Promise<void> {
+  const content = mediaRevisionContent.value
+  if (
+    !runtimeConnected.value
+    || !selectedCampaignIsRuntime.value
+    || content?.version === undefined
+    || (mediaRevisionMode.value === 'append' && mediaRevisionArtifactIds.value.length === 0)
+  ) {
+    return
+  }
+  mediaRevisionPending.value = true
+  mediaRevisionError.value = null
+  try {
+    await workbenchRuntime.reviseChannelContentMedia({
+      artifactIds: [...mediaRevisionArtifactIds.value],
+      baseVersion: content.version,
+      contentId: content.contentId,
+      mode: mediaRevisionMode.value,
+      projectId: snapshot.project.projectId,
+    })
+    await refreshProjectView()
+    mediaRevisionArtifactIds.value = []
+    mediaRevisionContent.value = null
+    mediaRevisionMode.value = 'append'
+  }
+  catch (error: unknown) {
+    mediaRevisionError.value = error instanceof Error
+      ? error.message
+      : '渠道内容媒体修订失败'
+  }
+  finally {
+    mediaRevisionPending.value = false
+  }
 }
 
 async function saveChannelContent(): Promise<void> {
@@ -1750,6 +1837,11 @@ async function openProjectSpace(projectId: string): Promise<void> {
         :can-publish-content="canPublishContent"
         :enabled-channels="enabledChannels"
         :has-publication-task="hasPublicationTask"
+        :media-revision-artifact-ids="mediaRevisionArtifactIds"
+        :media-revision-content="mediaRevisionContent"
+        :media-revision-error="mediaRevisionError"
+        :media-revision-mode="mediaRevisionMode"
+        :media-revision-pending="mediaRevisionPending"
         :project-account-alias="projectAccountAlias"
         :publication-plan-action-error="publicationPlanActionError"
         :publication-plan-action-pending="publicationPlanActionPending"
@@ -1771,14 +1863,19 @@ async function openProjectSpace(projectId: string): Promise<void> {
         @apply-activity-video-format="applyActivityVideoFormat"
         @close-activity-composer="closeActivityComposer"
         @close-content-composer="closeContentComposer"
+        @close-media-revision="closeChannelContentMediaRevision"
         @confirm-video-plan="confirmSelectedVideoPlan"
         @create-publication-plan="createPublicationPlanForContent"
         @open-activity-detail="openActivityDetail"
         @open-content-composer="openContentComposer"
+        @open-media-revision="openChannelContentMediaRevision"
         @revise-video-plan="reviseSelectedVideoPlan"
         @save-activity="saveActivity"
         @save-channel-content="saveChannelContent"
+        @save-media-revision="saveChannelContentMediaRevision"
+        @set-media-revision-mode="setChannelContentMediaRevisionMode"
         @select-task="selectTask"
+        @toggle-media-revision-artifact="toggleChannelContentMediaRevisionArtifact"
         @toggle-activity-channel-format="toggleActivityChannelFormat"
         />
       </template>
