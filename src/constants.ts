@@ -116,6 +116,18 @@ export const MARKETING_OPS_UTM_MEDIUM_VALUES = [
   'social',
 ] as const satisfies readonly MarketingOpsUtmMedium[]
 
+export const MARKETING_OPS_COMPATIBILITY_MATRIX = [{
+  contentStudioMajor: 0,
+  contentStudioMinor: 1,
+  contractVersion: 3,
+  runtimeMajor: 0,
+  runtimeMinor: 1,
+}] as const
+
+export const MARKETING_OPS_RUNTIME_NAME = 'marketing-ops' as const
+
+export const MARKETING_OPS_STATUS_TTL_MS = 60_000
+
 export const DEFAULT_ACTION_DURATION_MS = {
   'capture': 2000,
   'click': 600,

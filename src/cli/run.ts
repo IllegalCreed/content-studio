@@ -2,6 +2,7 @@
 
 import type {
   CampaignSpec,
+  MarketingOpsStatusClient,
   PlaywrightRecordingOptions,
   ProjectChannelBinding,
   ProjectManifest,
@@ -38,6 +39,7 @@ export interface CliRuntime {
   cwd: string
   env?: NodeJS.ProcessEnv
   input?: NodeJS.ReadableStream
+  marketingOpsStatus?: MarketingOpsStatusClient
   output?: NodeJS.WritableStream
   signal?: AbortSignal
   write: (message: string) => void

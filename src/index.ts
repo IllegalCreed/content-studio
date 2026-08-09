@@ -4,9 +4,12 @@ export {
   DEFAULT_STORAGE_RETENTION_POLICY,
   defaultContentMediaRequirement,
   GIF_LIMITS,
+  MARKETING_OPS_COMPATIBILITY_MATRIX,
   MARKETING_OPS_MEDIA_KINDS,
   MARKETING_OPS_PACKAGE_FORMAT_VALUES,
   MARKETING_OPS_PACKAGE_FORMATS,
+  MARKETING_OPS_RUNTIME_NAME,
+  MARKETING_OPS_STATUS_TTL_MS,
   MARKETING_OPS_UTM_MEDIUM_VALUES,
 } from './constants'
 export { generateContentPackages } from './content/generate'
@@ -60,8 +63,11 @@ export {
 } from './jobs/worker'
 export {
   assertMatchingMarketingOpsReceipt,
+  assessMarketingOpsCompatibility,
   createFakeMarketingOpsClient,
+  createMarketingOpsStatusClient,
   type FakeMarketingOpsClientOptions,
+  isMarketingOpsStatusSnapshotFresh,
   type MarketingOpsClient,
   type MarketingOpsReceiptMatch,
 } from './marketing-ops/client'

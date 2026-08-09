@@ -1,15 +1,17 @@
 // @env node
 
-import type { ProjectManifest } from '../types'
+import type { MarketingOpsStatusClient, ProjectManifest } from '../types'
 import { constants } from 'node:fs'
 import { access, stat } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import process from 'node:process'
 import { chromium } from 'playwright'
+import { isMarketingOpsStatusSnapshotFresh } from '../marketing-ops/client'
 import { createProjectRecord } from '../project/record'
 
 interface DoctorRuntime {
   cwd: string
+  marketingOpsStatus?: MarketingOpsStatusClient
   write: (message: string) => void
 }
 
@@ -54,11 +56,48 @@ export async function runDoctor(
     await directoryCheck('产物目录', contentDirectory),
     await directoryCheck('SQLite 目录', dirname(databasePath)),
     await playwrightCheck(projectRecord.sourceAccess, projectRecord.captureMode),
+    await marketingOpsCheck(project.projectId, runtime.marketingOpsStatus),
   ]
   for (const check of checks)
     runtime.write(formatCheck(check))
   runtime.write('提示：doctor 只检查本地运行条件，不自动创建目录，也不会自动读取凭据或配置渠道。')
   return checks.some(check => check.status === 'error') ? 1 : 0
+}
+
+async function marketingOpsCheck(
+  projectId: string,
+  client: MarketingOpsStatusClient | undefined,
+): Promise<DoctorCheck> {
+  if (client === undefined) {
+    return {
+      detail: '受管 runtime 尚未连接；内容制作仍可用，发布保持阻塞',
+      label: 'Marketing Ops runtime',
+      status: 'warn',
+    }
+  }
+  try {
+    const snapshot = await client.getChannelsStatus(projectId)
+    if (!isMarketingOpsStatusSnapshotFresh(snapshot)) {
+      return {
+        detail: '状态快照已过期；发布保持阻塞',
+        label: 'Marketing Ops runtime',
+        status: 'error',
+      }
+    }
+    const ready = snapshot.channels.filter(channel => channel.adapterReady).length
+    return {
+      detail: `${snapshot.runtimeVersion} / contract v${snapshot.contractVersion}；${ready}/${snapshot.channels.length} 个适配器已就绪`,
+      label: 'Marketing Ops runtime',
+      status: ready > 0 ? 'ok' : 'warn',
+    }
+  }
+  catch {
+    return {
+      detail: '运行时不兼容、不可用或状态响应未通过校验；发布保持阻塞',
+      label: 'Marketing Ops runtime',
+      status: 'error',
+    }
+  }
 }
 
 function nodeCheck(): DoctorCheck {

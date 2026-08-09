@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { Readable, Writable } from 'node:stream'
 import { describe, expect, it } from 'vitest'
+import { createMarketingOpsStatusClient } from '../marketing-ops/client'
 import { runCli } from './run'
 
 const project = {
@@ -284,8 +285,78 @@ describe('content-studio CLI', () => {
       expect(report).toContain('Content Studio doctor')
       expect(report).toContain('项目模式')
       expect(report).toContain('SQLite 目录')
+      expect(report).toContain('[!] Marketing Ops runtime')
       expect(report).toContain('不会自动读取凭据')
       await expect(access(join(temporaryDirectory, '.content-studio'))).rejects.toThrow()
+    }
+    finally {
+      await rm(temporaryDirectory, {
+        force: true,
+        recursive: true,
+      })
+    }
+  })
+
+  it('reports compatible and incompatible marketing-ops runtime status without exposing aliases', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'content-studio-doctor-'))
+    const projectPath = join(temporaryDirectory, 'project.json')
+    const messages: string[] = []
+    try {
+      await writeFile(projectPath, JSON.stringify(project), 'utf8')
+      const compatible = createMarketingOpsStatusClient({
+        transport: {
+          getChannelsStatus: async () => ({
+            channels: [{
+              adapterReady: true,
+              alias: '@private-project-alias',
+              channel: 'github',
+              health: 'ready',
+              nextAction: null,
+            }],
+            contractVersion: 3,
+            projectId: 'algorithm-visualizer',
+          }),
+          getRuntimeInfo: async () => ({
+            name: 'marketing-ops',
+            version: '0.1.0',
+          }),
+        },
+      })
+
+      await expect(runCli(
+        ['doctor', '--project', projectPath],
+        {
+          cwd: temporaryDirectory,
+          marketingOpsStatus: compatible,
+          write: message => messages.push(message),
+        },
+      )).resolves.toBe(0)
+      expect(messages.join('\n')).toContain('[✓] Marketing Ops runtime')
+      expect(messages.join('\n')).toContain('0.1.0 / contract v3')
+      expect(messages.join('\n')).toContain('1/1 个适配器已就绪')
+      expect(messages.join('\n')).not.toContain('@private-project-alias')
+
+      messages.length = 0
+      const incompatible = createMarketingOpsStatusClient({
+        transport: {
+          getChannelsStatus: async () => ({}),
+          getRuntimeInfo: async () => ({
+            name: 'marketing-ops',
+            version: '0.2.0',
+          }),
+        },
+      })
+      await expect(runCli(
+        ['doctor', '--project', projectPath],
+        {
+          cwd: temporaryDirectory,
+          marketingOpsStatus: incompatible,
+          write: message => messages.push(message),
+        },
+      )).resolves.toBe(1)
+      expect(messages.join('\n')).toContain('[×] Marketing Ops runtime')
+      expect(messages.join('\n')).toContain('不兼容、不可用或状态响应未通过校验')
+      expect(messages.join('\n')).not.toContain('runtime-version')
     }
     finally {
       await rm(temporaryDirectory, {

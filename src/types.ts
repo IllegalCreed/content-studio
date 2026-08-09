@@ -687,6 +687,71 @@ export interface MarketingOpsPublicationPackagePreparation {
   package: MarketingOpsPublicationPackage
 }
 
+export type MarketingOpsChannelHealth
+  = | 'blocked'
+    | 'not-configured'
+    | 'ready'
+    | 'reauth-required'
+
+export type MarketingOpsChannelNextStep
+  = | 'blocked'
+    | 'configure'
+    | 'ready'
+    | 'reauthorize'
+
+export interface MarketingOpsChannelStatus {
+  accountAlias?: string
+  adapterReady: boolean
+  channel: ChannelId
+  health: MarketingOpsChannelHealth
+  nextStep: MarketingOpsChannelNextStep
+}
+
+export interface MarketingOpsChannelsStatusSnapshot {
+  authorizesExternalWrite: false
+  channels: MarketingOpsChannelStatus[]
+  contractVersion: number
+  expiresAt: string
+  observedAt: string
+  projectId: string
+  runtimeVersion: string
+}
+
+export type MarketingOpsCompatibilityIssue
+  = | 'contract-version'
+    | 'runtime-name'
+    | 'runtime-version'
+
+export interface MarketingOpsCompatibilityInput {
+  contractVersion: number
+  runtimeName: string
+  runtimeVersion: string
+}
+
+export interface MarketingOpsCompatibilityAssessment {
+  compatible: boolean
+  contractVersion: number
+  expectedContractVersion: number
+  issue?: MarketingOpsCompatibilityIssue
+  runtimeVersion: string
+}
+
+export interface MarketingOpsStatusTransport {
+  getChannelsStatus: (input: { projectId: string }) => Promise<unknown>
+  getRuntimeInfo: () => Promise<unknown>
+}
+
+export interface MarketingOpsStatusClient {
+  getChannelsStatus: (
+    projectId: string,
+  ) => Promise<MarketingOpsChannelsStatusSnapshot>
+}
+
+export interface MarketingOpsStatusClientOptions {
+  now?: () => Date
+  transport: MarketingOpsStatusTransport
+}
+
 export type OwnerHandoffStatus = 'cancelled' | 'completed' | 'expired' | 'pending'
 
 export interface OwnerHandoff {

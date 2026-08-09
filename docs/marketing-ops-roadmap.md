@@ -1,7 +1,7 @@
 # marketing-ops 扩展路线
 
 > 状态：Content Studio 总路线的配套子路线
-> 最近评审：2026-08-09
+> 最近评审：2026-08-10
 
 ## 定位
 
@@ -65,9 +65,11 @@ Content Studio 可以保存账号引用和脱敏投影，但不能保存或转�
 
 ### M0：契约基线与受控客户端（对应 Content Studio V0.5 起步）
 
-- 固定 `marketing-ops` 兼容版本和 Content Studio 客户端版本矩阵。
-- 为 `channels_status`、发布准备、发布提交、状态查询、回执和监测读取建立有类型
-  客户端；不在 Vue 中直接拼 MCP 参数。
+- [x] 固定当前 `marketing-ops` 0.1.x / contract v3 与 Content Studio 0.1.x 的兼容矩阵，
+      并为 `channels_status` 建立只读、有类型客户端；快照在 Content Studio 侧只保留脱敏
+      alias、能力状态和有限的下一步枚举，固定 60 秒有效期。
+- [ ] 为发布准备、发布提交、状态查询、回执和监测读取建立有类型客户端；不在 Vue 中
+      直接拼 MCP 参数。
 - 每次写入前执行项目级状态刷新、能力检查、素材校验和授权检查。
 - 增加 `dry-run`/`assisted-prepare` 等不产生外部写入的准备阶段。
 - 建立本地假适配器和契约测试，测试不连接真实渠道。
@@ -92,6 +94,12 @@ Bilibili 中文图文/GIF fixture 已覆盖该边界；它尚未调用真实 `pu
 元数据，不能提交账号引用或路径。返回值显式标记 `prepare-only` 和
 `externalWrite: false`，不会创建授权、任务状态变化或发布回执。这个入口仍只是本地契约
 验证，不会把草案包伪装成当前 v3 `publish_campaign` 输入。
+
+2026-08-10 补齐了兼容性与状态边界：`src/marketing-ops/client.ts` 只接受本地 transport 提供的
+`channels_status` 数据，校验 runtime 名称、0.1.x 版本和 contract v3，拒绝跨项目、重复
+渠道、未知字段或敏感字段；`observedAt/expiresAt` 由 Content Studio 生成，状态只映射为
+`ready/configure/reauthorize/blocked`，不把 `nextAction` 命令文本传播到项目数据或 MCP。
+`doctor` 未连接 runtime 时保持 warn，版本不兼容或快照过期时 fail closed。
 
 这份新包是下一版互操作契约草案，不冒充当前 v3 MCP 输入。接入写入前，`marketing-ops`
 仍需先支持稳定 package/publication ID、同渠道多包以及带校验和的素材引用；在此之前，
