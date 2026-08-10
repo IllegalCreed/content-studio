@@ -1,6 +1,8 @@
 import type { ProductionWorkerJob } from '../jobs/worker'
 import type {
   MarketingOpsChannelsStatusSnapshot,
+  MarketingOpsPublishClient,
+  MarketingOpsPublishResult,
   MarketingOpsStatusClient,
   ProjectManifest,
   ProjectRecord,
@@ -77,8 +79,25 @@ const snapshot: ProjectSnapshot = {
   version: 1,
 }
 
+function freshMarketingOpsStatus(
+  snapshotProjectId: string,
+): MarketingOpsChannelsStatusSnapshot {
+  const observedAt = new Date()
+  return {
+    authorizesExternalWrite: false,
+    capabilities: [],
+    channels: [],
+    contractVersion: 3,
+    expiresAt: new Date(observedAt.getTime() + 30_000).toISOString(),
+    observedAt: observedAt.toISOString(),
+    projectId: snapshotProjectId,
+    runtimeVersion: '0.1.0',
+  }
+}
+
 function createFixture(options: {
   includeBilibili?: boolean
+  marketingOpsPublish?: MarketingOpsPublishClient
   marketingOpsStatus?: MarketingOpsStatusClient
   ownerTakeovers?: OwnerTakeoverRegistry
   taskStore?: InMemoryExecutionTaskStore
@@ -104,6 +123,7 @@ function createFixture(options: {
     })
   }
   return createContentStudioMcpServer({
+    marketingOpsPublish: options.marketingOpsPublish,
     marketingOpsStatus: options.marketingOpsStatus,
     ownerTakeovers: options.ownerTakeovers,
     projectId,
@@ -111,7 +131,701 @@ function createFixture(options: {
   })
 }
 
+type MarketingOpsPublishInput = Parameters<MarketingOpsPublishClient['publishCampaign']>[0]
+type MarketingOpsConfirmationFactory = (
+  input: MarketingOpsPublishInput,
+) => MarketingOpsPublishResult
+
+function confirmationReceipt(
+  input: MarketingOpsPublishInput,
+  publicUrl: string,
+  receiptId: string,
+) {
+  const packageValue = input.packages[0]!.contentStudio
+  return {
+    activityId: packageValue.activityId,
+    accountRef: packageValue.accountRef,
+    channel: input.packages[0]!.channel,
+    contentSha256: packageValue.contentHash,
+    externalReceiptId: `external-${receiptId}`,
+    issuedAt: '2026-08-10T10:01:00.000Z',
+    projectId: input.projectId,
+    publicationId: packageValue.publicationId,
+    publicUrl,
+    receiptId,
+    source: 'marketing-ops' as const,
+    status: 'published' as const,
+  }
+}
+
+async function createBilibiliAssistedConfirmationFixture(): Promise<{
+  confirm: (publicUrl: string) => Promise<unknown>
+  setConfirmationResult: (factory: MarketingOpsConfirmationFactory) => void
+  setBinding: (binding: {
+    accountRef?: string
+    delivery?: 'content-only' | 'owner-assisted'
+    enabled?: boolean
+  }) => void
+  service: ContentStudioApplicationService
+}> {
+  const repository = new InMemoryContentStudioRepository()
+  const service = new ContentStudioApplicationService(repository)
+  service.registerProject(project, snapshot)
+  const binding = {
+    accountRef: 'bilibili-main',
+    channel: 'bilibili' as const,
+    delivery: 'owner-assisted' as const,
+    enabled: true,
+    projectId,
+  }
+  service.bindProjectChannel(binding)
+  const activity = service.createActivity({
+    activityId: 'bilibili-confirmation-activity',
+    campaignId: 'bilibili-confirmation-campaign',
+    channels: [{
+      contentFormats: ['image-text'],
+      id: 'bilibili',
+      locale: 'zh-CN',
+    }],
+    goal: 'education',
+    projectId,
+    projectSnapshotId: snapshot.snapshotId,
+    status: 'draft',
+    targetUrl: 'https://example.com/bilibili/',
+    topic: { 'en': 'Bilibili package', 'zh-CN': 'Bilibili 图文包' },
+  })
+  const group = service.createContentGroup({
+    activityId: activity.activityId,
+    contentGroupId: 'bilibili-confirmation-group',
+    coreMessage: 'Prepare the image-text package.',
+    projectId,
+    title: 'Bilibili package',
+  })
+  service.createActivityArtifact({
+    activityId: activity.activityId,
+    artifactId: 'bilibili-confirmation-cover',
+    kind: 'image',
+    locale: 'zh-CN',
+    projectId,
+    relativePath: '.content-studio/bilibili-confirmation/cover.png',
+    sha256: 'a'.repeat(64),
+  })
+  const content = service.createChannelContent({
+    activityId: activity.activityId,
+    artifactIds: ['bilibili-confirmation-cover'],
+    body: '快速排序图文：https://example.com/bilibili/',
+    channel: 'bilibili',
+    contentGroupId: group.contentGroupId,
+    contentId: 'bilibili-confirmation-content',
+    format: 'image-text',
+    locale: 'zh-CN',
+    projectId,
+    title: '快速排序图文',
+  })
+  service.createPublicationPlan({
+    activityId: activity.activityId,
+    channel: 'bilibili',
+    contentId: content.contentId,
+    projectId,
+    publicationId: 'bilibili-confirmation-publication',
+  })
+
+  let confirmationFactory: MarketingOpsConfirmationFactory | undefined
+  const marketingOpsPublish: MarketingOpsPublishClient = {
+    publishCampaign: async (input) => {
+      const packageValue = input.packages[0]!.contentStudio
+      if (input.execution.mode === 'assisted-confirm') {
+        return confirmationFactory?.(input) ?? {
+          campaignId: input.campaignId,
+          failures: [],
+          handoffs: [],
+          limitations: [],
+          projectId: input.projectId,
+          receipts: [confirmationReceipt(
+            input,
+            input.execution.confirmations[0]!.publicUrl,
+            'bilibili-confirmation-receipt',
+          )],
+        }
+      }
+      return {
+        campaignId: input.campaignId,
+        failures: [],
+        handoffs: [{
+          contentHash: 'b'.repeat(64),
+          form: packageValue.contentFormat,
+          idempotencyKey: 'content-studio/confirmation',
+          packageId: packageValue.packageId,
+          publicationId: packageValue.publicationId,
+          status: 'awaiting-owner' as const,
+        }],
+        limitations: [],
+        projectId: input.projectId,
+        receipts: [],
+      }
+    },
+  }
+  const observedAt = new Date()
+  const server = createContentStudioMcpServer({
+    marketingOpsPublish,
+    marketingOpsStatus: {
+      getChannelsStatus: async () => ({
+        authorizesExternalWrite: false,
+        capabilities: ['content-studio-assisted-publication-v1'],
+        channels: [{
+          adapterReady: false,
+          alias: null,
+          assistedPublicationReady: true,
+          channel: 'bilibili',
+          health: 'ready',
+          nextAction: 'Publish in the official Bilibili UI, then confirm its public URL',
+          nextStep: 'ready',
+        }],
+        contractVersion: 3,
+        expiresAt: new Date(observedAt.getTime() + 30_000).toISOString(),
+        observedAt: observedAt.toISOString(),
+        projectId,
+        runtimeVersion: '0.1.0',
+      }),
+    },
+    projectId,
+    service,
+  })
+  const preparedResponse = await server.handleMessage({
+    jsonrpc: '2.0',
+    id: 'bilibili-confirmation-prepare',
+    method: 'tools/call',
+    params: {
+      name: 'publish_marketing_ops_package',
+      arguments: {
+        authorization: {
+          authorizedAt: '2026-08-10T10:00:00.000Z',
+          source: 'owner-prompt',
+        },
+        execution: { mode: 'assisted-prepare' },
+        projectId,
+        publicationId: 'bilibili-confirmation-publication',
+        renderer: {
+          canonicalUrl: 'https://example.com/bilibili/',
+          format: 'manual-package',
+          links: ['https://example.com/bilibili/'],
+          media: ['image'],
+          utmMedium: 'social',
+        },
+      },
+    },
+  })
+  const handoffId = (preparedResponse?.result as {
+    structuredContent?: { handoff?: { handoffId?: string } }
+  })?.structuredContent?.handoff?.handoffId
+  if (typeof handoffId !== 'string')
+    throw new Error('Test fixture failed to prepare an owner handoff')
+
+  return {
+    confirm: publicUrl => server.handleMessage({
+      jsonrpc: '2.0',
+      id: `bilibili-confirmation-${publicUrl}`,
+      method: 'tools/call',
+      params: {
+        name: 'publish_marketing_ops_package',
+        arguments: {
+          authorization: {
+            authorizedAt: '2026-08-10T10:02:00.000Z',
+            source: 'owner-prompt',
+          },
+          execution: { mode: 'assisted-confirm', publicUrl },
+          handoffId,
+          projectId,
+        },
+      },
+    }),
+    service,
+    setBinding: updates => service.updateProjectChannelBinding({
+      ...binding,
+      ...updates,
+    }),
+    setConfirmationResult: (factory) => {
+      confirmationFactory = factory
+    },
+  }
+}
+
 describe('content Studio local MCP server', () => {
+  it('fails closed when no managed marketing-ops publish client is injected', async () => {
+    const server = createFixture({ includeBilibili: true })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'publish-unavailable',
+      method: 'tools/call',
+      params: {
+        name: 'publish_marketing_ops_package',
+        arguments: {
+          authorization: {
+            authorizedAt: '2026-08-10T10:00:00.000Z',
+            source: 'owner-prompt',
+          },
+          execution: { mode: 'assisted-prepare' },
+          projectId,
+          publicationId: 'bilibili-publication',
+          renderer: {
+            canonicalUrl: 'https://example.com/bilibili/',
+            format: 'manual-package',
+            links: ['https://example.com/bilibili/'],
+            media: [],
+            utmMedium: 'social',
+          },
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: true,
+        content: [{ text: expect.stringMatching(/unavailable|blocked/i) }],
+      },
+    })
+  })
+
+  it('prepares one locked Bilibili package through the managed client without publishing remotely', async () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    service.registerProject(project, snapshot)
+    service.bindProjectChannel({
+      channel: 'bilibili',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId,
+    })
+    const activity = service.createActivity({
+      activityId: 'bilibili-assisted-activity',
+      campaignId: 'bilibili-assisted-campaign',
+      channels: [{
+        contentFormats: ['image-text'],
+        id: 'bilibili',
+        locale: 'zh-CN',
+      }],
+      goal: 'education',
+      projectId,
+      projectSnapshotId: snapshot.snapshotId,
+      status: 'draft',
+      targetUrl: 'https://example.com/bilibili/',
+      topic: { 'en': 'Bilibili package', 'zh-CN': 'Bilibili 图文包' },
+    })
+    const group = service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'bilibili-assisted-group',
+      coreMessage: 'Prepare the image-text package.',
+      projectId,
+      title: 'Bilibili package',
+    })
+    service.createActivityArtifact({
+      activityId: activity.activityId,
+      artifactId: 'bilibili-assisted-cover',
+      kind: 'image',
+      locale: 'zh-CN',
+      projectId,
+      relativePath: '.content-studio/bilibili-assisted/cover.png',
+      sha256: 'a'.repeat(64),
+    })
+    const content = service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: ['bilibili-assisted-cover'],
+      body: '快速排序图文：https://example.com/bilibili/',
+      channel: 'bilibili',
+      contentGroupId: group.contentGroupId,
+      contentId: 'bilibili-assisted-content',
+      format: 'image-text',
+      locale: 'zh-CN',
+      projectId,
+      title: '快速排序图文',
+    })
+    service.createPublicationPlan({
+      activityId: activity.activityId,
+      channel: 'bilibili',
+      contentId: content.contentId,
+      projectId,
+      publicationId: 'bilibili-assisted-publication',
+    })
+
+    let forwarded:
+      | Parameters<MarketingOpsPublishClient['publishCampaign']>[0]
+      | undefined
+    const marketingOpsPublish: MarketingOpsPublishClient = {
+      publishCampaign: async (input) => {
+        forwarded = input
+        if (input.execution.mode === 'assisted-confirm') {
+          const packageValue = input.packages[0]!
+          return {
+            campaignId: input.campaignId,
+            failures: [],
+            handoffs: [],
+            limitations: ['publication-is-owner-confirmed-not-remotely-created'],
+            projectId: input.projectId,
+            receipts: [{
+              activityId: packageValue.contentStudio.activityId,
+              channel: packageValue.channel,
+              contentFormat: packageValue.contentStudio.contentFormat,
+              contentSha256: packageValue.contentStudio.contentHash,
+              externalReceiptId: '966723264948731941',
+              issuedAt: '2026-08-10T10:01:00.000Z',
+              projectId: input.projectId,
+              publicationId: packageValue.contentStudio.publicationId,
+              publicUrl: input.execution.confirmations[0]!.publicUrl,
+              receiptId: 'bilibili-owner-confirmed-1',
+              source: 'marketing-ops',
+              status: 'published',
+            }],
+          }
+        }
+        return {
+          campaignId: input.campaignId,
+          failures: [],
+          handoffs: [{
+            contentHash: 'b'.repeat(64),
+            form: 'image-text',
+            idempotencyKey: 'campaign-v3/algorithm-visualizer/bilibili-assisted-campaign/bilibili/bilibili-assisted-publication/12345678',
+            nextAction: 'Publish this package in the official UI, then confirm its public URL.',
+            packageId: 'bilibili-assisted-publication',
+            publicationId: 'bilibili-assisted-publication',
+            status: 'awaiting-owner',
+          }],
+          limitations: ['publication-is-owner-confirmed-not-remotely-created'],
+          projectId: input.projectId,
+          receipts: [],
+        }
+      },
+    }
+    const observedAt = new Date()
+    const server = createContentStudioMcpServer({
+      marketingOpsPublish,
+      marketingOpsStatus: {
+        getChannelsStatus: async () => ({
+          authorizesExternalWrite: false,
+          capabilities: ['content-studio-assisted-publication-v1'],
+          channels: [{
+            adapterReady: false,
+            alias: null,
+            assistedPublicationReady: true,
+            channel: 'bilibili',
+            health: 'ready',
+            nextAction: 'Publish in the official Bilibili UI, then confirm its public URL',
+            nextStep: 'ready',
+          }],
+          contractVersion: 3,
+          expiresAt: new Date(observedAt.getTime() + 30_000).toISOString(),
+          observedAt: observedAt.toISOString(),
+          projectId,
+          runtimeVersion: '0.1.0',
+        }),
+      },
+      projectId,
+      service,
+    })
+
+    const preparedResponse = await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'bilibili-assisted-prepare',
+      method: 'tools/call',
+      params: {
+        name: 'publish_marketing_ops_package',
+        arguments: {
+          authorization: {
+            authorizedAt: '2026-08-10T10:00:00.000Z',
+            source: 'owner-prompt',
+          },
+          execution: { mode: 'assisted-prepare' },
+          projectId,
+          publicationId: 'bilibili-assisted-publication',
+          renderer: {
+            canonicalUrl: 'https://example.com/bilibili/',
+            format: 'manual-package',
+            links: ['https://example.com/bilibili/'],
+            media: ['image'],
+            utmMedium: 'social',
+          },
+        },
+      },
+    })
+    expect(preparedResponse).toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          handoff: {
+            marketingOpsPackage: {
+              contentHash: expect.any(String),
+              publicationId: 'bilibili-assisted-publication',
+            },
+            status: 'pending',
+          },
+          handoffs: [{
+            packageId: 'bilibili-assisted-publication',
+            publicationId: 'bilibili-assisted-publication',
+            status: 'awaiting-owner',
+          }],
+          mode: 'assisted-prepare',
+        },
+      },
+    })
+    const handoffId = (preparedResponse as {
+      result: { structuredContent: { handoff: { handoffId: string } } }
+    }).result.structuredContent.handoff.handoffId
+    expect(forwarded).toMatchObject({
+      campaignId: 'bilibili-assisted-campaign',
+      execution: { mode: 'assisted-prepare' },
+      packages: [{
+        channel: 'bilibili',
+        contentStudio: {
+          artifactRefs: [{
+            artifactId: 'bilibili-assisted-cover',
+            sha256: 'a'.repeat(64),
+          }],
+          packageId: 'bilibili-assisted-publication',
+          publicationId: 'bilibili-assisted-publication',
+        },
+      }],
+      projectId,
+    })
+    expect(JSON.stringify(forwarded)).not.toContain('relativePath')
+    expect(service.getProjectView(projectId).publicationReceipts).toEqual([])
+    expect(service.getProjectView(projectId).tasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        status: 'awaiting-owner',
+        taskId: 'publication-bilibili-assisted-publication',
+      }),
+    ]))
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'bilibili-assisted-confirm',
+      method: 'tools/call',
+      params: {
+        name: 'publish_marketing_ops_package',
+        arguments: {
+          authorization: {
+            authorizedAt: '2026-08-10T10:02:00.000Z',
+            source: 'owner-prompt',
+          },
+          execution: {
+            mode: 'assisted-confirm',
+            publicUrl: 'https://www.bilibili.com/opus/966723264948731941',
+          },
+          handoffId,
+          projectId,
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          mode: 'assisted-confirm',
+          receipts: [{
+            publicationId: 'bilibili-assisted-publication',
+            status: 'published',
+          }],
+        },
+      },
+    })
+    expect(forwarded?.execution).toMatchObject({
+      confirmations: [{
+        form: 'image-text',
+        packageId: 'bilibili-assisted-publication',
+        publicationId: 'bilibili-assisted-publication',
+      }],
+      mode: 'assisted-confirm',
+    })
+    expect(service.getProjectView(projectId).publicationReceipts).toMatchObject([{
+      publicationId: 'bilibili-assisted-publication',
+      publicUrl: 'https://www.bilibili.com/opus/966723264948731941',
+      status: 'published',
+    }])
+    expect(service.getProjectView(projectId).ownerHandoffs).toMatchObject([{
+      handoffId,
+      status: 'completed',
+    }])
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'bilibili-assisted-confirm-retry',
+      method: 'tools/call',
+      params: {
+        name: 'publish_marketing_ops_package',
+        arguments: {
+          authorization: {
+            authorizedAt: '2026-08-10T10:03:00.000Z',
+            source: 'owner-prompt',
+          },
+          execution: {
+            mode: 'assisted-confirm',
+            publicUrl: 'https://www.bilibili.com/opus/966723264948731941',
+          },
+          handoffId,
+          projectId,
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          receipts: [{ receiptId: 'bilibili-owner-confirmed-1' }],
+        },
+      },
+    })
+    expect(service.getProjectView(projectId).publicationReceipts).toHaveLength(1)
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'bilibili-assisted-confirm-different-url',
+      method: 'tools/call',
+      params: {
+        name: 'publish_marketing_ops_package',
+        arguments: {
+          authorization: {
+            authorizedAt: '2026-08-10T10:04:00.000Z',
+            source: 'owner-prompt',
+          },
+          execution: {
+            mode: 'assisted-confirm',
+            publicUrl: 'https://www.bilibili.com/opus/966723264948731942',
+          },
+          handoffId,
+          projectId,
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        content: [{ text: expect.stringMatching(/another public URL/i) }],
+        isError: true,
+      },
+    })
+    expect(service.getProjectView(projectId).publicationReceipts).toHaveLength(1)
+  })
+
+  it('refuses confirmation without a stored owner handoff', async () => {
+    const server = createFixture({
+      includeBilibili: true,
+      marketingOpsPublish: {
+        publishCampaign: async () => {
+          throw new Error('publish should not be reached without a handoff')
+        },
+      },
+      marketingOpsStatus: {
+        getChannelsStatus: async () => freshMarketingOpsStatus(projectId),
+      },
+    })
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'missing-owner-handoff',
+      method: 'tools/call',
+      params: {
+        name: 'publish_marketing_ops_package',
+        arguments: {
+          authorization: {
+            authorizedAt: '2026-08-10T10:00:00.000Z',
+            source: 'owner-prompt',
+          },
+          execution: {
+            mode: 'assisted-confirm',
+            publicUrl: 'https://www.bilibili.com/opus/966723264948731941',
+          },
+          projectId,
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: true,
+        content: [{ text: expect.stringMatching(/handoff/i) }],
+      },
+    })
+  })
+
+  it('rechecks the current Bilibili owner-assisted binding before confirmation', async () => {
+    const updates = [
+      { enabled: false },
+      { delivery: 'content-only' as const },
+      { accountRef: 'bilibili-other' },
+    ]
+    for (const update of updates) {
+      const fixture = await createBilibiliAssistedConfirmationFixture()
+      fixture.setBinding(update)
+
+      await expect(fixture.confirm('https://www.bilibili.com/opus/100001')).resolves.toMatchObject({
+        result: {
+          content: [{ text: expect.stringMatching(/binding/i) }],
+          isError: true,
+        },
+      })
+      expect(fixture.service.getProjectView(projectId).publicationReceipts).toEqual([])
+    }
+  })
+
+  it('validates the complete confirmation result before recording any receipt', async () => {
+    const cases: Array<{
+      expectedMessage: RegExp
+      name: string
+      result: MarketingOpsConfirmationFactory
+    }> = [
+      {
+        expectedMessage: /exactly one/i,
+        name: 'two receipts',
+        result: (input) => {
+          const publicUrl = input.execution.mode === 'assisted-confirm'
+            ? input.execution.confirmations[0]!.publicUrl
+            : 'https://www.bilibili.com/opus/100001'
+          const first = confirmationReceipt(input, publicUrl, 'bilibili-receipt-one')
+          return {
+            campaignId: input.campaignId,
+            failures: [],
+            handoffs: [],
+            limitations: [],
+            projectId: input.projectId,
+            receipts: [first, {
+              ...first,
+              externalReceiptId: 'external-bilibili-receipt-two',
+              receiptId: 'bilibili-receipt-two',
+            }],
+          }
+        },
+      },
+      {
+        expectedMessage: /failures/i,
+        name: 'one failure and one success',
+        result: (input) => {
+          const publicUrl = input.execution.mode === 'assisted-confirm'
+            ? input.execution.confirmations[0]!.publicUrl
+            : 'https://www.bilibili.com/opus/100001'
+          return {
+            campaignId: input.campaignId,
+            failures: [{
+              code: 'owner-confirmation-partial',
+              message: 'one package failed',
+              packageId: input.packages[0]!.contentStudio.packageId,
+              retryable: false,
+            }],
+            handoffs: [],
+            limitations: [],
+            projectId: input.projectId,
+            receipts: [confirmationReceipt(
+              input,
+              publicUrl,
+              'bilibili-success-with-failure',
+            )],
+          }
+        },
+      },
+    ]
+
+    for (const testCase of cases) {
+      const fixture = await createBilibiliAssistedConfirmationFixture()
+      fixture.setConfirmationResult(testCase.result)
+      await expect(fixture.confirm('https://www.bilibili.com/opus/100001')).resolves.toMatchObject({
+        result: {
+          content: [{ text: expect.stringMatching(testCase.expectedMessage) }],
+          isError: true,
+        },
+      })
+      expect(fixture.service.getProjectView(projectId).publicationReceipts).toEqual([])
+    }
+  })
+
   it('initializes a standard MCP client before exposing tools and resources', async () => {
     const server = createFixture()
 
@@ -534,6 +1248,10 @@ describe('content Studio local MCP server', () => {
             'en': 'Explain quick sort',
             'zh-CN': '讲解快速排序',
           },
+          video: {
+            flowIds: ['quick-sort'],
+            format: 'landscape',
+          },
         },
       },
     })).resolves.toMatchObject({
@@ -575,6 +1293,7 @@ describe('content Studio local MCP server', () => {
     const observedAtMs = Date.now()
     const status: MarketingOpsChannelsStatusSnapshot = {
       authorizesExternalWrite: false,
+      capabilities: [],
       channels: [{
         accountAlias: '@project-a',
         adapterReady: true,
@@ -1344,8 +2063,8 @@ describe('content Studio local MCP server', () => {
     const service = new ContentStudioApplicationService(repository, taskStore)
     service.registerProject(project, snapshot)
     service.bindProjectChannel({
-      channel: 'github',
-      delivery: 'automatic-candidate',
+      channel: 'youtube',
+      delivery: 'owner-assisted',
       enabled: true,
       projectId,
     })
@@ -1378,7 +2097,7 @@ describe('content Studio local MCP server', () => {
     service.createActivity({
       activityId: 'mcp-video-worker',
       campaignId: 'mcp-video-worker',
-      channels: [{ id: 'github', locale: 'en' }],
+      channels: [{ id: 'youtube', locale: 'en' }],
       goal: 'education',
       projectId,
       projectSnapshotId: snapshot.snapshotId,
@@ -1401,7 +2120,7 @@ describe('content Studio local MCP server', () => {
       activityId: 'mcp-video-worker',
       artifactIds: [],
       body: 'Worker scheduling video',
-      channel: 'github',
+      channel: 'youtube',
       contentGroupId: group.contentGroupId,
       contentId: 'mcp-video-worker-content',
       format: 'video',

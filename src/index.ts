@@ -8,6 +8,7 @@ export {
   MARKETING_OPS_MEDIA_KINDS,
   MARKETING_OPS_PACKAGE_FORMAT_VALUES,
   MARKETING_OPS_PACKAGE_FORMATS,
+  MARKETING_OPS_PUBLISH_UNAVAILABLE_MESSAGE,
   MARKETING_OPS_RUNTIME_NAME,
   MARKETING_OPS_STATUS_REFRESH_INTERVAL_MS,
   MARKETING_OPS_STATUS_TTL_MS,
@@ -68,6 +69,7 @@ export {
   assessMarketingOpsCompatibility,
   createFakeMarketingOpsClient,
   createMarketingOpsManagedRuntime,
+  createMarketingOpsMcpPublishClient,
   createMarketingOpsMcpStatusClient,
   createMarketingOpsStatusClient,
   type FakeMarketingOpsClientOptions,
@@ -79,6 +81,14 @@ export {
   compileMarketingOpsPublicationPackage,
   compileMarketingOpsPublicationPackages,
 } from './marketing-ops/package'
+export {
+  buildMarketingOpsCampaignRequest,
+  createMarketingOpsCampaignSpec,
+  type MarketingOpsCampaignRequestInput,
+} from './marketing-ops/publish'
+export {
+  createMarketingOpsPublishClient,
+} from './marketing-ops/publish-client'
 export {
   type ContentStudioMcpHttpServerHandle,
   type ContentStudioMcpHttpServerOptions,
@@ -104,6 +114,12 @@ export {
   type GenerateDeterministicCoverInput,
   MediaCoverError,
 } from './media/cover'
+export {
+  exportBilibiliVideo,
+  type ExportBilibiliVideoInput,
+  type ExportBilibiliVideoResult,
+  MediaExportError,
+} from './media/export'
 export {
   probeMediaDuration,
   probeVideoSize,

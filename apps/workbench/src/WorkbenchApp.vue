@@ -357,6 +357,22 @@ const videoFormatOptions: Array<{ label: string, value: VideoFormat }> = [
   { label: '方形', value: 'square' },
 ]
 
+const activityTargetsBilibiliVideo = computed(() =>
+  activityForm.channels.includes('bilibili')
+  && activityForm.contentFormats.bilibili?.includes('video-metadata') === true,
+)
+
+const activityVideoFormatOptions = computed(() =>
+  activityTargetsBilibiliVideo.value
+    ? videoFormatOptions.filter(option => option.value !== 'square')
+    : videoFormatOptions,
+)
+
+watch(activityTargetsBilibiliVideo, (targetsBilibiliVideo) => {
+  if (targetsBilibiliVideo && activityForm.videoFormat === 'square')
+    applyActivityVideoFormat('landscape')
+})
+
 const currentModule = computed(() => {
   const module = moduleDefinitions.find(candidate => candidate.id === activeModule.value)
     ?? moduleDefinitions[0]!
@@ -1601,6 +1617,10 @@ async function saveActivity(): Promise<void> {
     activitySaveError.value = `${channelWithoutContentFormat} 至少选择一种内容形态`
     return
   }
+  if (activityTargetsBilibiliVideo.value && !activityForm.videoEnabled) {
+    activitySaveError.value = 'Bilibili 视频内容需要同时启用视频制作计划'
+    return
+  }
   if (activityForm.videoEnabled && projectCaptureFlowIds.value.length === 0) {
     activitySaveError.value = '当前项目没有登记可录制流程，暂时不能创建视频制作计划'
     return
@@ -1923,7 +1943,7 @@ async function openProjectSpace(projectId: string): Promise<void> {
         :snapshot="snapshot"
         :runtime-connected="runtimeConnected"
         :runtime-loading="runtimeLoading"
-        :video-format-options="videoFormatOptions"
+        :video-format-options="activityVideoFormatOptions"
         :video-plan-action-error="videoPlanActionError"
         :video-plan-action-pending="videoPlanActionPending"
         :video-plan-revision-error="videoPlanRevisionError"

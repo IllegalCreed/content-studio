@@ -85,6 +85,7 @@ import {
 } from '../jobs/task'
 import { ProductionWorker } from '../jobs/worker'
 import { isMarketingOpsStatusSnapshotFresh } from '../marketing-ops/client'
+import { exportBilibiliVideo } from '../media/export'
 import { createProjectRecord } from '../project/record'
 import {
   ProjectPreviewAdapterRegistry,
@@ -227,6 +228,7 @@ export function createContentStudioServer(
   const ownerTakeovers = new OwnerTakeoverRegistry(application.taskStore)
   const production = options.production ?? {
     compose: composeProductionVideoClips,
+    exportBilibiliVideo,
     record: recordWithPlaywright,
   }
   const productionOutputRoot = options.productionOutputRoot
@@ -1788,6 +1790,7 @@ export function parseRecordPublicationReceiptInput(
     'activityId',
     'accountRef',
     'channel',
+    'contentSha256',
     'externalReceiptId',
     'issuedAt',
     'projectId',
@@ -1796,6 +1799,7 @@ export function parseRecordPublicationReceiptInput(
     'receiptId',
     'source',
     'status',
+    'videoOrientation',
   ])
   for (const key of Object.keys(value)) {
     if (!supportedKeys.has(key))
@@ -1828,10 +1832,27 @@ export function parseRecordPublicationReceiptInput(
     : dateTimeField(value.issuedAt, 'issuedAt')
   if (status === 'published' && issuedAt === undefined)
     throw new RequestError(400, 'Published publication receipts require issuedAt')
+  const contentSha256 = value.contentSha256 === undefined
+    ? undefined
+    : stringField(value.contentSha256, 'contentSha256')
+  if (contentSha256 !== undefined && !/^[a-f0-9]{64}$/u.test(contentSha256))
+    throw new RequestError(400, 'contentSha256 must be a SHA-256 hex digest')
+  const videoOrientation = value.videoOrientation === undefined
+    ? undefined
+    : stringField(value.videoOrientation, 'videoOrientation')
+  if (
+    videoOrientation !== undefined
+    && videoOrientation !== 'landscape'
+    && videoOrientation !== 'portrait'
+    && videoOrientation !== 'square'
+  ) {
+    throw new RequestError(400, `Unsupported video orientation: ${videoOrientation}`)
+  }
   return {
     activityId,
     ...(value.accountRef === undefined ? {} : { accountRef: stringField(value.accountRef, 'accountRef') }),
     channel: channel as PublicationReceipt['channel'],
+    ...(contentSha256 === undefined ? {} : { contentSha256 }),
     externalReceiptId: stringField(value.externalReceiptId, 'externalReceiptId'),
     ...(issuedAt === undefined ? {} : { issuedAt }),
     projectId,
@@ -1842,6 +1863,9 @@ export function parseRecordPublicationReceiptInput(
     receiptId: identifierField(value.receiptId, 'receiptId'),
     ...(source === undefined ? {} : { source: source as PublicationReceipt['source'] }),
     status,
+    ...(videoOrientation === undefined
+      ? {}
+      : { videoOrientation: videoOrientation as VideoFormat }),
   }
 }
 

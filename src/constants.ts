@@ -72,6 +72,20 @@ export const CHANNEL_BLUEPRINTS = {
 } satisfies Record<ChannelId, ChannelBlueprint>
 
 /**
+ * Resolves the forms selected for one activity target. Older activities may
+ * omit `contentFormats`; those records mean the channel blueprint's single
+ * default form, not every form the channel happens to support today.
+ */
+export function selectedContentFormatsForChannel(
+  channel: {
+    contentFormats?: readonly ContentFormat[]
+    id: ChannelId
+  },
+): readonly ContentFormat[] {
+  return channel.contentFormats ?? [CHANNEL_BLUEPRINTS[channel.id].format]
+}
+
+/**
  * Renderer formats understood by the current marketing-ops contract. This
  * describes package shape only; it does not imply adapter or write support.
  */
@@ -132,6 +146,9 @@ export const MARKETING_OPS_STATUS_TTL_MS = 60_000
 
 export const MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE
   = 'Marketing Ops status unavailable; publishing remains blocked'
+
+export const MARKETING_OPS_PUBLISH_UNAVAILABLE_MESSAGE
+  = 'Marketing Ops publish unavailable; publishing remains blocked'
 
 export const DEFAULT_ACTION_DURATION_MS = {
   'capture': 2000,

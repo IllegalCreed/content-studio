@@ -1,5 +1,6 @@
 import type {
   CampaignSpec,
+  CampaignVideo,
   ChannelId,
   Locale,
   ProjectManifest,
@@ -32,6 +33,15 @@ export interface VideoRecordingConfigValidationOptions {
   format?: VideoFormat
   locales?: readonly Locale[]
   path?: string
+}
+
+export function resolveVideoFormatForChannel(
+  video: CampaignVideo,
+  channelId?: ChannelId,
+): VideoFormat {
+  return channelId === undefined
+    ? video.format
+    : video.recordingProfile?.channelVariants?.[channelId]?.format ?? video.format
 }
 
 export function validateVideoRecordingConfigOverrides(
@@ -114,7 +124,6 @@ export function resolveVideoRecordingConfig(
   if (campaign.video === undefined)
     throw new Error('Campaign does not define a video plan')
 
-  const format = campaign.video.format
   const videoChannel = campaign.channels.find(channel =>
     ['bilibili', 'douyin', 'youtube'].includes(channel.id),
   )
@@ -122,10 +131,10 @@ export function resolveVideoRecordingConfig(
     channel.id === channelId,
   ) ?? videoChannel ?? campaign.channels[0]
   const resolvedChannelId = targetChannel?.id
-  const variantFormat = campaign.video.recordingProfile
-    ?.channelVariants?.[resolvedChannelId ?? '']
-    ?.format
-  const effectiveFormat = variantFormat ?? format
+  const effectiveFormat = resolveVideoFormatForChannel(
+    campaign.video,
+    resolvedChannelId,
+  )
   const defaultLocale = targetChannel?.locale
     ?? campaign.channels[0]?.locale
     ?? project.locales[0]

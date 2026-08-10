@@ -7,6 +7,7 @@ import type {
   ActivityArtifact,
   ActivityContentPack,
   ActivityRevisionInput,
+  BilibiliVideoExportResult,
   ChannelContent,
   ChannelContentFormat,
   ChannelContentMediaRevisionInput,
@@ -36,6 +37,8 @@ import type {
   ExecutionTaskKind,
   ExecutionTaskStore,
   Locale,
+  MarketingOpsPublicationConfirmationState,
+  MarketingOpsPublicationPackage,
   MarketingOpsPublicationPackagePreparation,
   MonitoringObservation,
   OwnerHandoff,
@@ -54,8 +57,12 @@ import type {
   VideoPlan,
   VideoViewport,
 } from '../types'
+import { createHash } from 'node:crypto'
 import { join, relative, resolve } from 'node:path'
-import { CHANNEL_BLUEPRINTS } from '../constants'
+import {
+  CHANNEL_BLUEPRINTS,
+  selectedContentFormatsForChannel,
+} from '../constants'
 import {
   assessChannelContentReadiness,
   assessChannelContentsReadiness,
@@ -66,7 +73,10 @@ import { assertMatchingMarketingOpsReceipt } from '../marketing-ops/client'
 import { compileMarketingOpsPublicationPackage } from '../marketing-ops/package'
 import { resolveGifOutputSize } from '../media/gif'
 import { compileVideoPlan } from '../video/compile'
-import { validateVideoRecordingProfile } from '../video/recording-config'
+import {
+  resolveVideoFormatForChannel,
+  validateVideoRecordingProfile,
+} from '../video/recording-config'
 
 export class ProjectScopeError extends Error {
   constructor(projectId: string, recordId: string) {
@@ -88,6 +98,13 @@ export class RecordNotFoundError extends Error {
     this.name = 'RecordNotFoundError'
   }
 }
+
+const MARKETING_OPS_OWNER_HANDOFF_TARGETS: Partial<Record<ChannelId, string>> = {
+  bilibili: 'https://member.bilibili.com/',
+  youtube: 'https://studio.youtube.com/',
+}
+
+const MARKETING_OPS_OWNER_HANDOFF_TTL_MS = 24 * 60 * 60 * 1000
 
 export interface ContentStudioRepository {
   saveActivity: (activity: PublishingActivity) => PublishingActivity
@@ -829,6 +846,7 @@ export class ContentStudioApplicationService {
     const snapshot = this.requireSnapshot(input.projectId, input.projectSnapshotId)
     this.assertActivityVideo(input.video, snapshot)
     this.assertChannelContentFormats(input.channels)
+    this.assertActivityChannelVideoTargets(input.channels, input.video)
     this.assertEnabledChannels(input.projectId, input.channels)
     const activity = this.repository.saveActivity({
       ...input,
@@ -923,6 +941,7 @@ export class ContentStudioApplicationService {
         input,
         result,
         dependencies.compose,
+        dependencies.exportBilibiliVideo,
       ))
   }
 
@@ -935,6 +954,11 @@ export class ContentStudioApplicationService {
     >,
     result: ProductionTaskResult,
     compose: ComposeProduction | undefined,
+    exportBilibiliVideo: ((input: {
+      outputPath: string
+      signal?: AbortSignal
+      sourcePath: string
+    }) => Promise<BilibiliVideoExportResult>) | undefined,
   ): Promise<ProductionTaskResult> {
     const task = this.taskStore.getTask(projectId, taskId)
     if (
@@ -990,6 +1014,7 @@ export class ContentStudioApplicationService {
       })
     }
     let composed: Awaited<ReturnType<ComposeProduction>>
+    let bilibiliUpload: BilibiliVideoExportResult | undefined
     try {
       composed = await compose({
         clipPaths,
@@ -1008,6 +1033,22 @@ export class ContentStudioApplicationService {
         outputSize: plan.recordingConfig.outputSize,
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       })
+      if (task.channel === 'bilibili' && content?.format === 'video') {
+        if (exportBilibiliVideo === undefined) {
+          throw new Error('Bilibili video upload variant exporter is unavailable')
+        }
+        const uploadPath = join(
+          input.outputDirectory,
+          'composed',
+          `bilibili-${task.attempt}.mp4`,
+        )
+        bilibiliUpload = await exportBilibiliVideo({
+          outputPath: uploadPath,
+          sourcePath: outputPath,
+          ...(input.signal === undefined ? {} : { signal: input.signal }),
+        })
+        assertBilibiliUploadVariant(bilibiliUpload, uploadPath)
+      }
       if (!emittedKinds.has('video-ready')) {
         await emitCompositionProgress({ artifact: composed, kind: 'video-ready' })
       }
@@ -1019,35 +1060,14 @@ export class ContentStudioApplicationService {
       }
     }
     catch (error: unknown) {
-      const cancelled = this.cancelProductionIfRequested(
+      return this.failComposition(
         projectId,
         taskId,
-        input.signal,
         task.attempt,
+        input.signal,
+        result,
+        error,
       )
-      if (cancelled !== undefined) {
-        this.recordCompositionCancellation(projectId, taskId, task.attempt)
-        return { ...result, task: cancelled }
-      }
-      this.taskStore.transitionTask(projectId, taskId, 'failed')
-      this.taskStore.saveCompositionReceipt(projectId, taskId, {
-        artifacts: [],
-        attempt: task.attempt,
-        failure: {
-          code: 'runtime-error',
-          message: error instanceof Error ? error.message : String(error),
-          retryable: true,
-        },
-        jobId: taskId,
-        outcome: 'failed',
-        projectId,
-        receiptVersion: 1,
-      })
-      this.taskStore.appendCompositionEvent(projectId, taskId, {
-        kind: 'composition-failed',
-        message: error instanceof Error ? error.message : String(error),
-      })
-      throw error
     }
 
     const cancelled = this.cancelProductionIfRequested(
@@ -1061,71 +1081,133 @@ export class ContentStudioApplicationService {
       return { ...result, task: cancelled }
     }
 
-    const compositionArtifacts = compositionArtifactsFromResult(
-      taskId,
-      composed,
-      compositionRoot,
-      plan.recordingConfig.outputSize,
-    )
-    const videoArtifact = compositionArtifacts.find(artifact => artifact.kind === 'video')!
-    this.createActivityArtifact({
-      activityId: task.activityId,
-      artifactId: videoArtifact.artifactId,
-      kind: 'video',
-      projectId,
-      relativePath: videoArtifact.relativePath!,
-      sha256: videoArtifact.sha256,
-    })
-    const coverArtifact = compositionArtifacts.find(artifact => artifact.kind === 'cover')
-    if (coverArtifact !== undefined) {
-      this.createActivityArtifact({
-        activityId: task.activityId,
-        artifactId: coverArtifact.artifactId,
-        kind: 'image',
+    try {
+      const compositionArtifacts = compositionArtifactsFromResult(
+        taskId,
+        composed,
+        compositionRoot,
+        plan.recordingConfig.outputSize,
+      )
+      const bilibiliUploadArtifact = bilibiliUpload === undefined
+        ? undefined
+        : bilibiliCompositionArtifact(
+            taskId,
+            task.attempt,
+            bilibiliUpload,
+            compositionRoot,
+          )
+      const registeredArtifacts = bilibiliUploadArtifact === undefined
+        ? compositionArtifacts
+        : [...compositionArtifacts, bilibiliUploadArtifact]
+      for (const artifact of registeredArtifacts) {
+        this.createActivityArtifact({
+          activityId: task.activityId,
+          artifactId: artifact.artifactId,
+          kind: artifact.kind === 'video' ? 'video' : 'image',
+          projectId,
+          relativePath: artifact.relativePath!,
+          sha256: artifact.sha256,
+          ...(artifact.artifactId === bilibiliUploadArtifact?.artifactId
+            && content?.locale !== undefined
+            ? { locale: content.locale }
+            : {}),
+        })
+      }
+      if (task.contentId !== undefined) {
+        const contentArtifactIds = bilibiliUploadArtifact === undefined
+          ? compositionArtifacts.map(artifact => artifact.artifactId)
+          : registeredArtifacts
+              .filter(artifact => artifact.artifactId !== `composed-${taskId}`)
+              .map(artifact => artifact.artifactId)
+        if (bilibiliUploadArtifact === undefined) {
+          this.attachActivityArtifactsToChannelContent(
+            projectId,
+            task.contentId,
+            contentArtifactIds,
+          )
+        }
+        else {
+          this.replaceActivityVideoInChannelContent(
+            projectId,
+            task.contentId,
+            contentArtifactIds,
+          )
+        }
+      }
+      this.taskStore.saveCompositionReceipt(projectId, taskId, {
+        artifacts: registeredArtifacts,
+        attempt: task.attempt,
+        jobId: taskId,
+        outcome: 'succeeded',
         projectId,
-        relativePath: coverArtifact.relativePath!,
-        sha256: coverArtifact.sha256,
+        receiptVersion: 1,
       })
-    }
-    const gifArtifact = compositionArtifacts.find(artifact => artifact.kind === 'gif')
-    if (gifArtifact !== undefined) {
-      this.createActivityArtifact({
-        activityId: task.activityId,
-        artifactId: gifArtifact.artifactId,
-        kind: 'image',
+      const completed = this.taskStore.transitionTask(
         projectId,
-        relativePath: gifArtifact.relativePath!,
-        sha256: gifArtifact.sha256,
+        taskId,
+        'completed',
+      )
+      this.taskStore.appendCompositionEvent(projectId, taskId, {
+        kind: 'composition-completed',
+        message: `Composition completed with ${registeredArtifacts.length} artifacts`,
       })
+      return {
+        ...result,
+        task: completed,
+      }
     }
-    if (task.contentId !== undefined) {
-      this.attachActivityArtifactsToChannelContent(
+    catch (error: unknown) {
+      return this.failComposition(
         projectId,
-        task.contentId,
-        compositionArtifacts.map(artifact => artifact.artifactId),
+        taskId,
+        task.attempt,
+        input.signal,
+        result,
+        error,
       )
     }
+  }
+
+  private failComposition(
+    projectId: string,
+    taskId: string,
+    attempt: number,
+    signal: AbortSignal | undefined,
+    result: ProductionTaskResult,
+    error: unknown,
+  ): ProductionTaskResult {
+    const cancelled = this.cancelProductionIfRequested(
+      projectId,
+      taskId,
+      signal,
+      attempt,
+    )
+    if (cancelled !== undefined) {
+      this.recordCompositionCancellation(projectId, taskId, attempt)
+      return { ...result, task: cancelled }
+    }
+    const message = error instanceof Error ? error.message : String(error)
+    const task = this.taskStore.getTask(projectId, taskId)
+    if (task?.status === 'composing')
+      this.taskStore.transitionTask(projectId, taskId, 'failed')
     this.taskStore.saveCompositionReceipt(projectId, taskId, {
-      artifacts: compositionArtifacts,
-      attempt: task.attempt,
+      artifacts: [],
+      attempt,
+      failure: {
+        code: 'runtime-error',
+        message,
+        retryable: true,
+      },
       jobId: taskId,
-      outcome: 'succeeded',
+      outcome: 'failed',
       projectId,
       receiptVersion: 1,
     })
-    const completed = this.taskStore.transitionTask(
-      projectId,
-      taskId,
-      'completed',
-    )
     this.taskStore.appendCompositionEvent(projectId, taskId, {
-      kind: 'composition-completed',
-      message: `Composition completed with ${compositionArtifacts.length} artifacts`,
+      kind: 'composition-failed',
+      message,
     })
-    return {
-      ...result,
-      task: completed,
-    }
+    throw error
   }
 
   private cancelProductionIfRequested(
@@ -1250,8 +1332,10 @@ export class ContentStudioApplicationService {
       )
     }
     const snapshot = this.requireSnapshot(input.projectId, current.projectSnapshotId)
-    if (input.video !== undefined)
+    if (input.video !== undefined) {
       this.assertActivityVideo(input.video, snapshot)
+      this.assertActivityChannelVideoTargets(current.channels, input.video)
+    }
     return this.repository.saveActivity({
       ...current,
       topic: input.topic,
@@ -1472,9 +1556,12 @@ export class ContentStudioApplicationService {
     input: CreateActivityArtifactInput,
   ): ActivityArtifact {
     this.requireActivity(input.projectId, input.activityId)
+    const relativePath = toPortableRelativePath(input.relativePath)
+    if (!isSafeRelativePath(relativePath))
+      throw new Error('Activity artifact relative path must be safe')
     return this.repository.saveActivityArtifact({
       ...input,
-      relativePath: toPortableRelativePath(input.relativePath),
+      relativePath,
       version: 1,
     })
   }
@@ -1606,7 +1693,14 @@ export class ContentStudioApplicationService {
         publicationId: receipt.publicationId,
       })
     }
-    const savedReceipt = this.repository.savePublicationReceipt(receipt)
+    const existingReceipt = this.repository.getPublicationReceipt(
+      receipt.projectId,
+      receipt.receiptId,
+    )
+    if (existingReceipt !== undefined && !samePublicationReceipt(existingReceipt, receipt)) {
+      throw new Error('Publication receipt conflicts with an existing receipt')
+    }
+    const savedReceipt = existingReceipt ?? this.repository.savePublicationReceipt(receipt)
     const publicationTaskId = `publication-${receipt.publicationId}`
     let publicationTask = this.taskStore.getTask(receipt.projectId, publicationTaskId)
     if (publicationTask === undefined) {
@@ -1629,6 +1723,143 @@ export class ContentStudioApplicationService {
     return savedReceipt
   }
 
+  /**
+   * Stores the exact path-free package an owner must publish. Confirmation
+   * later reads this snapshot instead of compiling the mutable activity again.
+   */
+  createMarketingOpsPublicationHandoff(
+    packageValue: MarketingOpsPublicationPackage,
+  ): OwnerHandoff {
+    this.assertMarketingOpsPublicationHandoffPackage(packageValue)
+    const existing = this.repository.listOwnerHandoffs(packageValue.projectId)
+      .find(handoff =>
+        handoff.marketingOpsPackage?.packageId === packageValue.packageId
+        && handoff.marketingOpsPackage.contentHash === packageValue.contentHash
+        && (handoff.status === 'pending' || handoff.status === 'completed'),
+      )
+    if (existing !== undefined)
+      return existing
+
+    const issuedAt = new Date()
+    const expiresAt = new Date(issuedAt.getTime() + MARKETING_OPS_OWNER_HANDOFF_TTL_MS)
+    if (Number.isNaN(issuedAt.getTime()) || Number.isNaN(expiresAt.getTime()))
+      throw new Error('Marketing-ops handoff clock is invalid')
+    return this.createOwnerHandoff({
+      activityId: packageValue.activityId,
+      artifactChecksums: [...new Set(packageValue.artifactRefs.map(reference => reference.sha256))]
+        .sort(),
+      channel: packageValue.channel,
+      checklist: [
+        'Review the locked package and matching artifact checksums.',
+        'Publish the matching content only in the official channel UI.',
+        'Return only the resulting public HTTPS URL for confirmation.',
+      ],
+      expiresAt: expiresAt.toISOString(),
+      handoffId: marketingOpsHandoffId(packageValue, issuedAt),
+      marketingOpsPackage: packageValue,
+      officialTargetUrl: MARKETING_OPS_OWNER_HANDOFF_TARGETS[packageValue.channel]!,
+      projectId: packageValue.projectId,
+      publicationId: packageValue.publicationId,
+      status: 'pending',
+    })
+  }
+
+  getMarketingOpsPublicationHandoff(
+    projectId: string,
+    handoffId: string,
+  ): OwnerHandoff {
+    this.requireProject(projectId)
+    const handoff = this.repository.getOwnerHandoff(projectId, handoffId)
+    if (handoff === undefined)
+      throw new RecordNotFoundError('OwnerHandoff', handoffId)
+    if (handoff.marketingOpsPackage === undefined)
+      throw new Error('Owner handoff does not contain a marketing-ops package')
+    if (handoff.status !== 'pending' && handoff.status !== 'completed')
+      throw new Error(`Owner handoff ${handoffId} is not available for confirmation`)
+    const expiresAt = Date.parse(handoff.expiresAt)
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now())
+      throw new Error(`Owner handoff ${handoffId} has expired`)
+    this.assertMarketingOpsPublicationHandoffPackage(handoff.marketingOpsPackage)
+    return handoff
+  }
+
+  /**
+   * Reserves the exact public URL an owner is confirming. The repository
+   * update is synchronous, so two confirmations handled by this process
+   * cannot reserve different URLs for the same pending handoff.
+   */
+  claimMarketingOpsPublicationConfirmation(
+    projectId: string,
+    handoffId: string,
+    publicUrl: string,
+  ): OwnerHandoff {
+    assertOwnerConfirmationUrl(publicUrl)
+    const handoff = this.getMarketingOpsPublicationHandoff(projectId, handoffId)
+    const existing = handoff.marketingOpsConfirmation
+    if (existing !== undefined) {
+      if (existing.publicUrl !== publicUrl) {
+        throw new Error(
+          `Owner handoff ${handoffId} is already bound to another public URL`,
+        )
+      }
+      return handoff
+    }
+    if (handoff.status === 'completed') {
+      throw new Error(`Owner handoff ${handoffId} has no confirmation binding`)
+    }
+    const confirmation: MarketingOpsPublicationConfirmationState = {
+      publicUrl,
+      status: 'pending',
+    }
+    return this.repository.updateOwnerHandoff({
+      ...handoff,
+      marketingOpsConfirmation: confirmation,
+    })
+  }
+
+  completeMarketingOpsPublicationHandoff(
+    projectId: string,
+    handoffId: string,
+    publicUrl?: string,
+  ): OwnerHandoff {
+    if (publicUrl !== undefined)
+      assertOwnerConfirmationUrl(publicUrl)
+    const handoff = this.getMarketingOpsPublicationHandoff(projectId, handoffId)
+    if (
+      publicUrl !== undefined
+      && handoff.marketingOpsConfirmation !== undefined
+      && handoff.marketingOpsConfirmation.publicUrl !== publicUrl
+    ) {
+      throw new Error(
+        `Owner handoff ${handoffId} is already bound to another public URL`,
+      )
+    }
+    if (handoff.status === 'completed') {
+      if (
+        publicUrl !== undefined
+        && handoff.marketingOpsConfirmation === undefined
+      ) {
+        throw new Error(`Owner handoff ${handoffId} has no confirmation binding`)
+      }
+      return handoff
+    }
+    const completed = this.completeOwnerHandoff(projectId, handoffId)
+    if (publicUrl === undefined && completed.marketingOpsConfirmation === undefined)
+      return completed
+    const current = completed.marketingOpsConfirmation
+    const confirmation: MarketingOpsPublicationConfirmationState = {
+      publicUrl: publicUrl ?? current?.publicUrl ?? '',
+      status: 'confirmed',
+      confirmedAt: new Date().toISOString(),
+    }
+    if (confirmation.publicUrl === '')
+      throw new Error('Marketing-ops confirmation requires a public URL')
+    return this.repository.updateOwnerHandoff({
+      ...completed,
+      marketingOpsConfirmation: confirmation,
+    })
+  }
+
   createOwnerHandoff(handoff: OwnerHandoff): OwnerHandoff {
     this.requireProject(handoff.projectId)
     const plan = this.requirePublicationPlan(
@@ -1641,9 +1872,11 @@ export class ContentStudioApplicationService {
     ) {
       throw new Error('Owner handoff must match activity and channel')
     }
-    if (handoff.artifactChecksums.length === 0) {
+    if (handoff.artifactChecksums.length === 0 && handoff.marketingOpsPackage === undefined) {
       throw new Error('Owner handoff requires an artifact checksum')
     }
+    if (handoff.marketingOpsPackage !== undefined)
+      this.assertMarketingOpsPublicationHandoffPackage(handoff.marketingOpsPackage)
     if (handoff.checklist.length === 0) {
       throw new Error('Owner handoff requires a review checklist')
     }
@@ -1673,6 +1906,37 @@ export class ContentStudioApplicationService {
     if (handoff.status !== 'pending')
       throw new Error(`Owner handoff ${handoffId} is not pending`)
     return this.repository.updateOwnerHandoff({ ...handoff, status })
+  }
+
+  private assertMarketingOpsPublicationHandoffPackage(
+    packageValue: MarketingOpsPublicationPackage,
+  ): void {
+    const plan = this.requirePublicationPlan(
+      packageValue.projectId,
+      packageValue.publicationId,
+    )
+    if (
+      packageValue.schemaVersion !== 1
+      || packageValue.projectId !== plan.projectId
+      || packageValue.activityId !== plan.activityId
+      || packageValue.channel !== plan.channel
+      || packageValue.contentId !== plan.contentId
+      || packageValue.packageId !== packageValue.publicationId
+      || !/^[a-f0-9]{64}$/u.test(packageValue.contentHash)
+      || !isValidVideoOrientation(packageValue)
+      || MARKETING_OPS_OWNER_HANDOFF_TARGETS[packageValue.channel] === undefined
+    ) {
+      throw new Error('Marketing-ops handoff package does not match its publication plan')
+    }
+    for (const reference of packageValue.artifactRefs) {
+      if (
+        !/^[a-f0-9]{64}$/u.test(reference.sha256)
+        || !Number.isInteger(reference.version)
+        || reference.version < 1
+      ) {
+        throw new Error('Marketing-ops handoff package has an invalid artifact reference')
+      }
+    }
   }
 
   recordMonitoringObservation(
@@ -1819,6 +2083,29 @@ export class ContentStudioApplicationService {
     }
   }
 
+  private assertActivityChannelVideoTargets(
+    channels: readonly {
+      contentFormats?: readonly ContentFormat[]
+      id: ChannelId
+    }[],
+    video: PublishingActivity['video'],
+  ): void {
+    const bilibiliVideo = channels.find(channel =>
+      channel.id === 'bilibili'
+      && selectedContentFormatsForChannel(channel).includes('video-metadata'),
+    )
+    if (bilibiliVideo === undefined)
+      return
+    if (video === undefined)
+      throw new Error('Bilibili video content form requires an activity video plan')
+    const format = resolveVideoFormatForChannel(video, 'bilibili')
+    if (format !== 'landscape' && format !== 'portrait') {
+      throw new Error(
+        'Bilibili activity video orientation must be landscape or portrait',
+      )
+    }
+  }
+
   private assertActivityChannelContentFormat(
     activity: PublishingActivity,
     channel: ChannelId,
@@ -1828,10 +2115,10 @@ export class ContentStudioApplicationService {
     const target = activity.channels.find(candidate =>
       candidate.id === channel && candidate.locale === locale,
     )
-    if (target?.contentFormats === undefined)
+    if (target === undefined)
       return
     const packageFormat = format === 'video' ? 'video-metadata' : format
-    if (!target.contentFormats.includes(packageFormat)) {
+    if (!selectedContentFormatsForChannel(target).includes(packageFormat)) {
       throw new Error(
         `Activity channel ${channel} does not select content form: ${packageFormat}`,
       )
@@ -1958,6 +2245,48 @@ export class ContentStudioApplicationService {
     })
   }
 
+  /**
+   * A Bilibili video content item has exactly one upload video. Keep any
+   * accompanying cover/GIF references, but replace a previous final video so
+   * a stale WebM can never make the package ambiguous or exceed Bilibili's
+   * one-video requirement.
+   */
+  private replaceActivityVideoInChannelContent(
+    projectId: string,
+    contentId: string,
+    artifactIds: readonly string[],
+  ): ChannelContent {
+    const content = this.repository.getChannelContent(projectId, contentId)
+    if (content === undefined)
+      throw new RecordNotFoundError('Channel content', contentId)
+    const existingPlan = this.repository.listPublicationPlans(projectId)
+      .find(plan => plan.contentId === contentId)
+    if (existingPlan !== undefined) {
+      throw new Error(
+        `Channel content ${contentId} cannot be revised after publication plan ${existingPlan.publicationId}`,
+      )
+    }
+    const existingVideoArtifactIds = new Set(content.artifactIds.filter((artifactId) => {
+      const artifact = this.repository.getActivityArtifact(projectId, artifactId)
+      return artifact?.kind === 'video'
+    }))
+    const nextArtifactIds = [
+      ...content.artifactIds.filter(artifactId => !existingVideoArtifactIds.has(artifactId)),
+      ...artifactIds,
+    ]
+    this.assertChannelContentArtifacts(
+      projectId,
+      content.activityId,
+      nextArtifactIds,
+      content.locale,
+    )
+    return this.repository.saveChannelContent({
+      ...content,
+      artifactIds: [...new Set(nextArtifactIds)],
+      version: content.version + 1,
+    })
+  }
+
   private assertActivityVideo(
     video: PublishingActivity['video'],
     snapshot: ProjectSnapshot,
@@ -2044,11 +2373,59 @@ export class ContentStudioApplicationService {
   }
 }
 
+function isValidVideoOrientation(
+  packageValue: MarketingOpsPublicationPackage,
+): boolean {
+  if (
+    packageValue.videoOrientation !== undefined
+    && packageValue.videoOrientation !== 'landscape'
+    && packageValue.videoOrientation !== 'portrait'
+    && packageValue.videoOrientation !== 'square'
+  ) {
+    return false
+  }
+  if (packageValue.contentFormat !== 'video')
+    return packageValue.videoOrientation === undefined
+  return packageValue.channel !== 'bilibili'
+    || packageValue.videoOrientation === 'landscape'
+    || packageValue.videoOrientation === 'portrait'
+}
+
 function toRecordingAttemptRecord(
   receipt: RecorderAttemptReceipt,
 ): RecordingAttemptRecord {
   const { artifactDirectory: _artifactDirectory, ...record } = receipt
   return record
+}
+
+function samePublicationReceipt(
+  existing: PublicationReceipt,
+  requested: PublicationReceipt,
+): boolean {
+  return existing.receiptId === requested.receiptId
+    && existing.projectId === requested.projectId
+    && existing.activityId === requested.activityId
+    && existing.channel === requested.channel
+    && existing.publicationId === requested.publicationId
+    && existing.status === requested.status
+    && existing.source === requested.source
+    && existing.externalReceiptId === requested.externalReceiptId
+    && existing.publicUrl === requested.publicUrl
+    && existing.accountRef === requested.accountRef
+    && existing.issuedAt === requested.issuedAt
+    && existing.contentSha256 === requested.contentSha256
+    && existing.videoOrientation === requested.videoOrientation
+}
+
+function marketingOpsHandoffId(
+  packageValue: MarketingOpsPublicationPackage,
+  issuedAt: Date,
+): string {
+  const digest = createHash('sha256')
+    .update(`${packageValue.packageId}:${packageValue.contentHash}:${issuedAt.toISOString()}`)
+    .digest('hex')
+    .slice(0, 24)
+  return `marketing-ops-${digest}`
 }
 
 function compositionEventKind(
@@ -2127,7 +2504,7 @@ function compositionArtifactsFromResult(
       { artifact: result, kind: 'video-ready' },
       outputSize,
     ),
-    relativePath: toPortableRelativePath(relative(compositionRoot, result.artifactPath)),
+    relativePath: compositionRelativePath(compositionRoot, result.artifactPath),
   }]
   if (result.cover !== undefined) {
     artifacts.push({
@@ -2136,7 +2513,7 @@ function compositionArtifactsFromResult(
         { artifact: result.cover, kind: 'cover-ready' },
         outputSize,
       ),
-      relativePath: toPortableRelativePath(relative(compositionRoot, result.cover.artifactPath)),
+      relativePath: compositionRelativePath(compositionRoot, result.cover.artifactPath),
     })
   }
   if (result.gif !== undefined) {
@@ -2146,10 +2523,46 @@ function compositionArtifactsFromResult(
         { artifact: result.gif, kind: 'gif-ready' },
         outputSize,
       ),
-      relativePath: toPortableRelativePath(relative(compositionRoot, result.gif.artifactPath)),
+      relativePath: compositionRelativePath(compositionRoot, result.gif.artifactPath),
     })
   }
   return artifacts
+}
+
+function bilibiliCompositionArtifact(
+  taskId: string,
+  attempt: number,
+  result: BilibiliVideoExportResult,
+  compositionRoot: string,
+): CompositionArtifact {
+  const relativePath = compositionRelativePath(
+    compositionRoot,
+    result.artifactPath,
+  )
+  return {
+    artifactId: `bilibili-${taskId}-${attempt}`,
+    durationSeconds: result.durationSeconds,
+    kind: 'video',
+    relativePath,
+    sha256: result.sha256,
+    sizeBytes: result.sizeBytes,
+  }
+}
+
+function assertBilibiliUploadVariant(
+  result: BilibiliVideoExportResult,
+  expectedPath: string,
+): void {
+  if (
+    resolve(result.artifactPath) !== resolve(expectedPath)
+    || !/^[a-f0-9]{64}$/u.test(result.sha256)
+    || !Number.isFinite(result.durationSeconds)
+    || result.durationSeconds <= 0
+    || !Number.isInteger(result.sizeBytes)
+    || result.sizeBytes <= 0
+  ) {
+    throw new Error('Bilibili video upload variant is invalid')
+  }
 }
 
 function getScopedRecord<T extends { projectId: string }>(
@@ -2195,4 +2608,38 @@ function cloneOrUndefined<T>(value: T | undefined): T | undefined {
 
 function toPortableRelativePath(relativePath: string): string {
   return relativePath.replace(/\\/g, '/')
+}
+
+function compositionRelativePath(
+  compositionRoot: string,
+  artifactPath: string,
+): string {
+  const relativePath = toPortableRelativePath(
+    relative(compositionRoot, artifactPath),
+  )
+  if (!isSafeRelativePath(relativePath)) {
+    throw new Error(
+      'Composition artifact path must stay inside the controlled output',
+    )
+  }
+  return relativePath
+}
+
+function isSafeRelativePath(path: string): boolean {
+  return path.trim() !== ''
+    && !path.startsWith('/')
+    && !/^[A-Za-z]:\//u.test(path)
+    && !path.split('/').includes('..')
+}
+
+function assertOwnerConfirmationUrl(publicUrl: string): void {
+  let url: URL
+  try {
+    url = new URL(publicUrl)
+  }
+  catch {
+    throw new Error('Owner confirmation URL must be HTTPS')
+  }
+  if (url.protocol !== 'https:' || url.username !== '' || url.password !== '' || url.hash !== '')
+    throw new Error('Owner confirmation URL must be HTTPS')
 }

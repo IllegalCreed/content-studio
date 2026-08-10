@@ -138,9 +138,10 @@ draft → planned → active → completed → archived
 - 视频：包括脚本、分镜、录制计划、字幕稿、旁白稿和封面方案。
 
 渠道内容是面向具体平台和内容形态的完整作品，不是同一母稿的机械复制。一个渠道可以
-在同一活动中选择多个形态（例如 Bilibili 的视频稿、图文和动态），每个形态都保存为
-独立版本。AI 可以共享事实和活动目标，但必须遵循目标渠道对应形态的格式、语气和长度
-约束。
+在同一活动中选择多个形态；例如 Bilibili 可分别选择动态（`short-post`）、图文
+（`image-text`）和视频（`video-metadata`）。视频的横屏/竖屏由活动视频计划的
+`format` 明确锁定，并随发布包和人工回执传递。每个形态都保存为独立版本。AI 可以共享
+事实和活动目标，但必须遵循目标渠道对应形态的格式、语气和长度约束。
 
 项目视图中的 `channelBlueprints` 会返回每个渠道的逐形态蓝图：`maxTitleLength`、
 `maxBodyLength` 和 `media`（允许的 `image`/`video` 类型、`minCount`、可选的

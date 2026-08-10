@@ -3,6 +3,7 @@ import type {
   ChannelContentFormat,
   ChannelId,
   ContentStudioReport,
+  MarketingOpsPublicationPackage,
   MonitoringObservation,
   OwnerHandoff,
   ProjectChannelBinding,
@@ -456,13 +457,32 @@ describe('content studio application service', () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)
     registerProject(service, 'multi-form-project')
-    enableYouTube(service, 'multi-form-project')
-    const activity = createActivity(service, 'multi-form-project')
+    service.bindProjectChannel({
+      channel: 'bilibili',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId: 'multi-form-project',
+    })
+    const activity = service.createActivity({
+      activityId: 'multi-form-activity',
+      campaignId: 'multi-form-campaign',
+      channels: [{
+        contentFormats: ['image-text'],
+        id: 'bilibili',
+        locale: 'en',
+      }],
+      goal: 'education',
+      projectId: 'multi-form-project',
+      projectSnapshotId: 'multi-form-project-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://multi-form-project.example.com/',
+      topic: { 'en': 'A topic', 'zh-CN': '主题' },
+    })
     const contentId = createProductionContent(
       service,
       activity,
       'image-text',
-      'youtube',
+      'bilibili',
       'multi-form-image-text',
     )
 
@@ -567,6 +587,105 @@ describe('content studio application service', () => {
         locale: 'en',
       }],
     })).toThrow(/duplicate channel content form/i)
+  })
+
+  it('requires a compatible video plan when an activity selects Bilibili video', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    const flow: CaptureFlow = {
+      id: 'bilibili-video',
+      startPath: '/video',
+      steps: [{ kind: 'capture', label: 'video' }],
+      title: { 'en': 'Video', 'zh-CN': '视频' },
+    }
+    registerProject(service, 'bilibili-video-project', [flow])
+    service.bindProjectChannel({
+      channel: 'bilibili',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId: 'bilibili-video-project',
+    })
+    const baseInput = {
+      activityId: 'bilibili-video-activity',
+      campaignId: 'bilibili-video-campaign',
+      channels: [{
+        contentFormats: ['video-metadata' as const],
+        id: 'bilibili' as const,
+        locale: 'en' as const,
+      }],
+      goal: 'education' as const,
+      projectId: 'bilibili-video-project',
+      projectSnapshotId: 'bilibili-video-project-snapshot-1',
+      status: 'draft' as const,
+      targetUrl: 'https://bilibili-video-project.example.com/',
+      topic: { 'en': 'Video', 'zh-CN': '视频' },
+    }
+
+    expect(() => service.createActivity(baseInput)).toThrow(/video plan/i)
+    expect(() => service.createActivity({
+      ...baseInput,
+      video: { flowIds: [flow.id], format: 'square' },
+    })).toThrow(/landscape|portrait/i)
+    expect(service.createActivity({
+      ...baseInput,
+      video: {
+        flowIds: [flow.id],
+        format: 'landscape',
+        recordingProfile: {
+          channelVariants: { bilibili: { format: 'portrait' } },
+        },
+      },
+    }).video?.format).toBe('landscape')
+  })
+
+  it('uses the channel default when legacy activities omit contentFormats', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    const flow: CaptureFlow = {
+      id: 'legacy-bilibili-video',
+      startPath: '/video',
+      steps: [{ kind: 'capture', label: 'video' }],
+      title: { 'en': 'Video', 'zh-CN': '视频' },
+    }
+    registerProject(service, 'legacy-bilibili-project', [flow])
+    service.bindProjectChannel({
+      channel: 'bilibili',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId: 'legacy-bilibili-project',
+    })
+    const activity = service.createActivity({
+      activityId: 'legacy-bilibili-activity',
+      campaignId: 'legacy-bilibili-campaign',
+      channels: [{ id: 'bilibili', locale: 'en' }],
+      goal: 'education',
+      projectId: 'legacy-bilibili-project',
+      projectSnapshotId: 'legacy-bilibili-project-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://legacy-bilibili-project.example.com/',
+      topic: { 'en': 'Video', 'zh-CN': '视频' },
+      video: { flowIds: [flow.id], format: 'landscape' },
+    })
+    const group = service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'legacy-bilibili-group',
+      coreMessage: 'Legacy default',
+      projectId: activity.projectId,
+      title: 'Legacy default',
+    })
+
+    expect(() => service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: [],
+      body: 'Image text',
+      channel: 'bilibili',
+      contentGroupId: group.contentGroupId,
+      contentId: 'legacy-bilibili-image-text',
+      format: 'image-text',
+      locale: 'en',
+      projectId: activity.projectId,
+      title: 'Image text',
+    })).toThrow(/does not select content form.*image-text/i)
   })
 
   it('blocks publication plans until the selected content form references final media', () => {
@@ -1134,7 +1253,7 @@ describe('content studio application service', () => {
       channel: 'reddit',
       contentGroupId: group.contentGroupId,
       contentId: 'content-only-content',
-      format: 'article',
+      format: 'short-post',
       locale: 'en',
       projectId: activity.projectId,
       title: 'Content',
@@ -2109,6 +2228,310 @@ describe('content studio application service', () => {
     ])
   })
 
+  it('exports a Bilibili video variant and publishes only the MP4 reference', async () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(
+      repository,
+      new InMemoryExecutionTaskStore(),
+    )
+    registerProject(
+      service,
+      'compose-bilibili-project',
+      [{
+        id: 'quick-sort',
+        startPath: '/quick-sort',
+        steps: [{ durationMs: 100, kind: 'capture', label: 'algorithm' }],
+        title: { 'en': 'Quick sort', 'zh-CN': '快速排序' },
+      }],
+    )
+    service.bindProjectChannel({
+      channel: 'bilibili',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId: 'compose-bilibili-project',
+    })
+    const activity = service.createActivity({
+      activityId: 'compose-bilibili-activity',
+      campaignId: 'compose-bilibili-campaign',
+      channels: [{
+        contentFormats: ['video-metadata'],
+        id: 'bilibili',
+        locale: 'en',
+      }],
+      goal: 'education',
+      projectId: 'compose-bilibili-project',
+      projectSnapshotId: 'compose-bilibili-project-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://compose-bilibili-project.example.com/quick-sort',
+      topic: { 'en': 'Quick sort', 'zh-CN': '快速排序' },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        planVersion: 1,
+      },
+    })
+    const contentId = createProductionContent(
+      service,
+      activity,
+      'video',
+      'bilibili',
+      'compose-bilibili-content',
+    )
+    service.createActivityArtifact({
+      activityId: activity.activityId,
+      artifactId: 'legacy-bilibili-video',
+      kind: 'video',
+      locale: 'en',
+      projectId: 'compose-bilibili-project',
+      relativePath: 'composed/legacy.webm',
+      sha256: 'f'.repeat(64),
+    })
+    service.reviseChannelContentMedia({
+      artifactIds: ['legacy-bilibili-video'],
+      baseVersion: 1,
+      contentId,
+      mode: 'append',
+      projectId: 'compose-bilibili-project',
+    })
+    const taskId = `production-${contentId}`
+    service.startProductionTask('compose-bilibili-project', taskId)
+    const receipt: RecorderAttemptReceipt = {
+      artifactDirectory: '/tmp/content-studio-compose-bilibili/attempt-1',
+      artifacts: [{
+        id: 'clip-1',
+        kind: 'video-clip',
+        relativePath: 'clips/scene-001.webm',
+        sceneId: 'quick-sort',
+        sha256: 'a'.repeat(64),
+        sizeBytes: 42,
+      }],
+      attempt: 1,
+      campaignId: activity.campaignId,
+      completedActions: 1,
+      completedScenes: 1,
+      jobId: taskId,
+      logs: {
+        consoleErrors: 0,
+        consoleWarnings: 0,
+        entries: [],
+        pageErrors: 0,
+      },
+      outcome: 'succeeded',
+      planSha256: 'compose-bilibili-plan',
+      projectId: 'compose-bilibili-project',
+      recordingConfig: {
+        colorScheme: 'dark',
+        deviceScaleFactor: 1,
+        format: 'landscape',
+        locale: 'en',
+        outputSize: { height: 1080, width: 1920 },
+        viewport: { height: 1080, width: 1920 },
+      },
+      receiptVersion: 1,
+      totalActions: 1,
+      totalScenes: 1,
+    }
+    const exportInputs: Array<{ outputPath: string, sourcePath: string }> = []
+    const result = await service.runActivityProductionTask(
+      'compose-bilibili-project',
+      taskId,
+      {
+        baseUrl: 'https://compose-bilibili-project.example.com',
+        outputDirectory: '/tmp/content-studio-compose-bilibili',
+        projectOrigin: 'https://compose-bilibili-project.example.com',
+      },
+      {
+        compose: async () => ({
+          artifactPath: '/tmp/content-studio-compose-bilibili/composed/final.webm',
+          cover: {
+            artifactPath: '/tmp/content-studio-compose-bilibili/composed/cover.svg',
+            height: 1080,
+            sha256: 'd'.repeat(64),
+            sizeBytes: 8,
+            width: 1920,
+          },
+          durationSeconds: 3,
+          gif: {
+            artifactPath: '/tmp/content-studio-compose-bilibili/composed/preview.gif',
+            durationSeconds: 3,
+            fps: 10,
+            height: 360,
+            sha256: 'e'.repeat(64),
+            sizeBytes: 9,
+            width: 640,
+          },
+          reencoded: false,
+          sha256: 'c'.repeat(64),
+          sizeBytes: 7,
+        }),
+        exportBilibiliVideo: async (input) => {
+          exportInputs.push({ outputPath: input.outputPath, sourcePath: input.sourcePath })
+          return {
+            artifactPath: input.outputPath,
+            durationSeconds: 3,
+            sha256: 'b'.repeat(64),
+            sizeBytes: 10,
+          }
+        },
+        record: async () => ({ attempts: [], receipt }),
+      },
+    )
+
+    expect(result.task.status).toBe('completed')
+    expect(exportInputs).toEqual([{
+      outputPath: '/tmp/content-studio-compose-bilibili/composed/bilibili-1.mp4',
+      sourcePath: '/tmp/content-studio-compose-bilibili/composed/final.webm',
+    }])
+    expect(repository.listActivityArtifacts(
+      'compose-bilibili-project',
+      activity.activityId,
+    )).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        artifactId: `bilibili-${taskId}-1`,
+        kind: 'video',
+        locale: 'en',
+        relativePath: 'content-studio-compose-bilibili/composed/bilibili-1.mp4',
+        sha256: 'b'.repeat(64),
+      }),
+      expect.objectContaining({ artifactId: `composed-${taskId}`, kind: 'video' }),
+    ]))
+    expect(repository.getChannelContent(
+      'compose-bilibili-project',
+      contentId,
+    )).toMatchObject({
+      artifactIds: [
+        `cover-${taskId}`,
+        `gif-${taskId}`,
+        `bilibili-${taskId}-1`,
+      ],
+    })
+    expect(repository.getChannelContent(
+      'compose-bilibili-project',
+      contentId,
+    )?.artifactIds).not.toContain('legacy-bilibili-video')
+    expect(repository.getChannelContent(
+      'compose-bilibili-project',
+      contentId,
+    )?.artifactIds).not.toContain(`composed-${taskId}`)
+    expect(service.getChannelContentReadiness(
+      'compose-bilibili-project',
+      contentId,
+    )).toMatchObject({
+      matchingArtifactIds: [`bilibili-${taskId}-1`],
+      ready: true,
+    })
+  })
+
+  it('fails composition before registering an artifact outside its controlled output', async () => {
+    const repository = new InMemoryContentStudioRepository()
+    const taskStore = new InMemoryExecutionTaskStore()
+    const service = new ContentStudioApplicationService(repository, taskStore)
+    registerProject(
+      service,
+      'unsafe-composition-project',
+      [{
+        id: 'quick-sort',
+        startPath: '/quick-sort',
+        steps: [{ durationMs: 100, kind: 'capture', label: 'algorithm' }],
+        title: { 'en': 'Quick sort', 'zh-CN': '快速排序' },
+      }],
+    )
+    enableYouTube(service, 'unsafe-composition-project')
+    const activity = service.createActivity({
+      activityId: 'unsafe-composition-activity',
+      campaignId: 'unsafe-composition-campaign',
+      channels: [{ id: 'youtube', locale: 'en' }],
+      goal: 'education',
+      projectId: 'unsafe-composition-project',
+      projectSnapshotId: 'unsafe-composition-project-snapshot-1',
+      status: 'draft',
+      targetUrl: 'https://unsafe-composition-project.example.com/quick-sort',
+      topic: { 'en': 'Quick sort', 'zh-CN': '快速排序' },
+      video: {
+        flowIds: ['quick-sort'],
+        format: 'landscape',
+        planVersion: 1,
+      },
+    })
+    const contentId = createProductionContent(service, activity)
+    const taskId = `production-${contentId}`
+    service.startProductionTask('unsafe-composition-project', taskId)
+    const receipt: RecorderAttemptReceipt = {
+      artifactDirectory: '/tmp/content-studio-unsafe-composition/attempt-1',
+      artifacts: [{
+        id: 'clip-1',
+        kind: 'video-clip',
+        relativePath: 'clips/scene-001.webm',
+        sceneId: 'quick-sort',
+        sha256: 'a'.repeat(64),
+        sizeBytes: 42,
+      }],
+      attempt: 1,
+      campaignId: activity.campaignId,
+      completedActions: 1,
+      completedScenes: 1,
+      jobId: taskId,
+      logs: {
+        consoleErrors: 0,
+        consoleWarnings: 0,
+        entries: [],
+        pageErrors: 0,
+      },
+      outcome: 'succeeded',
+      planSha256: 'unsafe-composition-plan',
+      projectId: 'unsafe-composition-project',
+      recordingConfig: {
+        colorScheme: 'dark',
+        deviceScaleFactor: 1,
+        format: 'landscape',
+        locale: 'en',
+        outputSize: { height: 1080, width: 1920 },
+        viewport: { height: 1080, width: 1920 },
+      },
+      receiptVersion: 1,
+      totalActions: 1,
+      totalScenes: 1,
+    }
+
+    await expect(service.runActivityProductionTask(
+      'unsafe-composition-project',
+      taskId,
+      {
+        baseUrl: 'https://unsafe-composition-project.example.com',
+        outputDirectory: '/tmp/content-studio-unsafe-composition',
+        projectOrigin: 'https://unsafe-composition-project.example.com',
+      },
+      {
+        compose: async () => ({
+          artifactPath: '/outside-content-studio-composition.webm',
+          durationSeconds: 3,
+          reencoded: false,
+          sha256: 'b'.repeat(64),
+          sizeBytes: 7,
+        }),
+        record: async () => ({ attempts: [receipt], receipt }),
+      },
+    )).rejects.toThrow(/composition artifact path/i)
+
+    expect(taskStore.getTask('unsafe-composition-project', taskId)).toMatchObject({
+      status: 'failed',
+    })
+    expect(repository.listActivityArtifacts(
+      'unsafe-composition-project',
+      activity.activityId,
+    )).toEqual([])
+    expect(repository.getChannelContent(
+      'unsafe-composition-project',
+      contentId,
+    )?.artifactIds).toEqual([])
+    expect(service.getProjectView('unsafe-composition-project').compositionReceipts)
+      .toMatchObject([{
+        artifacts: [],
+        failure: { code: 'runtime-error' },
+        outcome: 'failed',
+      }])
+  })
+
   it('cancels before registering media when composition observes an aborted signal', async () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(
@@ -2579,6 +3002,99 @@ describe('content studio application service', () => {
       ...receipt,
       accountRef: 'account-youtube-main',
     })).toMatchObject({ source: 'marketing-ops', status: 'published' })
+  })
+
+  it('reuses an exact marketing-ops receipt on an idempotent confirmation retry', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'project-a')
+    enableYouTube(service, 'project-a', 'account-youtube-main')
+    const { activity, publication } = createPublication(service)
+    const receipt = {
+      accountRef: 'account-youtube-main',
+      activityId: activity.activityId,
+      channel: 'youtube' as const,
+      contentSha256: 'a'.repeat(64),
+      externalReceiptId: 'youtube-video-123',
+      issuedAt: '2026-08-10T00:00:00.000Z',
+      projectId: 'project-a',
+      publicationId: publication.publicationId,
+      publicUrl: 'https://www.youtube.com/watch?v=12345678901',
+      receiptId: 'marketing-ops-owner-confirmed-123',
+      source: 'marketing-ops' as const,
+      status: 'published' as const,
+    }
+
+    expect(service.recordPublicationReceipt(receipt)).toEqual(receipt)
+    expect(service.recordPublicationReceipt({ ...receipt })).toEqual(receipt)
+    expect(repository.listPublicationReceipts('project-a')).toEqual([receipt])
+    expect(() => service.recordPublicationReceipt({
+      ...receipt,
+      externalReceiptId: 'youtube-video-other',
+    })).toThrow(/conflicts with an existing receipt/i)
+  })
+
+  it('persists and reuses the immutable package behind an owner-assisted marketing-ops handoff', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'project-a')
+    enableYouTube(service, 'project-a')
+    const { activity, publication } = createPublication(service)
+    const packageValue: MarketingOpsPublicationPackage = {
+      activityId: activity.activityId,
+      artifactRefs: [{
+        artifactId: 'project-a-report-video',
+        kind: 'video',
+        locale: 'en',
+        mediaKind: 'video',
+        sha256: 'f'.repeat(64),
+        version: 1,
+      }],
+      body: 'A video script',
+      campaignId: 'project-a-campaign',
+      channel: 'youtube',
+      contentFormat: 'video',
+      contentHash: 'a'.repeat(64),
+      contentId: 'project-a-report-content',
+      contentVersion: 1,
+      locale: 'en',
+      packageId: publication.publicationId,
+      projectId: 'project-a',
+      publicationId: publication.publicationId,
+      renderer: {
+        canonicalUrl: 'https://project-a.example.com/',
+        format: 'manual-package',
+        links: ['https://project-a.example.com/'],
+        media: ['video'],
+        utmMedium: 'social',
+      },
+      schemaVersion: 1,
+      title: 'Quick sort explained',
+    }
+
+    const handoff = service.createMarketingOpsPublicationHandoff(packageValue)
+    expect(handoff).toMatchObject({
+      artifactChecksums: ['f'.repeat(64)],
+      channel: 'youtube',
+      marketingOpsPackage: packageValue,
+      publicationId: publication.publicationId,
+      status: 'pending',
+    })
+    expect(service.getMarketingOpsPublicationHandoff('project-a', handoff.handoffId))
+      .toEqual(handoff)
+    expect(service.createMarketingOpsPublicationHandoff({ ...packageValue }))
+      .toEqual(handoff)
+    expect(() => service.createMarketingOpsPublicationHandoff({
+      ...packageValue,
+      contentFormat: 'image-text',
+      videoOrientation: 'portrait',
+    })).toThrow(/does not match its publication plan/i)
+    expect(service.getProjectView('project-a').tasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        status: 'awaiting-owner',
+        taskId: `publication-${publication.publicationId}`,
+      }),
+    ]))
   })
 
   it('rejects mismatched ownership and duplicate immutable records', () => {

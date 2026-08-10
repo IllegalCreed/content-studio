@@ -4,6 +4,7 @@ import type {
   ComposeProduction,
   ExecutionTask,
   ExecutionTaskStore,
+  ExportBilibiliVideo,
   PlaywrightRecordingOptions,
   RecorderAttemptReceipt,
   RecordingContext,
@@ -35,6 +36,7 @@ export interface ProductionTaskInput {
 
 export interface ProductionTaskDependencies {
   compose?: ComposeProduction
+  exportBilibiliVideo?: ExportBilibiliVideo
   options?: Pick<
     PlaywrightRecordingOptions,
     'actionTimeoutMs' | 'emit' | 'headless' | 'ownerTakeover'

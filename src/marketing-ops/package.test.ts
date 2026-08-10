@@ -199,6 +199,78 @@ describe('marketing-ops publication package compiler', () => {
       .toMatchObject({ mediaKind: 'gif' })
   })
 
+  it('derives and locks Bilibili video orientation from the activity video plan', () => {
+    const currentContent = content({
+      artifactIds: ['video-en'],
+      body: `Watch the video at ${origin}/en/quick-sort/`,
+      channel: 'bilibili',
+      contentId: 'bilibili-en-video',
+      format: 'video',
+    })
+    const currentActivity = {
+      ...activity(),
+      channels: [
+        ...activity().channels.map(channel =>
+          channel.id === 'bilibili' && channel.locale === 'en'
+            ? {
+                ...channel,
+                contentFormats: [...(channel.contentFormats ?? []), 'video-metadata' as const],
+              }
+            : channel,
+        ),
+      ],
+      video: { flowIds: [], format: 'landscape' as const },
+    }
+    const baseInput = input({
+      activity: currentActivity,
+      artifacts: [artifact('video-en', 'video', 'media/quick-sort.mp4', 'en')],
+      content: currentContent,
+      publication: {
+        activityId,
+        channel: 'bilibili',
+        contentId: currentContent.contentId,
+        projectId,
+        publicationId: 'bilibili-en-video',
+      },
+      renderer: renderer({
+        format: 'manual-package',
+        media: ['video'],
+        utmMedium: 'social',
+      }),
+    })
+
+    const compiled = compileMarketingOpsPublicationPackage(baseInput)
+    expect(compiled.videoOrientation).toBe('landscape')
+    expect(compiled.contentHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(compileMarketingOpsPublicationPackage({
+      ...baseInput,
+      activity: {
+        ...currentActivity,
+        video: {
+          flowIds: [],
+          format: 'landscape',
+          recordingProfile: {
+            channelVariants: {
+              bilibili: { format: 'portrait' },
+            },
+          },
+        },
+      },
+    }).videoOrientation).toBe('portrait')
+    expect(compileMarketingOpsPublicationPackage({
+      ...baseInput,
+      activity: { ...currentActivity, video: { flowIds: [], format: 'portrait' } },
+    }).contentHash).not.toBe(compiled.contentHash)
+    expect(() => compileMarketingOpsPublicationPackage({
+      ...baseInput,
+      activity: { ...currentActivity, video: undefined },
+    })).toThrow(/orientation/i)
+    expect(() => compileMarketingOpsPublicationPackage({
+      ...baseInput,
+      activity: { ...currentActivity, video: { flowIds: [], format: 'square' } },
+    })).toThrow(/landscape|portrait/i)
+  })
+
   it('allows multiple locales and forms for one channel in a batch', () => {
     const chineseContent = content({
       artifactIds: ['article-zh', 'cover-zh'],
@@ -293,6 +365,18 @@ describe('marketing-ops publication package compiler', () => {
     expect(() => compileMarketingOpsPublicationPackage(input({
       renderer: renderer({ links: ['https://outside.example.com/page'] }),
     }))).toThrow(/origin|link/i)
+    expect(() => compileMarketingOpsPublicationPackage(input({
+      renderer: renderer({ media: ['image', 'image', 'image', 'image'] }),
+    }))).toThrow(/three media/i)
+    expect(() => compileMarketingOpsPublicationPackage(input({
+      renderer: renderer({ media: ['image', 'image'] }),
+    }))).toThrow(/unique/i)
+    expect(() => compileMarketingOpsPublicationPackage(input({
+      renderer: renderer({ canonicalUrl: 'not-a-url' }),
+    }))).toThrow(/valid URL/i)
+    expect(() => compileMarketingOpsPublicationPackage(input({
+      renderer: renderer({ canonicalUrl: 'http://package.example.com/en/quick-sort/' }),
+    }))).toThrow(/HTTPS/i)
     expect(() => compileMarketingOpsPublicationPackage(input({
       renderer: renderer({ links: [`https://user:password@${new URL(origin).host}/en/quick-sort/`] }),
     }))).toThrow(/credential/i)

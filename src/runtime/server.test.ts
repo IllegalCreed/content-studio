@@ -538,6 +538,34 @@ describe('content studio local application server', () => {
     }, 'project-a', 'activity-a', 'publication-a')
     expect(receipt).toMatchObject({ receiptId: 'receipt-a', status: 'published' })
 
+    expect(parseRecordPublicationReceiptInput({
+      activityId: 'activity-a',
+      channel: 'bilibili',
+      contentSha256: 'a'.repeat(64),
+      externalReceiptId: 'video-a',
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+      publicUrl: 'https://www.bilibili.com/video/BV1example',
+      receiptId: 'receipt-video-a',
+      issuedAt: '2026-08-04T00:00:00.000Z',
+      source: 'marketing-ops',
+      status: 'published',
+      videoOrientation: 'portrait',
+    }, 'project-a', 'activity-a', 'publication-a')).toMatchObject({
+      contentSha256: 'a'.repeat(64),
+      videoOrientation: 'portrait',
+    })
+    expect(() => parseRecordPublicationReceiptInput({
+      activityId: 'activity-a',
+      channel: 'bilibili',
+      contentSha256: 'not-a-sha',
+      externalReceiptId: 'video-invalid',
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+      receiptId: 'receipt-video-invalid',
+      status: 'failed',
+    }, 'project-a', 'activity-a', 'publication-a')).toThrow(/SHA-256/i)
+
     expect(() => parseRecordPublicationReceiptInput({
       activityId: 'activity-a',
       channel: 'github',
@@ -1224,6 +1252,7 @@ describe('content studio local application server', () => {
     const expiresAt = new Date(observedAtMs + 60_000).toISOString()
     const statusSnapshot: MarketingOpsChannelsStatusSnapshot = {
       authorizesExternalWrite: false,
+      capabilities: [],
       channels: [{
         accountAlias: '@project-a',
         adapterReady: true,

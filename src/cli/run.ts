@@ -3,6 +3,7 @@
 import type {
   CampaignSpec,
   MarketingOpsManagedRuntime,
+  MarketingOpsPublishClient,
   MarketingOpsStatusClient,
   PlaywrightRecordingOptions,
   ProjectChannelBinding,
@@ -22,6 +23,7 @@ import { OwnerTakeoverRegistry } from '../jobs/owner-takeover'
 import { ProductionWorker } from '../jobs/worker'
 import { createContentStudioMcpHttpServer } from '../mcp/http'
 import { createContentStudioMcpServer, serveMcpStdio } from '../mcp/server'
+import { exportBilibiliVideo } from '../media/export'
 import { writeStudioBundle } from '../output/write'
 import { createProjectRecord } from '../project/record'
 import { recordWithPlaywright } from '../recording/playwright'
@@ -41,6 +43,7 @@ export interface CliRuntime {
   env?: NodeJS.ProcessEnv
   input?: NodeJS.ReadableStream
   marketingOpsRuntime?: MarketingOpsManagedRuntime
+  marketingOpsPublish?: MarketingOpsPublishClient
   marketingOpsStatus?: MarketingOpsStatusClient
   output?: NodeJS.WritableStream
   signal?: AbortSignal
@@ -386,6 +389,7 @@ async function runMcp(
       return await runMcpHttp(execution, project.projectId, options, runtime)
     await serveMcpStdio(
       createContentStudioMcpServer({
+        marketingOpsPublish: marketingOpsPublishClient(runtime),
         marketingOpsStatus: marketingOpsStatusClient(runtime),
         ownerTakeovers: execution.ownerTakeovers,
         projectId: project.projectId,
@@ -465,6 +469,7 @@ function createMcpExecutionRuntime(
       productionForProject(
         {
           compose: composeProductionVideoClips,
+          exportBilibiliVideo,
           record: services.record,
         },
         ownerTakeovers,
@@ -484,6 +489,7 @@ async function runMcpHttp(
 ): Promise<number> {
   const http = createContentStudioMcpHttpServer({
     server: createContentStudioMcpServer({
+      marketingOpsPublish: marketingOpsPublishClient(runtime),
       marketingOpsStatus: marketingOpsStatusClient(runtime),
       ownerTakeovers: execution.ownerTakeovers,
       projectId,
@@ -588,6 +594,12 @@ function marketingOpsStatusClient(
   runtime: CliRuntime,
 ): MarketingOpsStatusClient | undefined {
   return runtime.marketingOpsRuntime?.statusClient ?? runtime.marketingOpsStatus
+}
+
+function marketingOpsPublishClient(
+  runtime: CliRuntime,
+): MarketingOpsPublishClient | undefined {
+  return runtime.marketingOpsRuntime?.publishClient ?? runtime.marketingOpsPublish
 }
 
 async function closeMarketingOpsRuntime(runtime: CliRuntime): Promise<void> {

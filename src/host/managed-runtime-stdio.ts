@@ -2,6 +2,7 @@
 
 import type { StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js'
 import type { Stream } from 'node:stream'
+import type { MarketingOpsCampaignRequest } from '../types'
 import type { ManagedMarketingOpsRuntimeAsset } from './managed-runtime-asset'
 import type {
   ManagedMarketingOpsMcpSession,
@@ -15,6 +16,7 @@ import {
   DEFAULT_INHERITED_ENV_VARS,
   StdioClientTransport,
 } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { assertNoSensitiveKeys } from '../validation'
 import { resolveManagedMarketingOpsRuntimeAsset } from './managed-runtime-asset'
 import { verifyInstalledManagedMarketingOpsRuntime } from './managed-runtime-installed-guard'
 
@@ -232,19 +234,20 @@ function createSession(
   let closePromise: Promise<void> | undefined
   return {
     callTool: async (input) => {
-      if (!isChannelsStatusInput(input))
+      const toolInput = managedToolInput(input)
+      if (toolInput === null)
         throw new Error('Unsupported marketing-ops tool')
       try {
         return await withTimeout(
-          client.callTool({
-            arguments: { projectId: input.arguments.projectId },
-            name: 'channels_status',
+          client.callTool(toolInput as unknown as {
+            arguments: Record<string, unknown>
+            name: string
           }),
           requestTimeoutMs,
         )
       }
       catch {
-        throw new Error('Marketing-ops status unavailable')
+        throw new Error('Marketing-ops tool unavailable')
       }
     },
     close: () => {
@@ -252,6 +255,23 @@ function createSession(
       return closePromise
     },
     getServerVersion: async () => client.getServerVersion(),
+  }
+}
+
+function managedToolInput(
+  input: unknown,
+): Parameters<ManagedMarketingOpsMcpSession['callTool']>[0] | null {
+  if (isChannelsStatusInput(input)) {
+    return {
+      arguments: { projectId: input.arguments.projectId },
+      name: 'channels_status',
+    }
+  }
+  if (!isPublishCampaignInput(input))
+    return null
+  return {
+    arguments: input.arguments,
+    name: 'publish_campaign',
   }
 }
 
@@ -265,6 +285,35 @@ function isChannelsStatusInput(
     && keys[0] === 'projectId'
     && typeof input.arguments.projectId === 'string'
     && /^[a-z0-9][a-z0-9-]{0,62}$/u.test(input.arguments.projectId)
+}
+
+function isPublishCampaignInput(
+  input: unknown,
+): input is { arguments: MarketingOpsCampaignRequest, name: 'publish_campaign' } {
+  if (!isRecord(input) || input.name !== 'publish_campaign' || !isRecord(input.arguments))
+    return false
+  const expected = new Set([
+    'authorization',
+    'campaignId',
+    'execution',
+    'idempotencyKey',
+    'packages',
+    'projectId',
+    'spec',
+  ])
+  if (
+    Object.keys(input.arguments).length !== expected.size
+    || Object.keys(input.arguments).some(key => !expected.has(key))
+  ) {
+    return false
+  }
+  try {
+    assertNoSensitiveKeys(input.arguments)
+    return true
+  }
+  catch {
+    return false
+  }
 }
 
 async function closeResources(

@@ -306,7 +306,7 @@ describe('managed marketing-ops stdio connector', () => {
     expect(timeoutFake.client.close).toHaveBeenCalledTimes(1)
   })
 
-  it('rejects every tool except channels_status at runtime', async () => {
+  it('allows only channels_status and publish_campaign at runtime', async () => {
     const asset = await createRuntimeAsset()
     const fake = createFakeConnection()
     const connector = createManagedMarketingOpsStdioConnector({
@@ -316,10 +316,45 @@ describe('managed marketing-ops stdio connector', () => {
     const session = await connector.connect(asset)
 
     await expect(session.callTool({
+      arguments: {
+        authorization: {
+          authorizedAt: '2026-08-10T10:00:00.000Z',
+          source: 'owner-prompt',
+        },
+        campaignId: 'campaign-a',
+        execution: { mode: 'assisted-prepare' },
+        idempotencyKey: 'content-studio/12345678',
+        packages: [],
+        projectId: 'project-a',
+        spec: {} as never,
+      },
+      name: 'publish_campaign',
+    })).resolves.toEqual({ structuredContent: { ok: true } })
+    expect(fake.client.callTool).toHaveBeenCalledWith({
+      arguments: expect.objectContaining({ campaignId: 'campaign-a' }),
+      name: 'publish_campaign',
+    })
+
+    await expect(session.callTool({
       arguments: { projectId: 'project-a' },
-      name: 'publish_campaign' as 'channels_status',
+      name: 'get_publish_status' as 'channels_status',
     })).rejects.toThrow('Unsupported marketing-ops tool')
-    expect(fake.client.callTool).not.toHaveBeenCalled()
+    await expect(session.callTool({
+      arguments: {
+        authorization: {
+          authorizedAt: '2026-08-10T10:00:00.000Z',
+          source: 'owner-prompt',
+        },
+        campaignId: 'campaign-a',
+        execution: { mode: 'assisted-prepare' },
+        idempotencyKey: 'content-studio/12345678',
+        packages: [],
+        projectId: 'project-a',
+        spec: {},
+        token: 'not-allowed',
+      } as never,
+      name: 'publish_campaign',
+    })).rejects.toThrow('Unsupported marketing-ops tool')
   })
 
   it('bounds status calls and shares one shutdown promise', async () => {
@@ -340,7 +375,7 @@ describe('managed marketing-ops stdio connector', () => {
     await expect(session.callTool({
       arguments: { projectId: 'project-a' },
       name: 'channels_status',
-    })).rejects.toThrow('Marketing-ops status unavailable')
+    })).rejects.toThrow('Marketing-ops tool unavailable')
     const firstClose = session.close()
     const secondClose = session.close()
     expect(secondClose).toBe(firstClose)

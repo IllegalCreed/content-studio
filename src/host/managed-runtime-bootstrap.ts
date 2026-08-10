@@ -1,6 +1,11 @@
 // @env node
 
-import type { MarketingOpsManagedRuntime, MarketingOpsMcpClient } from '../types'
+import type {
+  MarketingOpsCampaignRequest,
+  MarketingOpsManagedRuntime,
+  MarketingOpsMcpClient,
+  MarketingOpsMcpPublishClient,
+} from '../types'
 import type { ManagedMarketingOpsRuntimeAsset } from './managed-runtime-asset'
 import type { InstallerManagedRuntimeHandoff } from './managed-runtime-handoff'
 import { MARKETING_OPS_COMPATIBILITY_MATRIX } from '../constants'
@@ -11,8 +16,16 @@ import {
 import { resolveManagedMarketingOpsRuntimeAsset } from './managed-runtime-asset'
 import { parseInstallerManagedRuntimeHandoff } from './managed-runtime-handoff'
 
-export interface ManagedMarketingOpsMcpSession extends MarketingOpsMcpClient {
+export interface ManagedMarketingOpsMcpSession {
+  callTool: (input:
+    | Parameters<MarketingOpsMcpClient['callTool']>[0]
+    | {
+      arguments: MarketingOpsCampaignRequest
+      name: 'publish_campaign'
+    },
+  ) => Promise<unknown>
   close: () => Promise<void> | void
+  getServerVersion: () => Promise<unknown> | unknown
 }
 
 export interface ManagedMarketingOpsRuntimeConnector {
@@ -101,6 +114,9 @@ async function startManagedRuntime(
         callTool: input => connectedSession.callTool(input),
         getServerVersion: () => connectedSession.getServerVersion(),
       },
+      publishMcp: {
+        callTool: input => connectedSession.callTool(input),
+      } satisfies MarketingOpsMcpPublishClient,
     })
   }
   catch {

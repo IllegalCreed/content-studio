@@ -9,12 +9,19 @@ import type {
   ExecutionTask,
   ExecutionTaskEvent,
   ExecutionTaskStatus,
+  MarketingOpsChannelsStatusSnapshot,
+  MarketingOpsPublicationPackage,
+  MarketingOpsPublishClient,
+  MarketingOpsPublishResult,
   MarketingOpsStatusClient,
+  PrepareMarketingOpsPublicationPackageInput,
 } from '../types'
+import { createHash } from 'node:crypto'
 import { createInterface } from 'node:readline'
 import {
   MARKETING_OPS_MEDIA_KINDS,
   MARKETING_OPS_PACKAGE_FORMAT_VALUES,
+  MARKETING_OPS_PUBLISH_UNAVAILABLE_MESSAGE,
   MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE,
   MARKETING_OPS_UTM_MEDIUM_VALUES,
   MCP_LIST_TTL_MS,
@@ -31,6 +38,10 @@ import {
   TaskStateError,
 } from '../jobs/task'
 import { isMarketingOpsStatusSnapshotFresh } from '../marketing-ops/client'
+import {
+  buildMarketingOpsCampaignRequest,
+  createMarketingOpsCampaignSpec,
+} from '../marketing-ops/publish'
 import {
   parseCreateActivityArtifactInput,
   parseCreateActivityInput,
@@ -70,6 +81,7 @@ export interface McpJsonRpcResponse {
 }
 
 export interface ContentStudioMcpServerOptions {
+  marketingOpsPublish?: MarketingOpsPublishClient
   marketingOpsStatus?: MarketingOpsStatusClient
   ownerTakeovers?: OwnerTakeoverRegistry
   projectId: string
@@ -541,6 +553,17 @@ function toolDefinitions(): Array<Record<string, unknown>> {
     {
       annotations: {
         destructiveHint: false,
+        openWorldHint: true,
+        readOnlyHint: false,
+      },
+      description: '调用受管 marketing-ops 准备或确认一份已锁定的人工辅助发布包。准备阶段不会远程发布；确认阶段只接收 Owner 已在官方页面发布后的公开地址并写入匹配回执。需要当前任务中明确的 Owner 授权。',
+      inputSchema: marketingOpsAssistedPublicationSchema(),
+      name: 'publish_marketing_ops_package',
+      title: '人工辅助发布 Marketing Ops 包',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
         openWorldHint: false,
         readOnlyHint: false,
       },
@@ -861,6 +884,90 @@ function marketingOpsPackagePreparationSchema(): Record<string, unknown> {
   }
 }
 
+function marketingOpsAssistedPublicationSchema(): Record<string, unknown> {
+  return {
+    oneOf: [{
+      additionalProperties: false,
+      properties: {
+        authorization: marketingOpsOwnerAuthorizationSchema(),
+        execution: {
+          additionalProperties: false,
+          properties: { mode: { const: 'assisted-prepare', type: 'string' } },
+          required: ['mode'],
+          type: 'object',
+        },
+        projectId: { type: 'string' },
+        publicationId: { type: 'string' },
+        renderer: marketingOpsRendererSchema(),
+      },
+      required: ['authorization', 'execution', 'projectId', 'publicationId', 'renderer'],
+      type: 'object',
+    }, {
+      additionalProperties: false,
+      properties: {
+        authorization: marketingOpsOwnerAuthorizationSchema(),
+        execution: {
+          additionalProperties: false,
+          properties: {
+            mode: { const: 'assisted-confirm', type: 'string' },
+            publicUrl: { format: 'uri', pattern: '^https://', type: 'string' },
+          },
+          required: ['mode', 'publicUrl'],
+          type: 'object',
+        },
+        handoffId: { type: 'string' },
+        projectId: { type: 'string' },
+      },
+      required: ['authorization', 'execution', 'handoffId', 'projectId'],
+      type: 'object',
+    }],
+  }
+}
+
+function marketingOpsOwnerAuthorizationSchema(): Record<string, unknown> {
+  return {
+    additionalProperties: false,
+    properties: {
+      authorizedAt: { format: 'date-time', type: 'string' },
+      source: { const: 'owner-prompt', type: 'string' },
+    },
+    required: ['authorizedAt', 'source'],
+    type: 'object',
+  }
+}
+
+function marketingOpsRendererSchema(): Record<string, unknown> {
+  return {
+    additionalProperties: false,
+    properties: {
+      canonicalUrl: { format: 'uri', pattern: '^https://', type: 'string' },
+      format: {
+        enum: [...MARKETING_OPS_PACKAGE_FORMAT_VALUES],
+        type: 'string',
+      },
+      links: {
+        items: { format: 'uri', pattern: '^https://', type: 'string' },
+        maxItems: 10,
+        minItems: 1,
+        type: 'array',
+        uniqueItems: true,
+      },
+      media: {
+        items: { enum: [...MARKETING_OPS_MEDIA_KINDS], type: 'string' },
+        maxItems: 3,
+        type: 'array',
+        uniqueItems: true,
+      },
+      utmMedium: {
+        enum: [...MARKETING_OPS_UTM_MEDIUM_VALUES],
+        type: 'string',
+      },
+    },
+    required: ['canonicalUrl', 'format', 'links', 'media', 'utmMedium'],
+    type: 'object',
+  }
+}
+
 function ownerHandoffSchema(): Record<string, unknown> {
   return {
     properties: {
@@ -1008,7 +1115,7 @@ async function toolCall(
     assertNoSensitiveKeys(input)
     const result = name === 'get_marketing_ops_channels_status'
       ? await executeMarketingOpsStatus(input, options)
-      : executeTool(name, input, options)
+      : await executeTool(name, input, options)
     if (name === 'start_production_task' && supportsTasks(value._meta)) {
       return success(id, {
         ...asRecord(result, 'task result'),
@@ -1032,7 +1139,7 @@ async function toolCall(
 async function executeMarketingOpsStatus(
   input: unknown,
   options: ContentStudioMcpServerOptions,
-): Promise<unknown> {
+): Promise<MarketingOpsChannelsStatusSnapshot> {
   const value = scopedRecord(input, options.projectId, ['projectId'])
   if (options.marketingOpsStatus === undefined)
     throw new Error(MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE)
@@ -1052,11 +1159,287 @@ async function executeMarketingOpsStatus(
   }
 }
 
-function executeTool(
+interface ParsedMarketingOpsAssistedPublicationInput {
+  authorization: {
+    authorizedAt: string
+    source: 'owner-prompt'
+  }
+}
+
+interface ParsedMarketingOpsAssistedPreparation
+  extends ParsedMarketingOpsAssistedPublicationInput {
+  execution: { mode: 'assisted-prepare' }
+  preparation: PrepareMarketingOpsPublicationPackageInput
+}
+
+interface ParsedMarketingOpsAssistedConfirmation
+  extends ParsedMarketingOpsAssistedPublicationInput {
+  execution: { mode: 'assisted-confirm', publicUrl: string }
+  handoffId: string
+  projectId: string
+}
+
+async function executeMarketingOpsAssistedPublication(
+  input: unknown,
+  options: ContentStudioMcpServerOptions,
+): Promise<unknown> {
+  if (options.marketingOpsPublish === undefined)
+    throw new Error(MARKETING_OPS_PUBLISH_UNAVAILABLE_MESSAGE)
+  const parsed = parseMarketingOpsAssistedPublicationInput(input, options.projectId)
+  if ('preparation' in parsed)
+    return executeMarketingOpsAssistedPreparation(parsed, options)
+  return executeMarketingOpsAssistedConfirmation(parsed, options)
+}
+
+async function executeMarketingOpsAssistedPreparation(
+  parsed: ParsedMarketingOpsAssistedPreparation,
+  options: ContentStudioMcpServerOptions,
+): Promise<unknown> {
+  const status = await executeMarketingOpsStatus({ projectId: parsed.preparation.projectId }, options)
+  assertBilibiliAssistedReady(status)
+  const prepared = options.service.prepareMarketingOpsPublicationPackage(parsed.preparation)
+  const packageValue = prepared.package
+  assertBilibiliAssistedPackage(packageValue)
+  const result = await options.marketingOpsPublish!.publishCampaign(
+    buildMarketingOpsCampaignRequest({
+      authorization: parsed.authorization,
+      campaignId: packageValue.campaignId,
+      execution: { mode: 'assisted-prepare' },
+      idempotencyKey: publicationIdempotencyKey(packageValue),
+      packages: [packageValue],
+      spec: createMarketingOpsCampaignSpec([packageValue]),
+    }),
+  )
+  if (
+    result.failures.length > 0
+    || !result.handoffs.some(handoff =>
+      handoff.packageId === packageValue.packageId
+      && handoff.publicationId === packageValue.publicationId
+      && handoff.form === packageValue.contentFormat
+      && handoff.status === 'awaiting-owner',
+    )
+  ) {
+    throw new Error('Marketing Ops did not prepare the owner handoff')
+  }
+  const handoff = options.service.createMarketingOpsPublicationHandoff(packageValue)
+  return {
+    ...result,
+    handoff,
+    mode: 'assisted-prepare',
+    package: packageValue,
+  }
+}
+
+async function executeMarketingOpsAssistedConfirmation(
+  parsed: ParsedMarketingOpsAssistedConfirmation,
+  options: ContentStudioMcpServerOptions,
+): Promise<unknown> {
+  const handoff = options.service.getMarketingOpsPublicationHandoff(
+    parsed.projectId,
+    parsed.handoffId,
+  )
+  const packageValue = handoff.marketingOpsPackage
+  if (packageValue === undefined)
+    throw new Error('Owner handoff does not contain a marketing-ops package')
+  assertBilibiliAssistedPackage(packageValue)
+  assertCurrentBilibiliOwnerAssistedBinding(options.service, packageValue)
+  const status = await executeMarketingOpsStatus({ projectId: packageValue.projectId }, options)
+  assertBilibiliAssistedReady(status)
+  options.service.claimMarketingOpsPublicationConfirmation(
+    parsed.projectId,
+    parsed.handoffId,
+    parsed.execution.publicUrl,
+  )
+  const result = await options.marketingOpsPublish!.publishCampaign(
+    buildMarketingOpsCampaignRequest({
+      authorization: parsed.authorization,
+      campaignId: packageValue.campaignId,
+      execution: {
+        confirmations: [{
+          channel: packageValue.channel,
+          form: packageValue.contentFormat,
+          packageId: packageValue.packageId,
+          publicUrl: parsed.execution.publicUrl,
+          publicationId: packageValue.publicationId,
+        }],
+        mode: 'assisted-confirm',
+      },
+      idempotencyKey: publicationIdempotencyKey(packageValue),
+      packages: [packageValue],
+      spec: createMarketingOpsCampaignSpec([packageValue]),
+    }),
+  )
+  const receipt = assertMarketingOpsAssistedConfirmationResult(
+    result,
+    packageValue,
+    parsed.execution.publicUrl,
+  )
+  const receipts = [options.service.recordPublicationReceipt(receipt)]
+  const completedHandoff = options.service.completeMarketingOpsPublicationHandoff(
+    parsed.projectId,
+    parsed.handoffId,
+    parsed.execution.publicUrl,
+  )
+  return {
+    ...result,
+    handoff: completedHandoff,
+    mode: 'assisted-confirm',
+    package: packageValue,
+    receipts,
+  }
+}
+
+function assertCurrentBilibiliOwnerAssistedBinding(
+  service: ContentStudioApplicationService,
+  packageValue: MarketingOpsPublicationPackage,
+): void {
+  const binding = service
+    .getProjectView(packageValue.projectId)
+    .projectChannelBindings
+    .find(candidate => candidate.channel === 'bilibili')
+  if (
+    binding?.enabled !== true
+    || binding.delivery !== 'owner-assisted'
+    || binding.accountRef !== packageValue.accountRef
+  ) {
+    throw new Error(
+      'Bilibili owner-assisted confirmation requires the current matching channel binding',
+    )
+  }
+}
+
+function assertMarketingOpsAssistedConfirmationResult(
+  result: MarketingOpsPublishResult,
+  packageValue: MarketingOpsPublicationPackage,
+  publicUrl: string,
+): MarketingOpsPublishResult['receipts'][number] {
+  if (result.failures.length > 0)
+    throw new Error('Marketing Ops returned failures for the owner confirmation')
+  if (result.receipts.length !== 1)
+    throw new Error('Marketing Ops must return exactly one confirmation receipt')
+  const receipt = result.receipts[0]!
+  if (
+    receipt.projectId !== packageValue.projectId
+    || receipt.activityId !== packageValue.activityId
+    || receipt.publicationId !== packageValue.publicationId
+    || receipt.channel !== packageValue.channel
+    || receipt.accountRef !== packageValue.accountRef
+    || receipt.contentSha256 !== packageValue.contentHash
+    || receipt.videoOrientation !== packageValue.videoOrientation
+    || receipt.publicUrl !== publicUrl
+    || receipt.status !== 'published'
+  ) {
+    throw new Error('Marketing Ops did not return a matching confirmation receipt')
+  }
+  return receipt
+}
+
+function parseMarketingOpsAssistedPublicationInput(
+  input: unknown,
+  projectId: string,
+): ParsedMarketingOpsAssistedPreparation | ParsedMarketingOpsAssistedConfirmation {
+  const value = asRecord(input, 'marketingOpsAssistedPublication')
+  const scopedProjectId = scopedId(value.projectId, projectId, 'projectId')
+  const authorization = asRecord(value.authorization, 'marketingOps authorization')
+  assertKeys(authorization, ['authorizedAt', 'source'], 'marketingOps authorization')
+  if (authorization.source !== 'owner-prompt')
+    throw new McpToolError('marketingOps authorization source must be owner-prompt')
+  const authorizedAt = stringField(
+    authorization.authorizedAt,
+    'marketingOps authorization authorizedAt',
+  )
+  if (Number.isNaN(Date.parse(authorizedAt)))
+    throw new McpToolError('marketingOps authorization authorizedAt must be a date-time')
+  const execution = asRecord(value.execution, 'marketingOps execution')
+  const mode = stringField(execution.mode, 'marketingOps execution mode')
+  if (mode === 'assisted-prepare') {
+    assertKeys(
+      value,
+      ['authorization', 'execution', 'projectId', 'publicationId', 'renderer'],
+      'marketingOpsAssistedPublication',
+    )
+    assertKeys(execution, ['mode'], 'marketingOps execution')
+    const publicationId = identifierField(value.publicationId, 'publicationId')
+    const preparation = parsePrepareMarketingOpsPublicationPackageInput({
+      projectId: scopedProjectId,
+      publicationId,
+      renderer: value.renderer,
+    }, scopedProjectId, publicationId)
+    return {
+      authorization: { authorizedAt, source: 'owner-prompt' },
+      execution: { mode },
+      preparation,
+    }
+  }
+  if (mode !== 'assisted-confirm')
+    throw new McpToolError('marketingOps execution mode is unsupported')
+  assertKeys(
+    value,
+    ['authorization', 'execution', 'handoffId', 'projectId'],
+    'marketingOpsAssistedPublication',
+  )
+  assertKeys(execution, ['mode', 'publicUrl'], 'marketingOps execution')
+  const publicUrl = safeHttpsUrl(
+    execution.publicUrl,
+    'marketingOps execution publicUrl',
+  )
+  return {
+    authorization: { authorizedAt, source: 'owner-prompt' },
+    execution: { mode, publicUrl },
+    handoffId: identifierField(value.handoffId, 'handoffId'),
+    projectId: scopedProjectId,
+  }
+}
+
+function assertBilibiliAssistedPackage(
+  packageValue: MarketingOpsPublicationPackage,
+): void {
+  if (packageValue.channel !== 'bilibili')
+    throw new McpToolError('Only Bilibili owner-assisted packages are enabled')
+}
+
+function assertBilibiliAssistedReady(
+  status: MarketingOpsChannelsStatusSnapshot,
+): void {
+  if (!status.capabilities?.includes('content-studio-assisted-publication-v1'))
+    throw new Error(MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE)
+  const bilibili = status.channels.find(channel => channel.channel === 'bilibili')
+  if (
+    bilibili === undefined
+    || bilibili.health !== 'ready'
+    || bilibili.assistedPublicationReady !== true
+  ) {
+    throw new Error(MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE)
+  }
+}
+
+function publicationIdempotencyKey(
+  packageValue: { contentHash: string, publicationId: string, projectId: string },
+): string {
+  const digest = createHash('sha256')
+    .update(`${packageValue.projectId}:${packageValue.publicationId}:${packageValue.contentHash}`)
+    .digest('hex')
+  return `content-studio/${digest}`
+}
+
+function safeHttpsUrl(input: unknown, name: string): string {
+  const value = stringField(input, name)
+  let url: URL
+  try {
+    url = new URL(value)
+  }
+  catch {
+    throw new McpToolError(`${name} must be an HTTPS URL`)
+  }
+  if (url.protocol !== 'https:' || url.username || url.password || url.hash)
+    throw new McpToolError(`${name} must be an HTTPS URL without credentials or fragments`)
+  return value
+}
+async function executeTool(
   name: string,
   input: unknown,
   options: ContentStudioMcpServerOptions,
-): unknown {
+): Promise<unknown> {
   switch (name) {
     case 'get_project_view': {
       const value = scopedRecord(input, options.projectId, ['projectId'])
@@ -1136,6 +1519,9 @@ function executeTool(
           publicationId,
         ),
       )
+    }
+    case 'publish_marketing_ops_package': {
+      return executeMarketingOpsAssistedPublication(input, options)
     }
     case 'create_owner_handoff': {
       const value = asRecord(input, 'ownerHandoff')

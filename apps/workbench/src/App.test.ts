@@ -10,6 +10,52 @@ import WorkbenchApp from './WorkbenchApp.vue'
 import './styles.css'
 
 describe('content studio workbench', () => {
+  it('要求选择 Bilibili 视频形态的活动同时建立视频制作计划', async () => {
+    const router = createWorkbenchRouter(true)
+    await router.push('/project/activities')
+    await router.isReady()
+    const pinia = createPinia()
+    const runtimeStore = useWorkbenchStore(pinia)
+    runtimeStore.markRuntimeReady()
+    const wrapper = mount(WorkbenchApp, {
+      global: {
+        plugins: [pinia, router],
+      },
+    })
+
+    await wrapper.get('.workspace-actions button').trigger('click')
+    await wrapper.get('input[name="activity-topic"]').setValue('Bilibili 多形态发布')
+    await wrapper.get('input[name="activity-channel-bilibili"]').setValue(true)
+    await wrapper.get('form.activity-composer').trigger('submit')
+
+    expect(wrapper.get('.form-error').text())
+      .toContain('Bilibili 视频内容需要同时启用视频制作计划')
+  })
+
+  it('为 Bilibili 视频活动只提供横屏和竖屏画幅', async () => {
+    const router = createWorkbenchRouter(true)
+    await router.push('/project/activities')
+    await router.isReady()
+    const pinia = createPinia()
+    const runtimeStore = useWorkbenchStore(pinia)
+    runtimeStore.markRuntimeReady()
+    const wrapper = mount(WorkbenchApp, {
+      global: {
+        plugins: [pinia, router],
+      },
+    })
+
+    await wrapper.get('.workspace-actions button').trigger('click')
+    await wrapper.get('input[name="activity-channel-bilibili"]').setValue(true)
+    await wrapper.get('input[name="activity-video-enabled"]').setValue(true)
+    await wrapper.get('button[aria-label="视频画幅"]').trigger('click')
+
+    const formatMenu = wrapper.get('[role="listbox"][aria-label="视频画幅"]')
+    expect(formatMenu.text()).toContain('横屏')
+    expect(formatMenu.text()).toContain('竖屏')
+    expect(formatMenu.text()).not.toContain('方形')
+  })
+
   it('在发布按钮旁显示资源就绪状态，并阻止缺少必需媒体的内容进入发布安排', async () => {
     const router = createWorkbenchRouter(true)
     await router.push('/project/activities')

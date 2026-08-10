@@ -9,14 +9,19 @@ import type {
 } from '../types'
 import { createHash } from 'node:crypto'
 import { extname } from 'node:path'
-import { MARKETING_OPS_PACKAGE_FORMATS } from '../constants'
+import {
+  MARKETING_OPS_PACKAGE_FORMATS,
+  selectedContentFormatsForChannel,
+} from '../constants'
 import { assessChannelContentReadiness } from '../content/readiness'
+import { resolveVideoFormatForChannel } from '../video/recording-config'
 
 export function compileMarketingOpsPublicationPackage(
   input: MarketingOpsPublicationPackageInput,
 ): MarketingOpsPublicationPackage {
   assertPackageScope(input)
   assertRendererOutput(input)
+  const videoOrientation = resolveVideoOrientation(input)
 
   const artifactRefs = resolveArtifactReferences(input)
   const artifacts = resolveArtifacts(input)
@@ -57,6 +62,7 @@ export function compileMarketingOpsPublicationPackage(
     renderer,
     schemaVersion: 1 as const,
     title: input.content.title,
+    ...(videoOrientation === undefined ? {} : { videoOrientation }),
   }
 
   return {
@@ -68,6 +74,37 @@ export function compileMarketingOpsPublicationPackage(
     packageId: input.publication.publicationId,
     publicationId: input.publication.publicationId,
   }
+}
+
+/**
+ * Carries the activity's locked video format into a rendered package. A
+ * package is only a video package when its channel content says so; other
+ * content forms must not accidentally inherit an activity-level video plan.
+ * Bilibili's video form is deliberately fail-closed because the owner needs
+ * to know which upload orientation the platform-facing handoff represents.
+ */
+function resolveVideoOrientation(
+  input: MarketingOpsPublicationPackageInput,
+): MarketingOpsPublicationPackage['videoOrientation'] {
+  if (input.content.format !== 'video')
+    return undefined
+  const format = input.activity.video === undefined
+    ? undefined
+    : resolveVideoFormatForChannel(input.activity.video, input.content.channel)
+  if (format === undefined) {
+    if (input.content.channel === 'bilibili') {
+      throw new Error('Bilibili video package requires activity video orientation')
+    }
+    return undefined
+  }
+  if (
+    input.content.channel === 'bilibili'
+    && format !== 'landscape'
+    && format !== 'portrait'
+  ) {
+    throw new Error('Bilibili video package orientation must be landscape or portrait')
+  }
+  return format
 }
 
 export function compileMarketingOpsPublicationPackages(
@@ -132,10 +169,7 @@ function assertPackageScope(input: MarketingOpsPublicationPackageInput): void {
   const activityFormat = content.format === 'video'
     ? 'video-metadata'
     : content.format
-  if (
-    activityChannel.contentFormats !== undefined
-    && !activityChannel.contentFormats.includes(activityFormat)
-  ) {
+  if (!selectedContentFormatsForChannel(activityChannel).includes(activityFormat)) {
     throw new Error(
       'Marketing-ops package content form must match the activity channel',
     )

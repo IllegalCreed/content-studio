@@ -1,6 +1,6 @@
 // @env node
 
-import type { PublicationReceipt } from '../types'
+import type { MarketingOpsCampaignRequest, PublicationReceipt } from '../types'
 import { describe, expect, it } from 'vitest'
 import { MARKETING_OPS_STATUS_TTL_MS } from '../constants'
 import {
@@ -8,12 +8,110 @@ import {
   assessMarketingOpsCompatibility,
   createFakeMarketingOpsClient,
   createMarketingOpsManagedRuntime,
+  createMarketingOpsMcpPublishClient,
   createMarketingOpsMcpStatusClient,
   createMarketingOpsStatusClient,
   isMarketingOpsStatusSnapshotFresh,
 } from './client'
 
 describe('marketing-ops client boundary', () => {
+  it('adapts an initialized MCP client through the fixed publish_campaign tool only', async () => {
+    const calls: unknown[] = []
+    const request: MarketingOpsCampaignRequest = {
+      authorization: {
+        authorizedAt: '2026-08-10T00:00:00.000Z',
+        source: 'owner-prompt',
+      },
+      campaignId: 'campaign-a',
+      execution: { mode: 'assisted-prepare' },
+      idempotencyKey: 'content-studio/12345678',
+      packages: [{
+        channel: 'bilibili',
+        contentStudio: {
+          activityId: 'activity-a',
+          artifactRefs: [],
+          contentFormat: 'short-post',
+          contentHash: 'a'.repeat(64),
+          contentId: 'content-a',
+          contentVersion: 1,
+          packageId: 'package-a',
+          projectId: 'project-a',
+          publicationId: 'publication-a',
+          schemaVersion: 1,
+        },
+        format: 'manual-package',
+        utmMedium: 'social',
+        variants: [{
+          body: 'A short update',
+          links: ['https://example.test/'],
+          locale: 'en',
+          media: [],
+          title: 'Update',
+        }],
+      }],
+      projectId: 'project-a',
+      spec: {
+        campaign: 'campaign-a',
+        channels: ['bilibili'],
+        content: {
+          media: [],
+          variants: {
+            en: {
+              angle: 'A short update',
+              callToAction: 'Open',
+              title: 'Update',
+            },
+          },
+        },
+        failureMode: 'continue-supported',
+        id: 'campaign-a',
+        locales: ['en'],
+        publishAt: '2026-08-10T00:00:00.000Z',
+        replies: { createBugIssues: false, mode: 'off' },
+        schemaVersion: 1,
+        targetUrls: ['https://example.test/'],
+        topic: 'Update',
+      },
+    }
+    const client = createMarketingOpsMcpPublishClient({
+      mcp: {
+        callTool: async (input) => {
+          calls.push(input)
+          return {
+            content: [{ text: 'Untrusted display text', type: 'text' }],
+            isError: false,
+            structuredContent: {
+              campaignId: 'campaign-a',
+              failures: [],
+              handoffs: [{
+                channel: 'bilibili',
+                contentHash: 'b'.repeat(64),
+                contentStudioContentHash: 'a'.repeat(64),
+                form: 'short-post',
+                idempotencyKey: 'campaign-v3/project-a/campaign-a/bilibili/package-a/12345678',
+                packageId: 'package-a',
+                publicationId: 'publication-a',
+                status: 'awaiting-owner',
+              }],
+              limitations: [],
+              projectId: 'project-a',
+              receipts: [],
+            },
+          }
+        },
+      },
+    })
+
+    await expect(client.publishCampaign(request)).resolves.toMatchObject({
+      handoffs: [{ form: 'short-post', packageId: 'package-a' }],
+      projectId: 'project-a',
+    })
+    expect(calls).toEqual([{
+      arguments: request,
+      name: 'publish_campaign',
+    }])
+  })
+
   it('creates a deterministic local receipt without touching a channel', async () => {
     const client = createFakeMarketingOpsClient({
       now: () => new Date('2026-08-04T00:00:00.000Z'),
@@ -106,6 +204,7 @@ describe('marketing-ops client boundary', () => {
     expect(calls).toEqual(['project-a'])
     expect(snapshot).toEqual({
       authorizesExternalWrite: false,
+      capabilities: [],
       channels: [{
         accountAlias: '@project-release-bot',
         adapterReady: true,
@@ -217,6 +316,36 @@ describe('marketing-ops client boundary', () => {
       channels: [{
         accountRef: 'account.github.main',
         accountAlias: '@renamed-release-bot',
+      }],
+    })
+  })
+
+  it('preserves the managed runtime capability and owner-assisted Bilibili readiness', async () => {
+    const client = createMarketingOpsStatusClient({
+      transport: {
+        getChannelsStatus: async () => ({
+          capabilities: ['content-studio-assisted-publication-v1'],
+          channels: [{
+            adapterReady: false,
+            alias: null,
+            assistedPublicationReady: true,
+            channel: 'bilibili',
+            health: 'ready',
+            nextAction: 'Publish in the official Bilibili UI, then confirm its public URL',
+          }],
+          contractVersion: 3,
+          projectId: 'project-a',
+        }),
+        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.1.0' }),
+      },
+    })
+
+    await expect(client.getChannelsStatus('project-a')).resolves.toMatchObject({
+      capabilities: ['content-studio-assisted-publication-v1'],
+      channels: [{
+        assistedPublicationReady: true,
+        channel: 'bilibili',
+        nextStep: 'ready',
       }],
     })
   })

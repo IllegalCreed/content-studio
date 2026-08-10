@@ -592,6 +592,8 @@ export interface PublicationReceipt {
   source?: 'marketing-ops'
   status: 'failed' | 'published'
   accountRef?: string
+  contentSha256?: string
+  videoOrientation?: VideoFormat
   issuedAt?: string
 }
 
@@ -663,6 +665,7 @@ export interface MarketingOpsPublicationPackage {
   renderer: MarketingOpsRendererOutput
   schemaVersion: 1
   title: string
+  videoOrientation?: VideoFormat
 }
 
 export interface MarketingOpsPublicationPackageInput {
@@ -687,6 +690,137 @@ export interface MarketingOpsPublicationPackagePreparation {
   package: MarketingOpsPublicationPackage
 }
 
+/**
+ * The small campaign envelope shared with the managed marketing-ops runtime.
+ * It deliberately contains rendered copy and immutable artifact references,
+ * never local paths or credentials.
+ */
+export interface MarketingOpsCampaignSpec {
+  campaign: string
+  channels: ChannelId[]
+  content: {
+    media: MarketingOpsMediaKind[]
+    variants: Partial<Record<Locale, {
+      angle: string
+      callToAction: string
+      title: string
+    }>>
+  }
+  failureMode: 'all-or-none' | 'continue-supported'
+  id: string
+  locales: Locale[]
+  publishAt: string
+  replies: {
+    createBugIssues: boolean
+    mode: 'faq-only' | 'off'
+  }
+  schemaVersion: 1
+  targetUrls: string[]
+  topic: string
+}
+
+export interface MarketingOpsPublicationConfirmation {
+  channel: ChannelId
+  form: ChannelContentFormat
+  packageId: string
+  publicationId: string
+  publicUrl: string
+}
+
+export type MarketingOpsCampaignExecution
+  = | { mode: 'assisted-prepare' }
+    | {
+      confirmations: MarketingOpsPublicationConfirmation[]
+      mode: 'assisted-confirm'
+    }
+
+export interface MarketingOpsCampaignRequestInput {
+  authorization: {
+    authorizedAt: string
+    source: 'owner-prompt'
+  }
+  campaignId: string
+  execution: MarketingOpsCampaignExecution
+  idempotencyKey: string
+  packages: readonly MarketingOpsPublicationPackage[]
+  spec: MarketingOpsCampaignSpec
+}
+
+export interface MarketingOpsRenderedPackageVariant {
+  body: string
+  links: string[]
+  locale: Locale
+  media: MarketingOpsMediaKind[]
+  title: string
+}
+
+export interface MarketingOpsRenderedCampaignPackage {
+  canonicalUrl?: string
+  channel: ChannelId
+  contentStudio: {
+    accountRef?: string
+    activityId: string
+    artifactRefs: MarketingOpsArtifactReference[]
+    contentFormat: ChannelContentFormat
+    contentHash: string
+    contentId: string
+    contentVersion: number
+    packageId: string
+    projectId: string
+    publicationId: string
+    schemaVersion: 1
+    videoOrientation?: VideoFormat
+  }
+  format: MarketingOpsPackageFormat
+  utmMedium: MarketingOpsUtmMedium
+  variants: MarketingOpsRenderedPackageVariant[]
+}
+
+export interface MarketingOpsCampaignRequest {
+  authorization: MarketingOpsCampaignRequestInput['authorization']
+  campaignId: string
+  execution: MarketingOpsCampaignExecution
+  idempotencyKey: string
+  packages: MarketingOpsRenderedCampaignPackage[]
+  projectId: string
+  spec: MarketingOpsCampaignSpec
+}
+
+export interface MarketingOpsPublishHandoff {
+  contentHash: string
+  /** Source hash echoed by marketing-ops when the package carries CS provenance. */
+  contentStudioContentHash?: string
+  form: ChannelContentFormat
+  idempotencyKey: string
+  nextAction?: string
+  packageId: string
+  publicationId: string
+  status: 'awaiting-owner' | 'confirmed'
+  videoOrientation?: VideoFormat
+}
+
+export interface MarketingOpsPublishFailure {
+  code: string
+  message: string
+  packageId: string
+  retryable: boolean
+}
+
+export interface MarketingOpsPublishResult {
+  campaignId: string
+  failures: MarketingOpsPublishFailure[]
+  handoffs: MarketingOpsPublishHandoff[]
+  limitations: string[]
+  projectId: string
+  receipts: MarketingOpsPublicationReceipt[]
+}
+
+export interface MarketingOpsPublishClient {
+  publishCampaign: (
+    input: MarketingOpsCampaignRequest,
+  ) => Promise<MarketingOpsPublishResult>
+}
+
 export type MarketingOpsChannelHealth
   = | 'blocked'
     | 'not-configured'
@@ -699,11 +833,14 @@ export type MarketingOpsChannelNextStep
     | 'ready'
     | 'reauthorize'
 
+export type MarketingOpsCapability = 'content-studio-assisted-publication-v1'
+
 export interface MarketingOpsChannelStatus {
   /** Opaque account identity; aliases are display-only and may change. */
   accountRef?: string
   accountAlias?: string
   adapterReady: boolean
+  assistedPublicationReady?: boolean
   channel: ChannelId
   health: MarketingOpsChannelHealth
   nextStep: MarketingOpsChannelNextStep
@@ -711,6 +848,7 @@ export interface MarketingOpsChannelStatus {
 
 export interface MarketingOpsChannelsStatusSnapshot {
   authorizesExternalWrite: false
+  capabilities?: MarketingOpsCapability[]
   channels: MarketingOpsChannelStatus[]
   contractVersion: number
   expiresAt: string
@@ -767,12 +905,24 @@ export interface MarketingOpsMcpStatusClientOptions {
   now?: () => Date
 }
 
+export interface MarketingOpsMcpPublishClient {
+  callTool: (input: {
+    arguments: MarketingOpsCampaignRequest
+    name: 'publish_campaign'
+  }) => Promise<unknown>
+}
+
+export interface MarketingOpsMcpPublishClientOptions {
+  mcp: MarketingOpsMcpPublishClient
+}
+
 /**
  * Explicit lifecycle boundary supplied by the installer or host runtime.
  * Content Studio never discovers or starts the managed process itself.
  */
 export interface MarketingOpsManagedRuntime {
   close: () => Promise<void> | void
+  publishClient?: MarketingOpsPublishClient
   statusClient: MarketingOpsStatusClient
 }
 
@@ -780,9 +930,16 @@ export interface MarketingOpsManagedRuntimeOptions {
   close: () => Promise<void> | void
   mcp: MarketingOpsMcpClient
   now?: () => Date
+  publishMcp?: MarketingOpsMcpPublishClient
 }
 
 export type OwnerHandoffStatus = 'cancelled' | 'completed' | 'expired' | 'pending'
+
+export interface MarketingOpsPublicationConfirmationState {
+  publicUrl: string
+  status: 'confirmed' | 'pending'
+  confirmedAt?: string
+}
 
 export interface OwnerHandoff {
   activityId: string
@@ -791,6 +948,17 @@ export interface OwnerHandoff {
   checklist: string[]
   expiresAt: string
   handoffId: string
+  /**
+   * Immutable, path-free package snapshot for an owner-assisted
+   * marketing-ops publication. Generic owner handoffs intentionally omit it.
+   */
+  marketingOpsPackage?: MarketingOpsPublicationPackage
+  /**
+   * Reservation for an owner-confirmed URL. It prevents a completed handoff
+   * from being replayed with a different public post and makes retries for
+   * the same URL idempotent.
+   */
+  marketingOpsConfirmation?: MarketingOpsPublicationConfirmationState
   officialTargetUrl: string
   projectId: string
   publicationId: string
@@ -1287,6 +1455,28 @@ export interface ComposeProductionResult extends ProductionVideoResult {
   cover?: ProductionCoverResult
   gif?: ProductionGifResult
 }
+
+/**
+ * Internal, controlled export boundary for channel-specific upload variants.
+ * These paths are never part of an MCP request or a marketing-ops package;
+ * the control plane supplies them from its own composition directory.
+ */
+export interface BilibiliVideoExportInput {
+  outputPath: string
+  signal?: AbortSignal
+  sourcePath: string
+}
+
+export interface BilibiliVideoExportResult {
+  artifactPath: string
+  durationSeconds: number
+  sha256: string
+  sizeBytes: number
+}
+
+export type ExportBilibiliVideo = (
+  input: BilibiliVideoExportInput,
+) => Promise<BilibiliVideoExportResult>
 
 export interface ProductionVideoResult {
   artifactPath: string

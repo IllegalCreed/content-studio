@@ -2,6 +2,7 @@
 
 import type {
   ChannelId,
+  MarketingOpsCapability,
   MarketingOpsChannelHealth,
   MarketingOpsChannelNextStep,
   MarketingOpsChannelsStatusSnapshot,
@@ -10,9 +11,11 @@ import type {
   MarketingOpsCompatibilityInput,
   MarketingOpsManagedRuntime,
   MarketingOpsManagedRuntimeOptions,
+  MarketingOpsMcpPublishClientOptions,
   MarketingOpsMcpStatusClientOptions,
   MarketingOpsPublicationReceipt,
   MarketingOpsPublicationRequest,
+  MarketingOpsPublishClient,
   MarketingOpsStatusClient,
   MarketingOpsStatusClientOptions,
   PublicationReceipt,
@@ -24,6 +27,7 @@ import {
   MARKETING_OPS_STATUS_TTL_MS,
 } from '../constants'
 import { assertNoSensitiveKeys } from '../validation'
+import { createMarketingOpsPublishClient } from './publish-client'
 
 export interface MarketingOpsClient {
   /**
@@ -42,6 +46,9 @@ const MARKETING_OPS_CHANNEL_HEALTH = new Set<MarketingOpsChannelHealth>([
   'not-configured',
   'ready',
   'reauth-required',
+])
+const MARKETING_OPS_CAPABILITIES = new Set<MarketingOpsCapability>([
+  'content-studio-assisted-publication-v1',
 ])
 const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/u
 const RUNTIME_VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:\+[0-9A-Za-z.-]+)?$/u
@@ -110,6 +117,7 @@ export function createMarketingOpsStatusClient(
         throw new Error('Marketing-ops status clock returned an invalid date')
       return {
         authorizesExternalWrite: false,
+        capabilities: response.capabilities,
         channels: response.channels,
         contractVersion: response.contractVersion,
         expiresAt: new Date(
@@ -146,6 +154,24 @@ export function createMarketingOpsMcpStatusClient(
 }
 
 /**
+ * Narrows an initialized MCP client to the campaign tool only. The caller
+ * still has to provide an explicit owner authorization in the request; this
+ * adapter neither discovers a runtime nor creates any publishing authority.
+ */
+export function createMarketingOpsMcpPublishClient(
+  options: MarketingOpsMcpPublishClientOptions,
+): MarketingOpsPublishClient {
+  return createMarketingOpsPublishClient({
+    publishCampaign: async input => parseMarketingOpsMcpToolResult(
+      await options.mcp.callTool({
+        arguments: input,
+        name: 'publish_campaign',
+      }),
+    ),
+  })
+}
+
+/**
  * Creates the narrow status client and an idempotent shutdown handle from an
  * installer-initialized MCP connection. Process discovery and startup remain
  * outside this package and therefore outside the Content Studio trust scope.
@@ -154,6 +180,9 @@ export function createMarketingOpsManagedRuntime(
   options: MarketingOpsManagedRuntimeOptions,
 ): MarketingOpsManagedRuntime {
   const statusClient = createMarketingOpsMcpStatusClient(options)
+  const publishClient = options.publishMcp === undefined
+    ? undefined
+    : createMarketingOpsMcpPublishClient({ mcp: options.publishMcp })
   let closePromise: Promise<void> | undefined
   return {
     close: () => {
@@ -162,6 +191,7 @@ export function createMarketingOpsManagedRuntime(
         .then(() => undefined)
       return closePromise
     },
+    ...(publishClient === undefined ? {} : { publishClient }),
     statusClient,
   }
 }
@@ -271,6 +301,7 @@ function parseChannelsStatusResponse(
   input: unknown,
   projectId: string,
 ): {
+  capabilities: MarketingOpsCapability[]
   channels: MarketingOpsChannelStatus[]
   contractVersion: number
 } {
@@ -278,7 +309,7 @@ function parseChannelsStatusResponse(
   const value = asRecord(input, 'marketing-ops channels status')
   assertSupportedKeys(
     value,
-    ['channels', 'contractVersion', 'projectId'],
+    ['capabilities', 'channels', 'contractVersion', 'projectId'],
     'marketing-ops channels status',
   )
   if (value.projectId !== projectId)
@@ -287,6 +318,9 @@ function parseChannelsStatusResponse(
     throw new Error('Marketing-ops contract version must be a positive integer')
   if (!Array.isArray(value.channels))
     throw new Error('Marketing-ops channels status must include a channels array')
+  const capabilities = value.capabilities === undefined
+    ? []
+    : parseCapabilities(value.capabilities)
   const seen = new Set<ChannelId>()
   const channels = value.channels.map((inputChannel, index) => {
     const channel = parseChannelStatus(inputChannel, index)
@@ -296,6 +330,7 @@ function parseChannelsStatusResponse(
     return channel
   })
   return {
+    capabilities,
     channels,
     contractVersion: value.contractVersion as number,
   }
@@ -305,7 +340,15 @@ function parseChannelStatus(input: unknown, index: number): MarketingOpsChannelS
   const value = asRecord(input, `marketing-ops channels[${index}]`)
   assertSupportedKeys(
     value,
-    ['accountRef', 'adapterReady', 'alias', 'channel', 'health', 'nextAction'],
+    [
+      'accountRef',
+      'adapterReady',
+      'alias',
+      'assistedPublicationReady',
+      'channel',
+      'health',
+      'nextAction',
+    ],
     `marketing-ops channels[${index}]`,
   )
   const channel = stringField(
@@ -324,6 +367,12 @@ function parseChannelStatus(input: unknown, index: number): MarketingOpsChannelS
     throw new Error(`Unsupported marketing-ops channel health: ${health}`)
   if (typeof value.adapterReady !== 'boolean')
     throw new Error('Marketing-ops channel adapterReady must be a boolean')
+  if (
+    value.assistedPublicationReady !== undefined
+    && typeof value.assistedPublicationReady !== 'boolean'
+  ) {
+    throw new Error('Marketing-ops channel assistedPublicationReady must be a boolean')
+  }
   const accountAlias = nullableStringField(
     value.alias,
     `marketing-ops channels[${index}].alias`,
@@ -341,11 +390,15 @@ function parseChannelStatus(input: unknown, index: number): MarketingOpsChannelS
     ...(accountRef === undefined ? {} : { accountRef }),
     ...(accountAlias === undefined ? {} : { accountAlias }),
     adapterReady: value.adapterReady,
+    ...(value.assistedPublicationReady === undefined
+      ? {}
+      : { assistedPublicationReady: value.assistedPublicationReady }),
     channel: channel as ChannelId,
     health: health as MarketingOpsChannelHealth,
     nextStep: channelNextStep(
       health as MarketingOpsChannelHealth,
       value.adapterReady,
+      value.assistedPublicationReady === true,
     ),
   }
 }
@@ -357,11 +410,29 @@ function opaqueAccountReference(input: unknown, name: string): string {
   return value
 }
 
+function parseCapabilities(input: unknown): MarketingOpsCapability[] {
+  if (!Array.isArray(input))
+    throw new Error('Marketing-ops capabilities must be an array')
+  const capabilities: MarketingOpsCapability[] = []
+  for (const capability of input) {
+    if (
+      typeof capability !== 'string'
+      || !MARKETING_OPS_CAPABILITIES.has(capability as MarketingOpsCapability)
+      || capabilities.includes(capability as MarketingOpsCapability)
+    ) {
+      throw new Error('Marketing-ops capability is unsupported')
+    }
+    capabilities.push(capability as MarketingOpsCapability)
+  }
+  return capabilities
+}
+
 function channelNextStep(
   health: MarketingOpsChannelHealth,
   adapterReady: boolean,
+  assistedPublicationReady: boolean,
 ): MarketingOpsChannelNextStep {
-  if (health === 'ready' && adapterReady)
+  if (health === 'ready' && (adapterReady || assistedPublicationReady))
     return 'ready'
   if (health === 'reauth-required')
     return 'reauthorize'
