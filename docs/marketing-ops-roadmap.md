@@ -88,8 +88,9 @@ Content Studio 可以保存账号引用和脱敏投影，但不能保存或转�
 2026-08-10 先加入了 `content-studio-host` 入口和受管资产校验器：host 只转发三个
 `CONTENT_STUDIO_*` 项目路径变量，未来只接受由安装器内置摘要或签名信任的
 `marketing-ops` 0.1.0 固定布局，逐一校验 `dist/server.js`、`dist/keychain-helper` 以及
-`package.json`，并拒绝软链接、未知 manifest 字段、路径扩展和哈希不符。当前没有这类发布制品，因此 host 不会
-启动任何进程、更不会回退到 PATH 或用户输入；真实 stdio 初始化与注入仍保持未完成。
+`package.json`，并拒绝软链接、未知 manifest 字段、路径扩展和哈希不符。当前只能生成
+本地 staging 包，尚无安装器信任的正式发布制品，因此 host 不会启动任何进程、更不会回退到
+PATH 或用户输入；真实 stdio 初始化与注入仍保持未完成。
 
 验收：渠道未配置时仍能完成 AI 创作和本地制作；发布任务会明确显示“未配置”或
 “被阻塞”，不会从 UI 状态推断授权。
