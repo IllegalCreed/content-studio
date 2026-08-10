@@ -11,7 +11,10 @@ import { Buffer } from 'node:buffer'
 import { isAbsolute, resolve } from 'node:path'
 import process from 'node:process'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import {
+  DEFAULT_INHERITED_ENV_VARS,
+  StdioClientTransport,
+} from '@modelcontextprotocol/sdk/client/stdio.js'
 import { resolveManagedMarketingOpsRuntimeAsset } from './managed-runtime-asset'
 
 const CLIENT_NAME = 'content-studio-host'
@@ -23,29 +26,18 @@ const CLOSE_TIMEOUT_MS = 2_000
 const MAX_STDERR_BYTES = 16 * 1024
 const MAX_STDOUT_BUFFER_BYTES = 256 * 1024
 const POSIX_SAFE_ENVIRONMENT_KEYS = [
+  'GH_CONFIG_DIR',
   'HOME',
-  'LANG',
-  'LC_ALL',
-  'LOGNAME',
   'PATH',
-  'SHELL',
-  'TERM',
   'TMPDIR',
-  'USER',
+  'XDG_CONFIG_HOME',
 ] as const
 const WINDOWS_SAFE_ENVIRONMENT_KEYS = [
   'APPDATA',
-  'HOMEDRIVE',
-  'HOMEPATH',
   'LOCALAPPDATA',
   'PATH',
-  'PROCESSOR_ARCHITECTURE',
-  'PROGRAMFILES',
-  'SYSTEMDRIVE',
-  'SYSTEMROOT',
   'TEMP',
   'TMP',
-  'USERNAME',
   'USERPROFILE',
 ] as const
 const SAFE_ENVIRONMENT_KEYS = process.platform === 'win32'
@@ -99,7 +91,9 @@ export function createManagedMarketingOpsStdioConnector(
   const createClient = options.createClient
     ?? (() => new Client({ name: CLIENT_NAME, version: CLIENT_VERSION }) as unknown as ManagedMarketingOpsStdioClient)
   const createTransport = options.createTransport
-    ?? ((parameters: StdioServerParameters) => new StdioClientTransport(parameters))
+    ?? ((parameters: StdioServerParameters) => new StdioClientTransport(
+      withSdkEnvironmentDenyOverrides(parameters),
+    ))
 
   return {
     connect: async (asset) => {
@@ -178,6 +172,24 @@ function safeEnvironment(): Record<string, string> {
       environment[key] = value
   }
   return environment
+}
+
+function withSdkEnvironmentDenyOverrides(
+  parameters: StdioServerParameters,
+): StdioServerParameters {
+  // The pinned MCP SDK merges its platform defaults into every spawn. Node's
+  // child_process.spawn omits undefined environment values, so these local
+  // deny-overrides keep that merge from re-expanding the explicit allowlist.
+  const environment: Record<string, string | undefined> = {}
+  for (const key of DEFAULT_INHERITED_ENV_VARS)
+    environment[key] = undefined
+  Object.assign(environment, parameters.env)
+  // The SDK type models only string values; this one local boundary preserves
+  // Node's documented `undefined`-means-omitted spawn behavior.
+  return {
+    ...parameters,
+    env: environment as Record<string, string>,
+  }
 }
 
 function consumeStderr(stream: Stream | null): void {

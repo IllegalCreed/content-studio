@@ -168,33 +168,27 @@ describe('managed marketing-ops stdio connector', () => {
     const expectedEnvironmentKeys = process.platform === 'win32'
       ? [
           'APPDATA',
-          'HOMEDRIVE',
-          'HOMEPATH',
           'LOCALAPPDATA',
           'PATH',
-          'PROCESSOR_ARCHITECTURE',
-          'PROGRAMFILES',
-          'SYSTEMDRIVE',
-          'SYSTEMROOT',
           'TEMP',
           'TMP',
-          'USERNAME',
           'USERPROFILE',
         ]
       : [
+          'GH_CONFIG_DIR',
           'HOME',
-          'LANG',
-          'LC_ALL',
-          'LOGNAME',
           'PATH',
-          'SHELL',
-          'TERM',
           'TMPDIR',
-          'USER',
+          'XDG_CONFIG_HOME',
         ]
     expect(Object.keys(parameters?.env ?? {}).sort()).toEqual(
       expectedEnvironmentKeys.filter(key => process.env[key] !== undefined).sort(),
     )
+    expect(parameters?.env).not.toHaveProperty('LOGNAME')
+    expect(parameters?.env).not.toHaveProperty('SHELL')
+    expect(parameters?.env).not.toHaveProperty('TERM')
+    expect(parameters?.env).not.toHaveProperty('USER')
+    expect(parameters?.env).not.toHaveProperty('NODE_OPTIONS')
     expect(parameters).not.toHaveProperty('shell')
 
     await expect(session.getServerVersion()).resolves.toEqual({
@@ -333,6 +327,13 @@ describe('managed marketing-ops stdio connector', () => {
       })
       pid = structured?.pid as number | undefined
       const environmentKeys = structured?.runtimeEnvKeys as string[] | undefined
+      expect(environmentKeys).toEqual(expect.arrayContaining(['HOME', 'PATH']))
+      expect(environmentKeys).not.toEqual(expect.arrayContaining([
+        'LOGNAME',
+        'SHELL',
+        'TERM',
+        'USER',
+      ]))
       expect(environmentKeys?.some(key => /TOKEN|PASSWORD|NODE_OPTIONS|CONTENT_STUDIO_/u.test(key))).toBe(false)
     }
     finally {

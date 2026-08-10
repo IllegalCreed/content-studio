@@ -95,8 +95,20 @@ PATH 或用户输入；真实 stdio 初始化与注入仍保持未完成。
 2026-08-10 又加入了安装器专用 `installer-host` 组合入口和固定 stdio connector：连接器只用
 `process.execPath` 启动已二次验货的 `dist/server.js`，固定工作目录和有限环境，使用官方 MCP
 SDK 1.30 的有界 stdio 缓冲，并把 MCP 面收窄为 `channels_status`。隔离 staging 烟测已经完成
-标准握手和脱敏状态读取；普通 CLI/Plugin 入口仍不自动发现或启动 runtime。安装器签名/内置
-摘要、安装目录权限与原子升级，以及真正把该交接单接入发布安装流程，仍是下一步。
+标准握手和脱敏状态读取；普通 CLI/Plugin 入口仍不自动发现或启动 runtime。
+
+同日，安装器 API 已能接收**安装器自身已信任**的 manifest 摘要，把 staging 包放入唯一的
+`runtimes/marketing-ops/0.1.0` 路径：POSIX 下先用 `mkdir` 原子占位，已有目录就拒绝覆盖；
+再以 owner-only 权限写入固定文件，并把 manifest 放在最后，半成品因此不会被验包器接受。失败时
+保留半成品而不递归删除未知文件。它仍不是正式发行或升级机制：摘要的签名/内置来源、平台制品映射
+和真正把可信交接单接入发布安装流程仍是下一步。
+
+连接器的子进程环境进一步收紧为 runtime 实际需要的本地路径：POSIX 只保留 `HOME`、
+`PATH`、`TMPDIR`、`XDG_CONFIG_HOME` 和 `GH_CONFIG_DIR`（Windows 仅保留对应的用户目录、
+临时目录和 `PATH`）。`marketing-ops` bundle 自己用 `HOME` 定位本地数据，并只把这些路径
+转给受限的 `gh`/`weibo` 子进程；不会转发 token、密码、`NODE_OPTIONS` 或其他父进程环境。
+由于 MCP SDK 默认会合并一组环境变量，connector 会用 `undefined` 明确屏蔽未列入白名单的
+默认键，并用真实 staging bundle 在隔离 HOME 下回归 `channels_status`。
 
 验收：渠道未配置时仍能完成 AI 创作和本地制作；发布任务会明确显示“未配置”或
 “被阻塞”，不会从 UI 状态推断授权。

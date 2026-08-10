@@ -4,6 +4,13 @@ import type { InstallerManagedRuntimeBootstrap } from './host/run'
 import { createInstallerManagedRuntimeBootstrapFromHandoff } from './host/managed-runtime-bootstrap'
 import { createManagedMarketingOpsStdioConnector } from './host/managed-runtime-stdio'
 
+export {
+  installManagedMarketingOpsRuntime,
+} from './host/managed-runtime-install'
+export type {
+  InstallManagedMarketingOpsRuntimeOptions,
+} from './host/managed-runtime-install'
+
 /**
  * Installer-only composition point. The caller must supply a handoff from an
  * installer-owned signed or embedded trust source, never from CLI arguments,
