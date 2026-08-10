@@ -5,6 +5,7 @@ export default defineConfig({
     'src/index.ts',
     'src/cli.ts',
     'src/host.ts',
+    'src/installer-host.ts',
   ],
   format: [
     'esm',

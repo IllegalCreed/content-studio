@@ -151,7 +151,10 @@ Content Studio、Codex 对话、MCP 参数、日志或仓库。
 当前源码已提供 `content-studio-host` 和受管资产的 fail-closed 校验器。
 `marketing-ops` 也能通过 `pnpm package:runtime` 生成一个只含固定文件的本地 staging 包，
 但这还不是安装器信任的正式发布物；它的 manifest 摘要仍必须由安装器内置或签名。因此
-host 目前不会启动 `marketing-ops`，也不会用 PATH、环境变量或临时路径替代固定安装器资产。
+普通 `content-studio-host` 目前不会自动启动 `marketing-ops`，也不会用 PATH、环境变量或临时路径
+替代固定安装器资产。安装器专用的 `installer-host` API 已经能在收到可信交接单后，用固定
+`process.execPath + dist/server.js` 通过标准 MCP stdio 建立只读连接；交接单若不是来自安装器
+内置或签名的信任源，仍必须视为无效，不能直接拿用户输入调用。
 
 ## 部署形态
 

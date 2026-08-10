@@ -1,0 +1,353 @@
+// @env node
+
+import type { ManagedMarketingOpsRuntimeAsset } from './managed-runtime-asset'
+import type {
+  ManagedMarketingOpsStdioClient,
+  ManagedMarketingOpsStdioTransport,
+} from './managed-runtime-stdio'
+import { createHash } from 'node:crypto'
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { PassThrough } from 'node:stream'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { resolveManagedMarketingOpsRuntimeAsset } from './managed-runtime-asset'
+import { createManagedMarketingOpsStdioConnector } from './managed-runtime-stdio'
+
+const temporaryDirectories: string[] = []
+
+function sha256(contents: string): string {
+  return createHash('sha256').update(contents).digest('hex')
+}
+
+async function createRuntimeAsset(
+  server = 'managed marketing-ops server fixture\n',
+): Promise<ManagedMarketingOpsRuntimeAsset> {
+  const parent = await mkdtemp(join(tmpdir(), 'content-studio-managed-stdio-'))
+  temporaryDirectories.push(parent)
+  const root = join(parent, 'runtimes', 'marketing-ops', '0.1.0')
+  const helper = 'managed marketing-ops keychain helper fixture\n'
+  const packageJson = JSON.stringify({
+    name: '@illegalcreed/marketing-ops',
+    private: true,
+    type: 'module',
+    version: '0.1.0',
+  })
+  await mkdir(join(root, 'dist'), { recursive: true })
+  await writeFile(join(root, 'dist/server.js'), server, 'utf8')
+  await writeFile(join(root, 'dist/keychain-helper'), helper, 'utf8')
+  await chmod(join(root, 'dist/keychain-helper'), 0o755)
+  await writeFile(join(root, 'package.json'), packageJson, 'utf8')
+  const manifest = JSON.stringify({
+    contractVersion: 3,
+    files: [
+      { path: 'dist/keychain-helper', sha256: sha256(helper) },
+      { path: 'dist/server.js', sha256: sha256(server) },
+      { path: 'package.json', sha256: sha256(packageJson) },
+    ],
+    runtimeName: 'marketing-ops',
+    runtimeVersion: '0.1.0',
+    schemaVersion: 1,
+  })
+  await writeFile(join(root, 'runtime-manifest.json'), manifest, 'utf8')
+  const asset = await resolveManagedMarketingOpsRuntimeAsset(root, sha256(manifest))
+  if (asset === null)
+    throw new Error('fixture asset could not be verified')
+  return asset
+}
+
+afterEach(async () => {
+  vi.unstubAllEnvs()
+  await Promise.all(temporaryDirectories.splice(0).map(directory => rm(directory, {
+    force: true,
+    recursive: true,
+  })))
+})
+
+function createFakeConnection(): {
+  client: ManagedMarketingOpsStdioClient
+  transport: ManagedMarketingOpsStdioTransport
+} {
+  const transport: ManagedMarketingOpsStdioTransport = {
+    close: vi.fn(async () => undefined),
+    stderr: new PassThrough(),
+  }
+  const client: ManagedMarketingOpsStdioClient = {
+    callTool: vi.fn(async () => ({ structuredContent: { ok: true } })),
+    close: vi.fn(async () => undefined),
+    connect: vi.fn(async () => undefined),
+    getServerVersion: vi.fn(() => ({ name: 'marketing-ops', version: '0.1.0' })),
+  }
+  return { client, transport }
+}
+
+function createMcpFixtureServer(): string {
+  return String.raw`
+let buffer = Buffer.alloc(0);
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + '\n');
+}
+
+function handle(message) {
+  if (message.method === 'initialize') {
+    send({ jsonrpc: '2.0', id: message.id, result: {
+      capabilities: { tools: {} },
+      protocolVersion: message.params?.protocolVersion ?? '2025-06-18',
+      serverInfo: { name: 'marketing-ops', version: '0.1.0' },
+    }});
+    return;
+  }
+  if (message.method === 'tools/call') {
+    const projectId = message.params?.arguments?.projectId;
+    send({ jsonrpc: '2.0', id: message.id, result: {
+      content: [{ type: 'text', text: 'fixture' }],
+      structuredContent: {
+        channels: [],
+        contractVersion: 3,
+        projectId,
+        runtimeEnvKeys: Object.keys(process.env),
+        pid: process.pid,
+      },
+    }});
+  }
+}
+
+process.stderr.write('fixture stderr '.repeat(4096));
+process.stdin.on('data', (chunk) => {
+  buffer = Buffer.concat([buffer, chunk]);
+  while (true) {
+    const separator = buffer.indexOf('\n');
+    if (separator < 0) return;
+    const body = buffer.toString('utf8', 0, separator).replace(/\r$/u, '');
+    buffer = buffer.subarray(separator + 1);
+    handle(JSON.parse(body));
+  }
+});
+`
+}
+
+function createOverflowServer(): string {
+  return 'process.stdout.write(\'x\'.repeat(300 * 1024)); setInterval(() => undefined, 1_000);\n'
+}
+
+async function waitForExit(pid: number): Promise<boolean> {
+  const deadline = Date.now() + 2_000
+  while (Date.now() < deadline) {
+    try {
+      process.kill(pid, 0)
+    }
+    catch {
+      return true
+    }
+    await new Promise(resolve => setTimeout(resolve, 25))
+  }
+  return false
+}
+
+describe('managed marketing-ops stdio connector', () => {
+  it('uses only fixed Node/entrypoint parameters and exposes the narrow session', async () => {
+    const asset = await createRuntimeAsset()
+    const fake = createFakeConnection()
+    let parameters: Record<string, unknown> | undefined
+    const connector = createManagedMarketingOpsStdioConnector({
+      createClient: () => fake.client,
+      createTransport: (input) => {
+        parameters = input
+        return fake.transport
+      },
+    })
+
+    const session = await connector.connect(asset)
+    expect(parameters).toMatchObject({
+      args: [asset.entrypoint],
+      command: process.execPath,
+      cwd: asset.runtimeRoot,
+      maxBufferSize: 256 * 1024,
+      stderr: 'pipe',
+    })
+    const expectedEnvironmentKeys = process.platform === 'win32'
+      ? [
+          'APPDATA',
+          'HOMEDRIVE',
+          'HOMEPATH',
+          'LOCALAPPDATA',
+          'PATH',
+          'PROCESSOR_ARCHITECTURE',
+          'PROGRAMFILES',
+          'SYSTEMDRIVE',
+          'SYSTEMROOT',
+          'TEMP',
+          'TMP',
+          'USERNAME',
+          'USERPROFILE',
+        ]
+      : [
+          'HOME',
+          'LANG',
+          'LC_ALL',
+          'LOGNAME',
+          'PATH',
+          'SHELL',
+          'TERM',
+          'TMPDIR',
+          'USER',
+        ]
+    expect(Object.keys(parameters?.env ?? {}).sort()).toEqual(
+      expectedEnvironmentKeys.filter(key => process.env[key] !== undefined).sort(),
+    )
+    expect(parameters).not.toHaveProperty('shell')
+
+    await expect(session.getServerVersion()).resolves.toEqual({
+      name: 'marketing-ops',
+      version: '0.1.0',
+    })
+    await expect(session.callTool({
+      arguments: { projectId: 'project-a' },
+      name: 'channels_status',
+    })).resolves.toEqual({ structuredContent: { ok: true } })
+    expect(fake.client.callTool).toHaveBeenCalledWith({
+      arguments: { projectId: 'project-a' },
+      name: 'channels_status',
+    })
+
+    await session.close()
+    await session.close()
+    expect(fake.client.close).toHaveBeenCalledTimes(1)
+    expect(fake.transport.close).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not pass command/path or secret-like environment overrides', async () => {
+    vi.stubEnv('MARKETING_OPS_COMMAND', '/tmp/attacker')
+    vi.stubEnv('MARKETING_OPS_RUNTIME_PATH', '/tmp/attacker-runtime')
+    vi.stubEnv('MARKETING_OPS_TOKEN', 'should-not-cross')
+    vi.stubEnv('BLUESKY_PASSWORD', 'should-not-cross')
+    vi.stubEnv('NODE_OPTIONS', '--require=/tmp/attacker')
+    const asset = await createRuntimeAsset()
+    const fake = createFakeConnection()
+    let parameters: Record<string, unknown> | undefined
+    const connector = createManagedMarketingOpsStdioConnector({
+      createClient: () => fake.client,
+      createTransport: (input) => {
+        parameters = input
+        return fake.transport
+      },
+    })
+
+    await expect(connector.connect({
+      ...asset,
+      entrypoint: '/tmp/attacker-server.js',
+    })).rejects.toThrow('Managed marketing-ops connection unavailable')
+    expect(parameters).toBeUndefined()
+
+    await connector.connect(asset)
+    const environment = parameters?.env as Record<string, string> | undefined
+    expect(environment).toBeDefined()
+    expect(Object.keys(environment ?? {}).some(key => /MARKETING_OPS|BLUESKY|NODE_OPTIONS|PASSWORD|TOKEN/u.test(key))).toBe(false)
+    expect(parameters?.command).toBe(process.execPath)
+    expect(parameters?.args).toEqual([asset.entrypoint])
+  })
+
+  it('cleans up and sanitizes connection failures and timeouts', async () => {
+    const asset = await createRuntimeAsset()
+    const fake = createFakeConnection()
+    vi.mocked(fake.client.connect).mockRejectedValueOnce(new Error('/private/token=secret'))
+    const connector = createManagedMarketingOpsStdioConnector({
+      createClient: () => fake.client,
+      createTransport: () => fake.transport,
+    })
+
+    await expect(connector.connect(asset)).rejects.toThrow('Managed marketing-ops connection unavailable')
+    expect(fake.client.close).toHaveBeenCalledTimes(1)
+
+    const timeoutFake = createFakeConnection()
+    vi.mocked(timeoutFake.client.connect).mockImplementation(() => new Promise(() => undefined))
+    const timeoutConnector = createManagedMarketingOpsStdioConnector({
+      connectTimeoutMs: 5,
+      createClient: () => timeoutFake.client,
+      createTransport: () => timeoutFake.transport,
+    })
+    await expect(timeoutConnector.connect(asset)).rejects.toThrow('Managed marketing-ops connection unavailable')
+    expect(timeoutFake.client.close).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects every tool except channels_status at runtime', async () => {
+    const asset = await createRuntimeAsset()
+    const fake = createFakeConnection()
+    const connector = createManagedMarketingOpsStdioConnector({
+      createClient: () => fake.client,
+      createTransport: () => fake.transport,
+    })
+    const session = await connector.connect(asset)
+
+    await expect(session.callTool({
+      arguments: { projectId: 'project-a' },
+      name: 'publish_campaign' as 'channels_status',
+    })).rejects.toThrow('Unsupported marketing-ops tool')
+    expect(fake.client.callTool).not.toHaveBeenCalled()
+  })
+
+  it('bounds status calls and shares one shutdown promise', async () => {
+    const asset = await createRuntimeAsset()
+    const fake = createFakeConnection()
+    vi.mocked(fake.client.callTool).mockImplementation(() => new Promise(() => undefined))
+    let releaseClose: (() => void) | undefined
+    vi.mocked(fake.client.close).mockImplementation(() => new Promise((resolve) => {
+      releaseClose = resolve
+    }))
+    const connector = createManagedMarketingOpsStdioConnector({
+      createClient: () => fake.client,
+      createTransport: () => fake.transport,
+      requestTimeoutMs: 5,
+    })
+    const session = await connector.connect(asset)
+
+    await expect(session.callTool({
+      arguments: { projectId: 'project-a' },
+      name: 'channels_status',
+    })).rejects.toThrow('Marketing-ops status unavailable')
+    const firstClose = session.close()
+    const secondClose = session.close()
+    expect(secondClose).toBe(firstClose)
+    await vi.waitFor(() => expect(fake.client.close).toHaveBeenCalledTimes(1))
+    releaseClose?.()
+    await firstClose
+    expect(fake.client.close).toHaveBeenCalledTimes(1)
+  })
+
+  it('connects to a real stdio child with a bounded output buffer and sanitized environment', async () => {
+    const asset = await createRuntimeAsset(createMcpFixtureServer())
+    const connector = createManagedMarketingOpsStdioConnector({
+      requestTimeoutMs: 2_000,
+    })
+    const session = await connector.connect(asset)
+    let pid: number | undefined
+    try {
+      const result = await session.callTool({
+        arguments: { projectId: 'project-a' },
+        name: 'channels_status',
+      }) as { structuredContent?: Record<string, unknown> }
+      const structured = result.structuredContent
+      expect(structured).toMatchObject({
+        contractVersion: 3,
+        projectId: 'project-a',
+      })
+      pid = structured?.pid as number | undefined
+      const environmentKeys = structured?.runtimeEnvKeys as string[] | undefined
+      expect(environmentKeys?.some(key => /TOKEN|PASSWORD|NODE_OPTIONS|CONTENT_STUDIO_/u.test(key))).toBe(false)
+    }
+    finally {
+      await session.close()
+    }
+    expect(pid).toEqual(expect.any(Number))
+    await expect(waitForExit(pid!)).resolves.toBe(true)
+  })
+
+  it('fails closed when a child exceeds the bounded stdio output buffer', async () => {
+    const asset = await createRuntimeAsset(createOverflowServer())
+    const connector = createManagedMarketingOpsStdioConnector({
+      connectTimeoutMs: 1_000,
+    })
+
+    await expect(connector.connect(asset)).rejects.toThrow('Managed marketing-ops connection unavailable')
+  })
+})

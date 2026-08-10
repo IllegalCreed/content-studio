@@ -106,10 +106,14 @@ describe('content studio agent plugin package', () => {
       'content-studio': './dist/cli.mjs',
       'content-studio-host': './dist/host.mjs',
     })
+    expect(packageJson.exports).toMatchObject({
+      './installer-host': './dist/installer-host.mjs',
+    })
   })
 
   it('declares both executable entrypoints explicitly for the package build', () => {
     expect(buildConfig).toMatchObject({
+      entry: expect.arrayContaining(['src/installer-host.ts']),
       exports: {
         bin: {
           'content-studio': './src/cli.ts',

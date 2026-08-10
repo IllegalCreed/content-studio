@@ -17,6 +17,7 @@ const MANAGED_RUNTIME_NAME = 'marketing-ops'
 
 export interface ManagedMarketingOpsRuntimeAsset {
   entrypoint: string
+  manifestSha256: string
   runtimeRoot: string
   runtimeVersion: string
 }
@@ -64,6 +65,7 @@ export async function resolveManagedMarketingOpsRuntimeAsset(
     }
     return {
       entrypoint: resolve(safeRoot, 'dist/server.js'),
+      manifestSha256: expectedManifestSha256,
       runtimeRoot: safeRoot,
       runtimeVersion: manifest.runtimeVersion,
     }

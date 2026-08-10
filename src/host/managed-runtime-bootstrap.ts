@@ -113,14 +113,35 @@ function isCompatibleServerVersion(
   input: unknown,
   asset: ManagedMarketingOpsRuntimeAsset,
 ): boolean {
-  if (!isRecord(input) || typeof input.name !== 'string' || typeof input.version !== 'string')
+  const version = parseServerVersion(input)
+  if (version === null)
     return false
-  return input.version === asset.runtimeVersion
+  return version.version === asset.runtimeVersion
     && assessMarketingOpsCompatibility({
       contractVersion: MARKETING_OPS_COMPATIBILITY_MATRIX[0].contractVersion,
-      runtimeName: input.name,
-      runtimeVersion: input.version,
+      runtimeName: version.name,
+      runtimeVersion: version.version,
     }).compatible
+}
+
+function parseServerVersion(input: unknown): { name: string, version: string } | null {
+  if (!isRecord(input))
+    return null
+  const keys = Object.keys(input)
+  if (
+    keys.length !== 2
+    || !keys.includes('name')
+    || !keys.includes('version')
+    || typeof input.name !== 'string'
+    || typeof input.version !== 'string'
+    || input.name.length === 0
+    || input.name.length > 64
+    || input.version.length === 0
+    || input.version.length > 128
+  ) {
+    return null
+  }
+  return { name: input.name, version: input.version }
 }
 
 async function closeQuietly(

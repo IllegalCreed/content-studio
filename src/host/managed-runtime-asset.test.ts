@@ -60,6 +60,7 @@ describe('installer-owned marketing-ops runtime asset', () => {
 
     await expect(resolveManagedMarketingOpsRuntimeAsset(asset.root, asset.manifestSha256)).resolves.toEqual({
       entrypoint: join(safeRoot, 'dist/server.js'),
+      manifestSha256: asset.manifestSha256,
       runtimeRoot: safeRoot,
       runtimeVersion: '0.1.0',
     })

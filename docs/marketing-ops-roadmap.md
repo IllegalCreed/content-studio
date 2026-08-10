@@ -92,6 +92,12 @@ Content Studio 可以保存账号引用和脱敏投影，但不能保存或转�
 本地 staging 包，尚无安装器信任的正式发布制品，因此 host 不会启动任何进程、更不会回退到
 PATH 或用户输入；真实 stdio 初始化与注入仍保持未完成。
 
+2026-08-10 又加入了安装器专用 `installer-host` 组合入口和固定 stdio connector：连接器只用
+`process.execPath` 启动已二次验货的 `dist/server.js`，固定工作目录和有限环境，使用官方 MCP
+SDK 1.30 的有界 stdio 缓冲，并把 MCP 面收窄为 `channels_status`。隔离 staging 烟测已经完成
+标准握手和脱敏状态读取；普通 CLI/Plugin 入口仍不自动发现或启动 runtime。安装器签名/内置
+摘要、安装目录权限与原子升级，以及真正把该交接单接入发布安装流程，仍是下一步。
+
 验收：渠道未配置时仍能完成 AI 创作和本地制作；发布任务会明确显示“未配置”或
 “被阻塞”，不会从 UI 状态推断授权。
 

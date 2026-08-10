@@ -9,6 +9,7 @@
     ".": "./dist/index.mjs",
     "./cli": "./dist/cli.mjs",
     "./host": "./dist/host.mjs",
+    "./installer-host": "./dist/installer-host.mjs",
     "./package.json": "./package.json"
   },
   "types": "./dist/index.d.mts",
@@ -35,6 +36,7 @@
     "verify": "pnpm lint:check && pnpm type-check && pnpm test && pnpm build"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
     "ffmpeg-static": "catalog:",
     "playwright": "catalog:"
   },

@@ -140,6 +140,27 @@ describe('installer-owned marketing-ops bootstrap', () => {
     expect(session.close).toHaveBeenCalledTimes(1)
   })
 
+  it('rejects an expanded or malformed server identity before exposing a runtime', async () => {
+    const asset = await createRuntimeAsset()
+    const session = {
+      callTool: vi.fn(),
+      close: vi.fn(async () => undefined),
+      getServerVersion: vi.fn(() => ({
+        detail: '/private/runtime/token=secret',
+        name: 'marketing-ops',
+        version: '0.1.0',
+      })),
+    }
+    const bootstrap = createInstallerManagedRuntimeBootstrap({
+      connector: { connect: vi.fn(async () => session) },
+      manifestSha256: asset.manifestSha256,
+      runtimeRoot: asset.root,
+    })
+
+    await expect(bootstrap.start()).resolves.toBeUndefined()
+    expect(session.close).toHaveBeenCalledTimes(1)
+  })
+
   it('builds the bootstrap from a validated installer handoff without widening the options', async () => {
     const asset = await createRuntimeAsset()
     const session = {

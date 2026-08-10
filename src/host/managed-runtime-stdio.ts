@@ -1,0 +1,301 @@
+// @env node
+
+import type { StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js'
+import type { Stream } from 'node:stream'
+import type { ManagedMarketingOpsRuntimeAsset } from './managed-runtime-asset'
+import type {
+  ManagedMarketingOpsMcpSession,
+  ManagedMarketingOpsRuntimeConnector,
+} from './managed-runtime-bootstrap'
+import { Buffer } from 'node:buffer'
+import { isAbsolute, resolve } from 'node:path'
+import process from 'node:process'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { resolveManagedMarketingOpsRuntimeAsset } from './managed-runtime-asset'
+
+const CLIENT_NAME = 'content-studio-host'
+const CLIENT_VERSION = '0.1.0'
+const RUNTIME_VERSION = '0.1.0'
+const DEFAULT_CONNECT_TIMEOUT_MS = 5_000
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
+const CLOSE_TIMEOUT_MS = 2_000
+const MAX_STDERR_BYTES = 16 * 1024
+const MAX_STDOUT_BUFFER_BYTES = 256 * 1024
+const POSIX_SAFE_ENVIRONMENT_KEYS = [
+  'HOME',
+  'LANG',
+  'LC_ALL',
+  'LOGNAME',
+  'PATH',
+  'SHELL',
+  'TERM',
+  'TMPDIR',
+  'USER',
+] as const
+const WINDOWS_SAFE_ENVIRONMENT_KEYS = [
+  'APPDATA',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'LOCALAPPDATA',
+  'PATH',
+  'PROCESSOR_ARCHITECTURE',
+  'PROGRAMFILES',
+  'SYSTEMDRIVE',
+  'SYSTEMROOT',
+  'TEMP',
+  'TMP',
+  'USERNAME',
+  'USERPROFILE',
+] as const
+const SAFE_ENVIRONMENT_KEYS = process.platform === 'win32'
+  ? WINDOWS_SAFE_ENVIRONMENT_KEYS
+  : POSIX_SAFE_ENVIRONMENT_KEYS
+
+/**
+ * Small structural seam used by tests and by an installer-owned wrapper. The
+ * production factory below always supplies the official SDK implementations;
+ * command, path, and environment choices never come from this seam.
+ */
+export interface ManagedMarketingOpsStdioClient {
+  callTool: (input: {
+    arguments?: Record<string, unknown>
+    name: string
+  }) => Promise<unknown>
+  close: () => Promise<void>
+  connect: (transport: ManagedMarketingOpsStdioTransport) => Promise<void>
+  getServerVersion: () => unknown
+}
+
+export interface ManagedMarketingOpsStdioTransport {
+  close: () => Promise<void>
+  stderr: Stream | null
+}
+
+export interface ManagedMarketingOpsStdioConnectorOptions {
+  /** Test seam; production uses the pinned SDK constructor. */
+  createClient?: () => ManagedMarketingOpsStdioClient
+  /** Test seam; production uses the pinned SDK constructor. */
+  createTransport?: (
+    parameters: StdioServerParameters,
+  ) => ManagedMarketingOpsStdioTransport
+  connectTimeoutMs?: number
+  requestTimeoutMs?: number
+}
+
+/**
+ * Creates a connector which can only launch the verified bundled runtime with
+ * the current Node executable. It never consults PATH, a command argument, or
+ * a user-provided runtime environment.
+ */
+export function createManagedMarketingOpsStdioConnector(
+  options: ManagedMarketingOpsStdioConnectorOptions = {},
+): ManagedMarketingOpsRuntimeConnector {
+  const timeoutMs = validatedTimeout(options.connectTimeoutMs)
+  const requestTimeoutMs = validatedTimeout(
+    options.requestTimeoutMs,
+    DEFAULT_REQUEST_TIMEOUT_MS,
+  )
+  const createClient = options.createClient
+    ?? (() => new Client({ name: CLIENT_NAME, version: CLIENT_VERSION }) as unknown as ManagedMarketingOpsStdioClient)
+  const createTransport = options.createTransport
+    ?? ((parameters: StdioServerParameters) => new StdioClientTransport(parameters))
+
+  return {
+    connect: async (asset) => {
+      let transport: ManagedMarketingOpsStdioTransport | undefined
+      let client: ManagedMarketingOpsStdioClient | undefined
+      try {
+        const verifiedAsset = await revalidateAsset(asset)
+        if (verifiedAsset === null)
+          throw new Error('asset')
+        const parameters = createServerParameters(verifiedAsset)
+        transport = createTransport(parameters)
+        consumeStderr(transport.stderr)
+        const connectedClient = createClient()
+        client = connectedClient
+        await connectWithTimeout(connectedClient, transport, timeoutMs)
+        return createSession(connectedClient, transport, requestTimeoutMs)
+      }
+      catch {
+        await closeResources(client, transport)
+        throw new Error('Managed marketing-ops connection unavailable')
+      }
+    },
+  }
+}
+
+async function revalidateAsset(
+  asset: ManagedMarketingOpsRuntimeAsset,
+): Promise<ManagedMarketingOpsRuntimeAsset | null> {
+  if (
+    asset.runtimeVersion !== RUNTIME_VERSION
+    || !isAbsolute(asset.runtimeRoot)
+    || resolve(asset.runtimeRoot) !== asset.runtimeRoot
+    || asset.entrypoint !== resolve(asset.runtimeRoot, 'dist/server.js')
+    || !isFixedRuntimeRoot(asset.runtimeRoot)
+  ) {
+    return null
+  }
+  const verified = await resolveManagedMarketingOpsRuntimeAsset(
+    asset.runtimeRoot,
+    asset.manifestSha256,
+  )
+  if (
+    verified === null
+    || verified.entrypoint !== asset.entrypoint
+    || verified.runtimeRoot !== asset.runtimeRoot
+    || verified.runtimeVersion !== asset.runtimeVersion
+  ) {
+    return null
+  }
+  return verified
+}
+
+function isFixedRuntimeRoot(path: string): boolean {
+  const segments = path.split(/[\\/]+/u).filter(Boolean)
+  return segments.slice(-3).join('/') === 'runtimes/marketing-ops/0.1.0'
+}
+
+function createServerParameters(
+  asset: ManagedMarketingOpsRuntimeAsset,
+): StdioServerParameters {
+  return {
+    args: [asset.entrypoint],
+    command: process.execPath,
+    cwd: asset.runtimeRoot,
+    env: safeEnvironment(),
+    maxBufferSize: MAX_STDOUT_BUFFER_BYTES,
+    stderr: 'pipe',
+  }
+}
+
+function safeEnvironment(): Record<string, string> {
+  const environment: Record<string, string> = {}
+  for (const key of SAFE_ENVIRONMENT_KEYS) {
+    const value = process.env[key]
+    if (value !== undefined && !value.startsWith('()'))
+      environment[key] = value
+  }
+  return environment
+}
+
+function consumeStderr(stream: Stream | null): void {
+  if (stream === null)
+    return
+  let bytes = 0
+  stream.on('data', (chunk: unknown) => {
+    if (bytes >= MAX_STDERR_BYTES)
+      return
+    const chunkBytes = typeof chunk === 'string'
+      ? Buffer.byteLength(chunk)
+      : chunk instanceof Uint8Array
+        ? chunk.byteLength
+        : MAX_STDERR_BYTES
+    bytes = Math.min(MAX_STDERR_BYTES, bytes + chunkBytes)
+  })
+  stream.on('error', () => undefined)
+  const resume = (stream as Stream & { resume: () => void }).resume
+  resume.call(stream)
+}
+
+async function connectWithTimeout(
+  client: ManagedMarketingOpsStdioClient,
+  transport: ManagedMarketingOpsStdioTransport,
+  timeoutMs: number,
+): Promise<void> {
+  await withTimeout(client.connect(transport), timeoutMs)
+}
+
+function createSession(
+  client: ManagedMarketingOpsStdioClient,
+  transport: ManagedMarketingOpsStdioTransport,
+  requestTimeoutMs: number,
+): ManagedMarketingOpsMcpSession {
+  let closePromise: Promise<void> | undefined
+  return {
+    callTool: async (input) => {
+      if (!isChannelsStatusInput(input))
+        throw new Error('Unsupported marketing-ops tool')
+      try {
+        return await withTimeout(
+          client.callTool({
+            arguments: { projectId: input.arguments.projectId },
+            name: 'channels_status',
+          }),
+          requestTimeoutMs,
+        )
+      }
+      catch {
+        throw new Error('Marketing-ops status unavailable')
+      }
+    },
+    close: () => {
+      closePromise ??= closeResources(client, transport)
+      return closePromise
+    },
+    getServerVersion: async () => client.getServerVersion(),
+  }
+}
+
+function isChannelsStatusInput(
+  input: unknown,
+): input is { arguments: { projectId: string }, name: 'channels_status' } {
+  if (!isRecord(input) || input.name !== 'channels_status' || !isRecord(input.arguments))
+    return false
+  const keys = Object.keys(input.arguments)
+  return keys.length === 1
+    && keys[0] === 'projectId'
+    && typeof input.arguments.projectId === 'string'
+    && /^[a-z0-9][a-z0-9-]{0,62}$/u.test(input.arguments.projectId)
+}
+
+async function closeResources(
+  client: ManagedMarketingOpsStdioClient | undefined,
+  transport: ManagedMarketingOpsStdioTransport | undefined,
+): Promise<void> {
+  if (client !== undefined)
+    await attemptClose(() => client.close())
+  await attemptClose(() => transport?.close())
+}
+
+async function attemptClose(close: () => Promise<void> | undefined): Promise<boolean> {
+  if (close === undefined)
+    return true
+  try {
+    await withTimeout(Promise.resolve().then(close), CLOSE_TIMEOUT_MS)
+    return true
+  }
+  catch {
+    return false
+  }
+}
+
+async function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error('operation timeout')), timeoutMs)
+        timer.unref?.()
+      }),
+    ])
+  }
+  finally {
+    if (timer !== undefined)
+      clearTimeout(timer)
+  }
+}
+
+function validatedTimeout(input: number | undefined, fallback: number = DEFAULT_CONNECT_TIMEOUT_MS): number {
+  if (input === undefined)
+    return fallback
+  if (!Number.isInteger(input) || input < 1 || input > 30_000)
+    return fallback
+  return input
+}
+
+function isRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === 'object' && input !== null && !Array.isArray(input)
+}
