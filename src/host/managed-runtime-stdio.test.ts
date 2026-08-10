@@ -6,7 +6,7 @@ import type {
   ManagedMarketingOpsStdioTransport,
 } from './managed-runtime-stdio'
 import { createHash } from 'node:crypto'
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
@@ -23,7 +23,7 @@ function sha256(contents: string): string {
 async function createRuntimeAsset(
   server = 'managed marketing-ops server fixture\n',
 ): Promise<ManagedMarketingOpsRuntimeAsset> {
-  const parent = await mkdtemp(join(tmpdir(), 'content-studio-managed-stdio-'))
+  const parent = await realpath(await mkdtemp(join(await realpath(tmpdir()), 'content-studio-managed-stdio-')))
   temporaryDirectories.push(parent)
   const root = join(parent, 'runtimes', 'marketing-ops', '0.1.0')
   const helper = 'managed marketing-ops keychain helper fixture\n'
@@ -33,11 +33,10 @@ async function createRuntimeAsset(
     type: 'module',
     version: '0.1.0',
   })
-  await mkdir(join(root, 'dist'), { recursive: true })
-  await writeFile(join(root, 'dist/server.js'), server, 'utf8')
-  await writeFile(join(root, 'dist/keychain-helper'), helper, 'utf8')
-  await chmod(join(root, 'dist/keychain-helper'), 0o755)
-  await writeFile(join(root, 'package.json'), packageJson, 'utf8')
+  await mkdir(join(root, 'dist'), { recursive: true, mode: 0o700 })
+  await writeFile(join(root, 'dist/server.js'), server, { encoding: 'utf8', mode: 0o600 })
+  await writeFile(join(root, 'dist/keychain-helper'), helper, { encoding: 'utf8', mode: 0o700 })
+  await writeFile(join(root, 'package.json'), packageJson, { encoding: 'utf8', mode: 0o600 })
   const manifest = JSON.stringify({
     contractVersion: 3,
     files: [
@@ -49,7 +48,12 @@ async function createRuntimeAsset(
     runtimeVersion: '0.1.0',
     schemaVersion: 1,
   })
-  await writeFile(join(root, 'runtime-manifest.json'), manifest, 'utf8')
+  await writeFile(join(root, 'runtime-manifest.json'), manifest, { encoding: 'utf8', mode: 0o600 })
+  await chmod(join(parent, 'runtimes'), 0o700)
+  await chmod(join(parent, 'runtimes', 'marketing-ops'), 0o700)
+  await chmod(root, 0o700)
+  await chmod(join(root, 'dist'), 0o700)
+  await chmod(join(root, 'dist/keychain-helper'), 0o700)
   const asset = await resolveManagedMarketingOpsRuntimeAsset(root, sha256(manifest))
   if (asset === null)
     throw new Error('fixture asset could not be verified')
@@ -239,6 +243,44 @@ describe('managed marketing-ops stdio connector', () => {
     expect(Object.keys(environment ?? {}).some(key => /MARKETING_OPS|BLUESKY|NODE_OPTIONS|PASSWORD|TOKEN/u.test(key))).toBe(false)
     expect(parameters?.command).toBe(process.execPath)
     expect(parameters?.args).toEqual([asset.entrypoint])
+  })
+
+  it('does not spawn when an installed runtime layout changes after handoff', async () => {
+    const modeChanged = await createRuntimeAsset()
+    await chmod(join(modeChanged.runtimeRoot, 'dist'), 0o750)
+    const modeTransport = vi.fn(() => createFakeConnection().transport)
+    const modeConnector = createManagedMarketingOpsStdioConnector({
+      createTransport: modeTransport,
+    })
+    await expect(modeConnector.connect(modeChanged)).rejects.toThrow(
+      'Managed marketing-ops connection unavailable',
+    )
+    expect(modeTransport).not.toHaveBeenCalled()
+
+    const extraEntry = await createRuntimeAsset()
+    await writeFile(join(extraEntry.runtimeRoot, 'unexpected'), 'extra\n', { mode: 0o600 })
+    const extraTransport = vi.fn(() => createFakeConnection().transport)
+    const extraConnector = createManagedMarketingOpsStdioConnector({
+      createTransport: extraTransport,
+    })
+    await expect(extraConnector.connect(extraEntry)).rejects.toThrow(
+      'Managed marketing-ops connection unavailable',
+    )
+    expect(extraTransport).not.toHaveBeenCalled()
+
+    const symlinkEntry = await createRuntimeAsset()
+    const outside = join(symlinkEntry.runtimeRoot, '..', 'outside-server.js')
+    await writeFile(outside, 'outside\n', { mode: 0o600 })
+    await rm(join(symlinkEntry.runtimeRoot, 'dist/server.js'))
+    await symlink(outside, join(symlinkEntry.runtimeRoot, 'dist/server.js'))
+    const symlinkTransport = vi.fn(() => createFakeConnection().transport)
+    const symlinkConnector = createManagedMarketingOpsStdioConnector({
+      createTransport: symlinkTransport,
+    })
+    await expect(symlinkConnector.connect(symlinkEntry)).rejects.toThrow(
+      'Managed marketing-ops connection unavailable',
+    )
+    expect(symlinkTransport).not.toHaveBeenCalled()
   })
 
   it('cleans up and sanitizes connection failures and timeouts', async () => {

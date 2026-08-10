@@ -16,6 +16,7 @@ import {
   StdioClientTransport,
 } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { resolveManagedMarketingOpsRuntimeAsset } from './managed-runtime-asset'
+import { verifyInstalledManagedMarketingOpsRuntime } from './managed-runtime-installed-guard'
 
 const CLIENT_NAME = 'content-studio-host'
 const CLIENT_VERSION = '0.1.0'
@@ -131,6 +132,8 @@ async function revalidateAsset(
   ) {
     return null
   }
+  if (!await verifyInstalledManagedMarketingOpsRuntime(asset.runtimeRoot))
+    return null
   const verified = await resolveManagedMarketingOpsRuntimeAsset(
     asset.runtimeRoot,
     asset.manifestSha256,
@@ -143,6 +146,8 @@ async function revalidateAsset(
   ) {
     return null
   }
+  if (!await verifyInstalledManagedMarketingOpsRuntime(verified.runtimeRoot))
+    return null
   return verified
 }
 
