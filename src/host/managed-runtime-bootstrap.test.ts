@@ -1,9 +1,12 @@
 import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createInstallerManagedRuntimeBootstrap } from './managed-runtime-bootstrap'
+import {
+  createInstallerManagedRuntimeBootstrap,
+  createInstallerManagedRuntimeBootstrapFromHandoff,
+} from './managed-runtime-bootstrap'
 
 const temporaryDirectories: string[] = []
 
@@ -12,8 +15,9 @@ function sha256(contents: string): string {
 }
 
 async function createRuntimeAsset(): Promise<{ manifestSha256: string, root: string }> {
-  const root = await mkdtemp(join(tmpdir(), 'content-studio-managed-bootstrap-'))
-  temporaryDirectories.push(root)
+  const parent = await mkdtemp(join(tmpdir(), 'content-studio-managed-bootstrap-'))
+  const root = join(parent, 'runtimes', 'marketing-ops', '0.1.0')
+  temporaryDirectories.push(parent)
   const server = 'managed marketing-ops server fixture\n'
   const helper = 'managed marketing-ops keychain helper fixture\n'
   await mkdir(join(root, 'dist'), { recursive: true })
@@ -134,5 +138,45 @@ describe('installer-owned marketing-ops bootstrap', () => {
 
     await expect(bootstrap.start()).resolves.toBeUndefined()
     expect(session.close).toHaveBeenCalledTimes(1)
+  })
+
+  it('builds the bootstrap from a validated installer handoff without widening the options', async () => {
+    const asset = await createRuntimeAsset()
+    const session = {
+      callTool: vi.fn(),
+      close: vi.fn(async () => undefined),
+      getServerVersion: vi.fn(() => ({ name: 'marketing-ops', version: '0.1.0' })),
+    }
+    const connector = { connect: vi.fn(async () => session) }
+    const bootstrap = createInstallerManagedRuntimeBootstrapFromHandoff({
+      connector,
+      handoff: {
+        contractVersion: 3,
+        manifestSha256: asset.manifestSha256,
+        runtimeName: 'marketing-ops',
+        runtimeRoot: asset.root,
+        runtimeVersion: '0.1.0',
+      },
+    })
+
+    await expect(bootstrap.start()).resolves.toBeDefined()
+    expect(connector.connect).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not connect from an invalid installer handoff', async () => {
+    const connector = { connect: vi.fn() }
+    const bootstrap = createInstallerManagedRuntimeBootstrapFromHandoff({
+      connector,
+      handoff: {
+        contractVersion: 3,
+        manifestSha256: '0'.repeat(64),
+        runtimeName: 'marketing-ops',
+        runtimeRoot: dirname('/tmp/not-a-fixed-runtime-root'),
+        runtimeVersion: '0.1.0',
+      },
+    })
+
+    await expect(bootstrap.start()).resolves.toBeUndefined()
+    expect(connector.connect).not.toHaveBeenCalled()
   })
 })

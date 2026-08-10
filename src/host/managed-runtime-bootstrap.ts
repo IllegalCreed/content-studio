@@ -2,12 +2,14 @@
 
 import type { MarketingOpsManagedRuntime, MarketingOpsMcpClient } from '../types'
 import type { ManagedMarketingOpsRuntimeAsset } from './managed-runtime-asset'
+import type { InstallerManagedRuntimeHandoff } from './managed-runtime-handoff'
 import { MARKETING_OPS_COMPATIBILITY_MATRIX } from '../constants'
 import {
   assessMarketingOpsCompatibility,
   createMarketingOpsManagedRuntime,
 } from '../marketing-ops/client'
 import { resolveManagedMarketingOpsRuntimeAsset } from './managed-runtime-asset'
+import { parseInstallerManagedRuntimeHandoff } from './managed-runtime-handoff'
 
 export interface ManagedMarketingOpsMcpSession extends MarketingOpsMcpClient {
   close: () => Promise<void> | void
@@ -23,6 +25,27 @@ export interface InstallerManagedRuntimeBootstrapOptions {
   connector: ManagedMarketingOpsRuntimeConnector
   manifestSha256: string
   runtimeRoot: string
+}
+
+export interface InstallerManagedRuntimeHandoffBootstrapOptions {
+  connector: ManagedMarketingOpsRuntimeConnector
+  handoff: unknown
+}
+
+/**
+ * Converts an installer-owned handoff into the existing narrow bootstrap only
+ * after validating its exact identity and fixed runtime-root shape.
+ */
+export function createInstallerManagedRuntimeBootstrapFromHandoff(
+  options: InstallerManagedRuntimeHandoffBootstrapOptions,
+): { start: () => Promise<MarketingOpsManagedRuntime | undefined> } {
+  const handoff = parseInstallerManagedRuntimeHandoff(options.handoff)
+  if (handoff === null)
+    return { start: async () => undefined }
+  return createInstallerManagedRuntimeBootstrapFromValidatedHandoff(
+    options.connector,
+    handoff,
+  )
 }
 
 /**
@@ -41,6 +64,17 @@ export function createInstallerManagedRuntimeBootstrap(
       return startPromise
     },
   }
+}
+
+function createInstallerManagedRuntimeBootstrapFromValidatedHandoff(
+  connector: ManagedMarketingOpsRuntimeConnector,
+  handoff: InstallerManagedRuntimeHandoff,
+): { start: () => Promise<MarketingOpsManagedRuntime | undefined> } {
+  return createInstallerManagedRuntimeBootstrap({
+    connector,
+    manifestSha256: handoff.manifestSha256,
+    runtimeRoot: handoff.runtimeRoot,
+  })
 }
 
 async function startManagedRuntime(
