@@ -164,6 +164,11 @@ Content Studio、Codex 对话、MCP 参数、日志或仓库。
 软链接、硬链接或额外文件变化都会 fail-closed。正式发行仍需要安装器内置/签名的声明，不能
 把调用方传入的摘要或 handoff JSON 当作信任根。
 
+`installer-host` 也仅向安装器导出 release statement 验签器：它要求调用方提供按 `keyId`
+绑定的 Ed25519 公钥表，严格校验 canonical UTF-8 声明、签名、兼容性和当前平台，且不会下载、
+落盘或启动制品。该表必须将来由安装器内置或由安装器已验证的签名资源提供；Content Studio
+当前不随代码提供、更不宣称存在官方公钥。普通 `content-studio-host` 和默认 MCP host 均不接入这条路径。
+
 ## 部署形态
 
 | 形态                 | 主要用途                     | 计算与数据位置                     | 公网要求               |

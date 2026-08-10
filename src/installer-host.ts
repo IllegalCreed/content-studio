@@ -10,6 +10,16 @@ export {
 export type {
   InstallManagedMarketingOpsRuntimeOptions,
 } from './host/managed-runtime-install'
+export {
+  verifyManagedMarketingOpsReleaseStatement,
+} from './host/managed-runtime-release'
+export type {
+  ManagedMarketingOpsReleaseArchitecture,
+  ManagedMarketingOpsReleaseOperatingSystem,
+  ManagedMarketingOpsReleaseTarget,
+  ManagedMarketingOpsReleaseVerificationInput,
+  VerifiedManagedMarketingOpsReleaseStatement,
+} from './host/managed-runtime-release'
 
 /**
  * Installer-only composition point. The caller must supply a handoff from an

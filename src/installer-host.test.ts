@@ -1,9 +1,16 @@
 // @env node
 
 import { describe, expect, it } from 'vitest'
-import { createContentStudioInstallerHostBootstrap } from './installer-host'
+import {
+  createContentStudioInstallerHostBootstrap,
+  verifyManagedMarketingOpsReleaseStatement,
+} from './installer-host'
 
 describe('installer host composition', () => {
+  it('exports release verification only from the installer-facing entrypoint', () => {
+    expect(verifyManagedMarketingOpsReleaseStatement).toBeTypeOf('function')
+  })
+
   it('keeps invalid and unavailable handoffs fail-closed without starting a runtime', async () => {
     const invalid = createContentStudioInstallerHostBootstrap({
       contractVersion: 3,
