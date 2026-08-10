@@ -2,8 +2,10 @@ import { access, readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import buildConfig from '../tsdown.config'
 
 const pluginRoot = fileURLToPath(new URL('../plugin/', import.meta.url))
+const packageRoot = fileURLToPath(new URL('../package.json', import.meta.url))
 
 const pluginNamePattern = /^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/
 const skillNamePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -11,6 +13,10 @@ const skillNamePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 async function readJson(relativePath: string): Promise<Record<string, unknown>> {
   const raw = await readFile(join(pluginRoot, relativePath), 'utf8')
   return JSON.parse(raw) as Record<string, unknown>
+}
+
+async function readPackageJson(): Promise<Record<string, unknown>> {
+  return JSON.parse(await readFile(packageRoot, 'utf8')) as Record<string, unknown>
 }
 
 function parseFrontmatter(markdown: string): {
@@ -84,13 +90,33 @@ describe('content studio agent plugin package', () => {
     expect(Object.keys(config)).toEqual(['mcpServers'])
     const servers = config.mcpServers as Record<string, unknown>
     const server = servers['content-studio'] as Record<string, unknown>
-    expect(server.command).toBe('content-studio')
+    expect(server.command).toBe('content-studio-host')
     expect(server.args).toEqual(['mcp', '--stdio'])
     expect(server.env_vars).toEqual([
       'CONTENT_STUDIO_PROJECT',
       'CONTENT_STUDIO_CAMPAIGN',
       'CONTENT_STUDIO_DB',
     ])
+  })
+
+  it('ships a dedicated host command without adding a second Plugin runtime', async () => {
+    const packageJson = await readPackageJson()
+
+    expect(packageJson.bin).toEqual({
+      'content-studio': './dist/cli.mjs',
+      'content-studio-host': './dist/host.mjs',
+    })
+  })
+
+  it('declares both executable entrypoints explicitly for the package build', () => {
+    expect(buildConfig).toMatchObject({
+      exports: {
+        bin: {
+          'content-studio': './src/cli.ts',
+          'content-studio-host': './src/host.ts',
+        },
+      },
+    })
   })
 
   it('ships the planned usage skills as immediate skill directories', async () => {

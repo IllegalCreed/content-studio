@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "content-studio": {
-      "command": "content-studio",
+      "command": "content-studio-host",
       "args": [
         "mcp",
         "--stdio"

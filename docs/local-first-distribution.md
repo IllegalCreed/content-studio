@@ -87,7 +87,8 @@ Content Studio Plugin 负责：
 - 通过 Content Studio 应用服务使用发布能力，不直接绕过应用服务调用渠道。
 
 本地开发和自托管分发可以通过 Plugin 的本地 MCP 配置启动
-`content-studio mcp --stdio`。Plugin 安装不应复制 core、任务状态机或发布逻辑。
+`content-studio-host mcp --stdio`；开发者也可以直接运行 `content-studio mcp --stdio`。
+Plugin 安装不应复制 core、任务状态机或发布逻辑。
 
 公开目录中的 MCP Plugin 仍需要可供审核访问的公网生产 MCP URL。因此公开市场
 形态需要一个轻量入口，但该入口不应承担默认的浏览器和媒体计算：
@@ -128,6 +129,9 @@ ChatGPT/Codex 公共 Plugin
 - `marketing-ops` 保持独立仓库、包和运行进程或 MCP 服务；
 - 安装器/宿主通过显式 `MarketingOpsManagedRuntime` 把已初始化 MCP client 和关闭句柄
   注入 Content Studio；应用层不发现任意命令、路径或凭据，CLI 只在命令结束时幂等关闭；
+- 每个受管 runtime 制品必须有安装器本身信任的摘要或签名；host 只接受固定
+  `dist/server.js`、`dist/keychain-helper`、`package.json` 和精确版本/contract 的清单，拒绝软链接、路径
+  扩展和文件校验失败。单独放在 runtime 目录内的 manifest 不能被当成信任根；
 - Content Studio 不复制渠道适配器，不直接执行真实渠道写入；
 - 两者不共享凭据存储，也不通过 MCP 传递凭据或浏览器会话；
 - `marketing-ops` 的渠道运行配置、账号授权、渠道策略和发布回执仍是外部写入事实来源；
@@ -143,6 +147,10 @@ ChatGPT/Codex 公共 Plugin
 渠道登录、验证码、2FA、审核和最终点击继续由渠道授权人在官方平台界面完成。
 渠道配置只能通过 `marketing-ops` 提供的本地交互式流程进行，不能把凭据放入
 Content Studio、Codex 对话、MCP 参数、日志或仓库。
+
+当前源码已提供 `content-studio-host` 和受管资产的 fail-closed 校验器，但尚未有带可信
+摘要/签名的公开 runtime 制品。因此它不会启动 `marketing-ops`，也不会用 PATH、环境变量或
+临时路径替代固定安装器资产。
 
 ## 部署形态
 

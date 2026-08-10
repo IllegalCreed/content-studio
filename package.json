@@ -8,11 +8,13 @@
   "exports": {
     ".": "./dist/index.mjs",
     "./cli": "./dist/cli.mjs",
+    "./host": "./dist/host.mjs",
     "./package.json": "./package.json"
   },
   "types": "./dist/index.d.mts",
   "bin": {
-    "content-studio": "./dist/cli.mjs"
+    "content-studio": "./dist/cli.mjs",
+    "content-studio-host": "./dist/host.mjs"
   },
   "files": [
     "dist"

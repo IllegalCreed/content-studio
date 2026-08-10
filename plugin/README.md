@@ -20,7 +20,7 @@ plugin/
 ## 当前本地开发契约
 
 这个目录目前不是“一装即用”的公开发行物。使用前必须先从源码构建并让
-`content-studio` 可执行文件位于宿主的 `PATH`，再由项目所有者把
+`content-studio` 与 `content-studio-host` 可执行文件位于宿主的 `PATH`，再由项目所有者把
 `CONTENT_STUDIO_PROJECT` 设置为已确认的 `project.json` 绝对路径。需要渠道绑定和
 制作任务时，再显式设置活动简报和状态库路径；这些变量都只是 Owner 控制的本地路径，
 不是凭据：
@@ -53,6 +53,11 @@ content-studio mcp --stdio \
 Runtime 注入时可用；否则它返回阻塞状态，不会自动发现命令、读取凭据或扩大发布权限。
 宿主若通过 `MarketingOpsManagedRuntime` 注入该 client，CLI 会在本次命令结束时幂等关闭
 受管连接；Plugin 本身不携带进程路径、账号配置或凭据。
+
+插件配置实际启动的是 `content-studio-host mcp --stdio`。它只保留上面的三个
+`CONTENT_STUDIO_*` 路径变量，不读取任何 `marketing-ops` 命令或路径变量。当前源码发行物
+还没有安装器签名/内置摘要所信任的受管 runtime 制品；host 因此不会查找或启动替代进程，
+状态工具继续安全地显示为阻塞。
 
 项目清单可由下面两条命令起草；登记或使用前仍须由项目所有者确认：
 
