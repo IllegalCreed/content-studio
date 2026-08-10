@@ -149,11 +149,16 @@ function parseVerificationInput(
   ) {
     return null
   }
+  if (input.statement.byteLength === 0 || input.statement.byteLength > MAX_STATEMENT_BYTES)
+    return null
+  const statement = Buffer.from(input.statement)
+  if (statement.byteLength === 0 || statement.byteLength > MAX_STATEMENT_BYTES)
+    return null
   return {
     signature: input.signature,
     // Take one owned snapshot so canonical validation and signature checking
     // cannot observe different bytes if the caller mutates its view.
-    statement: Buffer.from(input.statement),
+    statement,
     trustedPublicKeys: input.trustedPublicKeys,
   }
 }
