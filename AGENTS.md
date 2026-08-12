@@ -73,4 +73,12 @@ project data, browser execution, and media production remain local by default.
 - `pnpm build`
 - `pnpm generate:example`
 
+## Browser-assisted adapter research gate
+
+Before changing or exercising any fixed browser-assisted channel adapter, inspect the real owner-controlled workflow with the Chrome plugin first. Capture the complete relevant DOM across every state the workflow will use, including dialogs, dropdowns, selected states, scroll/lazy-render states, native file-chooser handoffs, async prompts, and owner authentication handoffs. Raw page DOM is temporary evidence and must not be persisted when it contains account or session data.
+
+Before assembling Playwright logic, create a sanitized inventory of every required element with its exact semantic role/label/text/test-id locator, expected visible cardinality, bounded audited parent relationship when needed, scroll requirement, and observable precondition/postcondition. Verify every locator independently on the live page. Do not use page-wide fuzzy text, document order, coordinates, arbitrary selectors, or guesses from screenshots/errors.
+
+Only after the inventory passes may implementation proceed: add red-green tests for the DOM contract, scrolling and file-chooser ownership; encode `precondition -> one semantic action -> postcondition`; verify one transition at a time; then run the full assisted-prepare flow. Any unexpected chooser, dialog, locator cardinality, or state change stops the runner and returns the work to Chrome DOM investigation. Authentication and final publish confirmation remain owner handoffs.
+
 Before commit, inspect `git status`, stage exact files, and do not use `git add -A`.
