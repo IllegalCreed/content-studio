@@ -10,6 +10,9 @@ const serverContents = 'managed marketing-ops server fixture\n'
 const helperContents = 'managed marketing-ops keychain helper fixture\n'
 const browsersContents = '{"browsers":[]}\n'
 const bundleContents = 'managed marketing-ops playwright bundle fixture\n'
+const playwrightLicenseContents = 'managed playwright license fixture\n'
+const playwrightNoticeContents = 'managed playwright notice fixture\n'
+const playwrightThirdPartyNoticesContents = 'managed playwright third-party notices fixture\n'
 
 function sha256(contents: string): string {
   return createHash('sha256').update(contents).digest('hex')
@@ -21,7 +24,11 @@ async function createRuntimeAsset(
   const root = await mkdtemp(join(tmpdir(), 'content-studio-managed-runtime-'))
   temporaryDirectories.push(root)
   await mkdir(join(root, 'dist'), { recursive: true })
+  await mkdir(join(root, 'LICENSES', 'playwright-core'), { recursive: true })
   await writeFile(join(root, 'browsers.json'), browsersContents, 'utf8')
+  await writeFile(join(root, 'LICENSES/playwright-core/LICENSE'), playwrightLicenseContents, 'utf8')
+  await writeFile(join(root, 'LICENSES/playwright-core/NOTICE'), playwrightNoticeContents, 'utf8')
+  await writeFile(join(root, 'LICENSES/playwright-core/ThirdPartyNotices.txt'), playwrightThirdPartyNoticesContents, 'utf8')
   await writeFile(join(root, 'dist/server.js'), serverContents, 'utf8')
   await writeFile(join(root, 'dist/keychain-helper'), helperContents, 'utf8')
   await writeFile(join(root, 'dist/playwright-core.bundle.cjs'), bundleContents, 'utf8')
@@ -34,6 +41,9 @@ async function createRuntimeAsset(
     contractVersion: 3,
     files: [
       { path: 'browsers.json', sha256: sha256(browsersContents) },
+      { path: 'LICENSES/playwright-core/LICENSE', sha256: sha256(playwrightLicenseContents) },
+      { path: 'LICENSES/playwright-core/NOTICE', sha256: sha256(playwrightNoticeContents) },
+      { path: 'LICENSES/playwright-core/ThirdPartyNotices.txt', sha256: sha256(playwrightThirdPartyNoticesContents) },
       { path: 'dist/keychain-helper', sha256: sha256(helperContents) },
       { path: 'dist/playwright-core.bundle.cjs', sha256: sha256(bundleContents) },
       { path: 'dist/server.js', sha256: sha256(serverContents) },
@@ -75,6 +85,13 @@ describe('installer-owned marketing-ops runtime asset', () => {
   it('fails closed when a declared runtime file no longer matches its integrity digest', async () => {
     const asset = await createRuntimeAsset()
     await writeFile(join(asset.root, 'dist/server.js'), 'tampered server fixture\n', 'utf8')
+
+    await expect(resolveManagedMarketingOpsRuntimeAsset(asset.root, asset.manifestSha256)).resolves.toBeNull()
+  })
+
+  it('fails closed when a required Playwright notice file is missing', async () => {
+    const asset = await createRuntimeAsset()
+    await rm(join(asset.root, 'LICENSES/playwright-core/NOTICE'))
 
     await expect(resolveManagedMarketingOpsRuntimeAsset(asset.root, asset.manifestSha256)).resolves.toBeNull()
   })

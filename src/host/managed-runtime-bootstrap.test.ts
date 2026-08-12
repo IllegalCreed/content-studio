@@ -22,8 +22,15 @@ async function createRuntimeAsset(): Promise<{ manifestSha256: string, root: str
   const helper = 'managed marketing-ops keychain helper fixture\n'
   const browsers = '{"browsers":[]}\n'
   const bundle = 'managed marketing-ops playwright bundle fixture\n'
+  const license = 'managed playwright license fixture\n'
+  const notice = 'managed playwright notice fixture\n'
+  const thirdPartyNotices = 'managed playwright third-party notices fixture\n'
   await mkdir(join(root, 'dist'), { recursive: true })
+  await mkdir(join(root, 'LICENSES', 'playwright-core'), { recursive: true })
   await writeFile(join(root, 'browsers.json'), browsers, 'utf8')
+  await writeFile(join(root, 'LICENSES/playwright-core/LICENSE'), license, 'utf8')
+  await writeFile(join(root, 'LICENSES/playwright-core/NOTICE'), notice, 'utf8')
+  await writeFile(join(root, 'LICENSES/playwright-core/ThirdPartyNotices.txt'), thirdPartyNotices, 'utf8')
   await writeFile(join(root, 'dist/server.js'), server, 'utf8')
   await writeFile(join(root, 'dist/keychain-helper'), helper, 'utf8')
   await writeFile(join(root, 'dist/playwright-core.bundle.cjs'), bundle, 'utf8')
@@ -36,6 +43,9 @@ async function createRuntimeAsset(): Promise<{ manifestSha256: string, root: str
     contractVersion: 3,
     files: [
       { path: 'browsers.json', sha256: sha256(browsers) },
+      { path: 'LICENSES/playwright-core/LICENSE', sha256: sha256(license) },
+      { path: 'LICENSES/playwright-core/NOTICE', sha256: sha256(notice) },
+      { path: 'LICENSES/playwright-core/ThirdPartyNotices.txt', sha256: sha256(thirdPartyNotices) },
       { path: 'dist/keychain-helper', sha256: sha256(helper) },
       { path: 'dist/playwright-core.bundle.cjs', sha256: sha256(bundle) },
       { path: 'dist/server.js', sha256: sha256(server) },

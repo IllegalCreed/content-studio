@@ -28,6 +28,9 @@ const READ_NOFOLLOW_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW
 
 const RUNTIME_FILES = [
   { executable: false, mode: PRIVATE_FILE_MODE, path: 'browsers.json' },
+  { executable: false, mode: PRIVATE_FILE_MODE, path: 'LICENSES/playwright-core/LICENSE' },
+  { executable: false, mode: PRIVATE_FILE_MODE, path: 'LICENSES/playwright-core/NOTICE' },
+  { executable: false, mode: PRIVATE_FILE_MODE, path: 'LICENSES/playwright-core/ThirdPartyNotices.txt' },
   { executable: true, mode: PRIVATE_DIRECTORY_MODE, path: 'dist/keychain-helper' },
   { executable: false, mode: PRIVATE_FILE_MODE, path: 'dist/playwright-core.bundle.cjs' },
   { executable: false, mode: PRIVATE_FILE_MODE, path: 'dist/server.js' },
@@ -36,9 +39,12 @@ const RUNTIME_FILES = [
   { executable: false, mode: PRIVATE_FILE_MODE, path: 'runtime-manifest.json' },
 ] as const
 
-const ROOT_ENTRIES = ['browsers.json', 'dist', 'package.json', 'runtime-manifest.json']
-const ROOT_ENTRIES_WITH_ASSET_BUNDLES = ['asset-bundles', ...ROOT_ENTRIES]
+const RUNTIME_DIRECTORIES = ['dist', 'LICENSES', 'LICENSES/playwright-core'] as const
+const ROOT_ENTRIES = ['LICENSES', 'browsers.json', 'dist', 'package.json', 'runtime-manifest.json']
+const ROOT_ENTRIES_WITH_ASSET_BUNDLES = ['LICENSES', 'asset-bundles', 'browsers.json', 'dist', 'package.json', 'runtime-manifest.json']
 const DIST_ENTRIES = ['keychain-helper', 'playwright-core.bundle.cjs', 'server.js']
+const LICENSES_ENTRIES = ['playwright-core']
+const PLAYWRIGHT_LICENSE_ENTRIES = ['LICENSE', 'NOTICE', 'ThirdPartyNotices.txt']
 
 export interface InstallManagedMarketingOpsRuntimeOptions {
   /** A digest from the installer's signed or embedded trust source. */
@@ -218,11 +224,13 @@ async function writeFixedRuntimePackage(
   destination: string,
   currentUid: number,
 ): Promise<boolean> {
-  const dist = join(destination, 'dist')
-  await mkdir(dist, { mode: PRIVATE_DIRECTORY_MODE })
-  await chmod(dist, PRIVATE_DIRECTORY_MODE)
-  if (await readOwnedPrivateDirectory(dist, currentUid) !== dist)
-    return false
+  for (const relativeDirectory of RUNTIME_DIRECTORIES) {
+    const directory = join(destination, relativeDirectory)
+    await mkdir(directory, { mode: PRIVATE_DIRECTORY_MODE })
+    await chmod(directory, PRIVATE_DIRECTORY_MODE)
+    if (await readOwnedPrivateDirectory(directory, currentUid) !== directory)
+      return false
+  }
 
   for (const file of RUNTIME_FILES) {
     const contents = await readFixedStagingFile(sourceRoot, file.path, file.executable)
@@ -298,6 +306,18 @@ async function hasExactPrivateRuntimeLayout(
     return false
   const distEntries = (await readdir(dist)).sort()
   if (!sameEntries(distEntries, DIST_ENTRIES))
+    return false
+  const licenses = join(root, 'LICENSES')
+  const safeLicenses = await readOwnedPrivateDirectory(licenses, currentUid)
+  if (safeLicenses !== licenses || !hasMode(await lstat(licenses), PRIVATE_DIRECTORY_MODE))
+    return false
+  if (!sameEntries((await readdir(licenses)).sort(), LICENSES_ENTRIES))
+    return false
+  const playwrightLicenses = join(licenses, 'playwright-core')
+  const safePlaywrightLicenses = await readOwnedPrivateDirectory(playwrightLicenses, currentUid)
+  if (safePlaywrightLicenses !== playwrightLicenses || !hasMode(await lstat(playwrightLicenses), PRIVATE_DIRECTORY_MODE))
+    return false
+  if (!sameEntries((await readdir(playwrightLicenses)).sort(), PLAYWRIGHT_LICENSE_ENTRIES))
     return false
 
   for (const file of RUNTIME_FILES) {

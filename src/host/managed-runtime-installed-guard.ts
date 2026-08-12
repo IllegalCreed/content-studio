@@ -10,9 +10,11 @@ const RUNTIMES_DIRECTORY = 'runtimes'
 const PRIVATE_DIRECTORY_MODE = 0o700
 const PRIVATE_FILE_MODE = 0o600
 const PRIVATE_EXECUTABLE_MODE = 0o700
-const ROOT_ENTRIES = ['browsers.json', 'dist', 'package.json', 'runtime-manifest.json']
-const ROOT_ENTRIES_WITH_ASSET_BUNDLES = ['asset-bundles', ...ROOT_ENTRIES]
+const ROOT_ENTRIES = ['LICENSES', 'browsers.json', 'dist', 'package.json', 'runtime-manifest.json']
+const ROOT_ENTRIES_WITH_ASSET_BUNDLES = ['LICENSES', 'asset-bundles', 'browsers.json', 'dist', 'package.json', 'runtime-manifest.json']
 const DIST_ENTRIES = ['keychain-helper', 'playwright-core.bundle.cjs', 'server.js']
+const LICENSES_ENTRIES = ['playwright-core']
+const PLAYWRIGHT_LICENSE_ENTRIES = ['LICENSE', 'NOTICE', 'ThirdPartyNotices.txt']
 
 /**
  * Checks the immutable-on-disk shape expected of an installed runtime.
@@ -58,6 +60,16 @@ export async function verifyInstalledManagedMarketingOpsRuntime(
       return false
     if (!await hasExactEntries(dist, DIST_ENTRIES))
       return false
+    const licenses = resolve(root, 'LICENSES')
+    if (!await isPrivateDirectory(licenses, currentUid, PRIVATE_DIRECTORY_MODE))
+      return false
+    if (!await hasExactEntries(licenses, LICENSES_ENTRIES))
+      return false
+    const playwrightLicenses = resolve(licenses, 'playwright-core')
+    if (!await isPrivateDirectory(playwrightLicenses, currentUid, PRIVATE_DIRECTORY_MODE))
+      return false
+    if (!await hasExactEntries(playwrightLicenses, PLAYWRIGHT_LICENSE_ENTRIES))
+      return false
 
     return await hasPrivateRuntimeFiles(root, currentUid)
   }
@@ -69,6 +81,9 @@ export async function verifyInstalledManagedMarketingOpsRuntime(
 async function hasPrivateRuntimeFiles(root: string, currentUid: number): Promise<boolean> {
   const files: ReadonlyArray<{ mode: number, path: string }> = [
     { mode: PRIVATE_FILE_MODE, path: 'browsers.json' },
+    { mode: PRIVATE_FILE_MODE, path: 'LICENSES/playwright-core/LICENSE' },
+    { mode: PRIVATE_FILE_MODE, path: 'LICENSES/playwright-core/NOTICE' },
+    { mode: PRIVATE_FILE_MODE, path: 'LICENSES/playwright-core/ThirdPartyNotices.txt' },
     { mode: PRIVATE_EXECUTABLE_MODE, path: 'dist/keychain-helper' },
     { mode: PRIVATE_FILE_MODE, path: 'dist/playwright-core.bundle.cjs' },
     { mode: PRIVATE_FILE_MODE, path: 'dist/server.js' },

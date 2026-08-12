@@ -25,6 +25,9 @@ const SERVER = 'installed marketing-ops server fixture\n'
 const HELPER = 'installed marketing-ops keychain helper fixture\n'
 const BROWSERS = '{"browsers":[]}\n'
 const BUNDLE = 'installed marketing-ops playwright bundle fixture\n'
+const LICENSE = 'installed playwright license fixture\n'
+const NOTICE = 'installed playwright notice fixture\n'
+const THIRD_PARTY_NOTICES = 'installed playwright third-party notices fixture\n'
 const PACKAGE_JSON = JSON.stringify({
   name: '@illegalcreed/marketing-ops',
   private: true,
@@ -41,7 +44,11 @@ async function createInstalledRuntime(includeAssetBundles = false): Promise<stri
   temporaryDirectories.push(parent)
   const root = join(parent, 'runtimes', 'marketing-ops', '0.1.0')
   await mkdir(join(root, 'dist'), { recursive: true, mode: 0o700 })
+  await mkdir(join(root, 'LICENSES', 'playwright-core'), { recursive: true, mode: 0o700 })
   await writeFile(join(root, 'browsers.json'), BROWSERS, { mode: 0o600 })
+  await writeFile(join(root, 'LICENSES/playwright-core/LICENSE'), LICENSE, { mode: 0o600 })
+  await writeFile(join(root, 'LICENSES/playwright-core/NOTICE'), NOTICE, { mode: 0o600 })
+  await writeFile(join(root, 'LICENSES/playwright-core/ThirdPartyNotices.txt'), THIRD_PARTY_NOTICES, { mode: 0o600 })
   await writeFile(join(root, 'dist/server.js'), SERVER, { mode: 0o600 })
   await writeFile(join(root, 'dist/keychain-helper'), HELPER, { mode: 0o700 })
   await writeFile(join(root, 'dist/playwright-core.bundle.cjs'), BUNDLE, { mode: 0o600 })
@@ -50,6 +57,9 @@ async function createInstalledRuntime(includeAssetBundles = false): Promise<stri
     contractVersion: 3,
     files: [
       { path: 'browsers.json', sha256: sha256(BROWSERS) },
+      { path: 'LICENSES/playwright-core/LICENSE', sha256: sha256(LICENSE) },
+      { path: 'LICENSES/playwright-core/NOTICE', sha256: sha256(NOTICE) },
+      { path: 'LICENSES/playwright-core/ThirdPartyNotices.txt', sha256: sha256(THIRD_PARTY_NOTICES) },
       { path: 'dist/keychain-helper', sha256: sha256(HELPER) },
       { path: 'dist/playwright-core.bundle.cjs', sha256: sha256(BUNDLE) },
       { path: 'dist/server.js', sha256: sha256(SERVER) },
@@ -66,6 +76,8 @@ async function createInstalledRuntime(includeAssetBundles = false): Promise<stri
   await chmod(join(parent, 'runtimes', 'marketing-ops'), 0o700)
   await chmod(root, 0o700)
   await chmod(join(root, 'dist'), 0o700)
+  await chmod(join(root, 'LICENSES'), 0o700)
+  await chmod(join(root, 'LICENSES', 'playwright-core'), 0o700)
   if (includeAssetBundles) {
     await mkdir(join(root, 'asset-bundles'), { mode: 0o700 })
     await chmod(join(root, 'asset-bundles'), 0o700)
@@ -95,6 +107,14 @@ describe.runIf(process.platform !== 'win32')('installed marketing-ops runtime gu
     await chmod(join(root, 'dist'), 0o700)
     await chmod(join(root, 'dist/server.js'), 0o640)
     await expect(verifyInstalledManagedMarketingOpsRuntime(root)).resolves.toBe(false)
+
+    const licenseRoot = await createInstalledRuntime()
+    await chmod(join(licenseRoot, 'LICENSES', 'playwright-core'), 0o750)
+    await expect(verifyInstalledManagedMarketingOpsRuntime(licenseRoot)).resolves.toBe(false)
+
+    const licenseFileRoot = await createInstalledRuntime()
+    await chmod(join(licenseFileRoot, 'LICENSES/playwright-core/NOTICE'), 0o640)
+    await expect(verifyInstalledManagedMarketingOpsRuntime(licenseFileRoot)).resolves.toBe(false)
   })
 
   it('rejects browser runtime sidecars that are no longer private files', async () => {
@@ -140,6 +160,21 @@ describe.runIf(process.platform !== 'win32')('installed marketing-ops runtime gu
     await linkIfSupported(outsideHardlink, join(hardlinkRoot, 'dist/server.js'))
     if ((await lstat(outsideHardlink)).nlink > 1)
       await expect(verifyInstalledManagedMarketingOpsRuntime(hardlinkRoot)).resolves.toBe(false)
+  })
+
+  it('requires the exact private Playwright license tree', async () => {
+    const missingFileRoot = await createInstalledRuntime()
+    await rm(join(missingFileRoot, 'LICENSES/playwright-core/NOTICE'))
+    await expect(verifyInstalledManagedMarketingOpsRuntime(missingFileRoot)).resolves.toBe(false)
+
+    const extraFileRoot = await createInstalledRuntime()
+    await writeFile(join(extraFileRoot, 'LICENSES/playwright-core/extra'), 'extra\n', { mode: 0o600 })
+    await expect(verifyInstalledManagedMarketingOpsRuntime(extraFileRoot)).resolves.toBe(false)
+
+    const wrongTypeRoot = await createInstalledRuntime()
+    await rm(join(wrongTypeRoot, 'LICENSES/playwright-core/NOTICE'))
+    await mkdir(join(wrongTypeRoot, 'LICENSES/playwright-core/NOTICE'), { mode: 0o700 })
+    await expect(verifyInstalledManagedMarketingOpsRuntime(wrongTypeRoot)).resolves.toBe(false)
   })
 
   it('rejects an unsafe owner or parent directory', async () => {

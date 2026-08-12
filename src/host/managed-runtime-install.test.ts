@@ -46,6 +46,9 @@ async function createRuntimeStaging(): Promise<{
   const helper = 'managed marketing-ops staging keychain helper\n'
   const browsers = '{"browsers":[]}\n'
   const bundle = 'managed marketing-ops staging playwright bundle\n'
+  const license = 'managed playwright license fixture\n'
+  const notice = 'managed playwright notice fixture\n'
+  const thirdPartyNotices = 'managed playwright third-party notices fixture\n'
   const packageJson = JSON.stringify({
     name: '@illegalcreed/marketing-ops',
     private: true,
@@ -53,8 +56,14 @@ async function createRuntimeStaging(): Promise<{
     version: '0.1.0',
   })
   await mkdir(join(root, 'dist'), { mode: 0o700 })
+  await mkdir(join(root, 'LICENSES', 'playwright-core'), { mode: 0o700, recursive: true })
   await chmod(join(root, 'dist'), 0o700)
+  await chmod(join(root, 'LICENSES'), 0o700)
+  await chmod(join(root, 'LICENSES/playwright-core'), 0o700)
   await writeFile(join(root, 'browsers.json'), browsers, { mode: 0o600 })
+  await writeFile(join(root, 'LICENSES/playwright-core/LICENSE'), license, { mode: 0o600 })
+  await writeFile(join(root, 'LICENSES/playwright-core/NOTICE'), notice, { mode: 0o600 })
+  await writeFile(join(root, 'LICENSES/playwright-core/ThirdPartyNotices.txt'), thirdPartyNotices, { mode: 0o600 })
   await writeFile(join(root, 'dist/server.js'), server, { mode: 0o600 })
   await writeFile(join(root, 'dist/keychain-helper'), helper, { mode: 0o700 })
   await chmod(join(root, 'dist/keychain-helper'), 0o700)
@@ -64,6 +73,9 @@ async function createRuntimeStaging(): Promise<{
     contractVersion: 3,
     files: [
       { path: 'browsers.json', sha256: sha256(browsers) },
+      { path: 'LICENSES/playwright-core/LICENSE', sha256: sha256(license) },
+      { path: 'LICENSES/playwright-core/NOTICE', sha256: sha256(notice) },
+      { path: 'LICENSES/playwright-core/ThirdPartyNotices.txt', sha256: sha256(thirdPartyNotices) },
       { path: 'dist/keychain-helper', sha256: sha256(helper) },
       { path: 'dist/playwright-core.bundle.cjs', sha256: sha256(bundle) },
       { path: 'dist/server.js', sha256: sha256(server) },
@@ -107,10 +119,17 @@ describe.runIf(process.platform !== 'win32')('installer-owned marketing-ops runt
     })
 
     await expect(readdir(destination)).resolves.toEqual([
+      'LICENSES',
       'browsers.json',
       'dist',
       'package.json',
       'runtime-manifest.json',
+    ])
+    await expect(readdir(join(destination, 'LICENSES'))).resolves.toEqual(['playwright-core'])
+    await expect(readdir(join(destination, 'LICENSES', 'playwright-core'))).resolves.toEqual([
+      'LICENSE',
+      'NOTICE',
+      'ThirdPartyNotices.txt',
     ])
     await expect(readdir(join(destination, 'dist'))).resolves.toEqual([
       'keychain-helper',
@@ -124,7 +143,12 @@ describe.runIf(process.platform !== 'win32')('installer-owned marketing-ops runt
     await expect(lstat(destination)).resolves.toMatchObject({ mode: expect.any(Number) })
     expect((await lstat(destination)).mode & 0o777).toBe(0o700)
     expect((await lstat(join(destination, 'dist'))).mode & 0o777).toBe(0o700)
+    expect((await lstat(join(destination, 'LICENSES'))).mode & 0o777).toBe(0o700)
+    expect((await lstat(join(destination, 'LICENSES/playwright-core'))).mode & 0o777).toBe(0o700)
     expect((await lstat(join(destination, 'browsers.json'))).mode & 0o777).toBe(0o600)
+    expect((await lstat(join(destination, 'LICENSES/playwright-core/LICENSE'))).mode & 0o777).toBe(0o600)
+    expect((await lstat(join(destination, 'LICENSES/playwright-core/NOTICE'))).mode & 0o777).toBe(0o600)
+    expect((await lstat(join(destination, 'LICENSES/playwright-core/ThirdPartyNotices.txt'))).mode & 0o777).toBe(0o600)
     expect((await lstat(join(destination, 'dist/server.js'))).mode & 0o777).toBe(0o600)
     expect((await lstat(join(destination, 'dist/keychain-helper'))).mode & 0o777).toBe(0o700)
     expect((await lstat(join(destination, 'dist/playwright-core.bundle.cjs'))).mode & 0o777).toBe(0o600)

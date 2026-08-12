@@ -29,6 +29,9 @@ async function createRuntimeAsset(
   const helper = 'managed marketing-ops keychain helper fixture\n'
   const browsers = '{"browsers":[]}\n'
   const bundle = 'managed marketing-ops playwright bundle fixture\n'
+  const license = 'managed playwright license fixture\n'
+  const notice = 'managed playwright notice fixture\n'
+  const thirdPartyNotices = 'managed playwright third-party notices fixture\n'
   const packageJson = JSON.stringify({
     name: '@illegalcreed/marketing-ops',
     private: true,
@@ -36,7 +39,11 @@ async function createRuntimeAsset(
     version: '0.1.0',
   })
   await mkdir(join(root, 'dist'), { recursive: true, mode: 0o700 })
+  await mkdir(join(root, 'LICENSES', 'playwright-core'), { recursive: true, mode: 0o700 })
   await writeFile(join(root, 'browsers.json'), browsers, { encoding: 'utf8', mode: 0o600 })
+  await writeFile(join(root, 'LICENSES/playwright-core/LICENSE'), license, { encoding: 'utf8', mode: 0o600 })
+  await writeFile(join(root, 'LICENSES/playwright-core/NOTICE'), notice, { encoding: 'utf8', mode: 0o600 })
+  await writeFile(join(root, 'LICENSES/playwright-core/ThirdPartyNotices.txt'), thirdPartyNotices, { encoding: 'utf8', mode: 0o600 })
   await writeFile(join(root, 'dist/server.js'), server, { encoding: 'utf8', mode: 0o600 })
   await writeFile(join(root, 'dist/keychain-helper'), helper, { encoding: 'utf8', mode: 0o700 })
   await writeFile(join(root, 'dist/playwright-core.bundle.cjs'), bundle, { encoding: 'utf8', mode: 0o600 })
@@ -45,6 +52,9 @@ async function createRuntimeAsset(
     contractVersion: 3,
     files: [
       { path: 'browsers.json', sha256: sha256(browsers) },
+      { path: 'LICENSES/playwright-core/LICENSE', sha256: sha256(license) },
+      { path: 'LICENSES/playwright-core/NOTICE', sha256: sha256(notice) },
+      { path: 'LICENSES/playwright-core/ThirdPartyNotices.txt', sha256: sha256(thirdPartyNotices) },
       { path: 'dist/keychain-helper', sha256: sha256(helper) },
       { path: 'dist/playwright-core.bundle.cjs', sha256: sha256(bundle) },
       { path: 'dist/server.js', sha256: sha256(server) },
@@ -59,6 +69,8 @@ async function createRuntimeAsset(
   await chmod(join(parent, 'runtimes', 'marketing-ops'), 0o700)
   await chmod(root, 0o700)
   await chmod(join(root, 'dist'), 0o700)
+  await chmod(join(root, 'LICENSES'), 0o700)
+  await chmod(join(root, 'LICENSES/playwright-core'), 0o700)
   await chmod(join(root, 'dist/keychain-helper'), 0o700)
   const asset = await resolveManagedMarketingOpsRuntimeAsset(root, sha256(manifest))
   if (asset === null)
