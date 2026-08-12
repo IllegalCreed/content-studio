@@ -20,9 +20,13 @@ async function createRuntimeAsset(): Promise<{ manifestSha256: string, root: str
   temporaryDirectories.push(parent)
   const server = 'managed marketing-ops server fixture\n'
   const helper = 'managed marketing-ops keychain helper fixture\n'
+  const browsers = '{"browsers":[]}\n'
+  const bundle = 'managed marketing-ops playwright bundle fixture\n'
   await mkdir(join(root, 'dist'), { recursive: true })
+  await writeFile(join(root, 'browsers.json'), browsers, 'utf8')
   await writeFile(join(root, 'dist/server.js'), server, 'utf8')
   await writeFile(join(root, 'dist/keychain-helper'), helper, 'utf8')
+  await writeFile(join(root, 'dist/playwright-core.bundle.cjs'), bundle, 'utf8')
   const packageJson = JSON.stringify({
     name: '@illegalcreed/marketing-ops',
     version: '0.1.0',
@@ -31,7 +35,9 @@ async function createRuntimeAsset(): Promise<{ manifestSha256: string, root: str
   const manifest = JSON.stringify({
     contractVersion: 3,
     files: [
+      { path: 'browsers.json', sha256: sha256(browsers) },
       { path: 'dist/keychain-helper', sha256: sha256(helper) },
+      { path: 'dist/playwright-core.bundle.cjs', sha256: sha256(bundle) },
       { path: 'dist/server.js', sha256: sha256(server) },
       { path: 'package.json', sha256: sha256(packageJson) },
     ],

@@ -4,6 +4,7 @@ import type { VideoViewport } from '../types'
 import { execFile as execFileCallback } from 'node:child_process'
 import {
   access,
+  chmod,
   unlink,
   writeFile,
 } from 'node:fs/promises'
@@ -149,6 +150,7 @@ export async function composeVideoClips(
   }
 
   throwIfAborted(input.signal)
+  await chmod(input.outputPath, 0o600)
   let durationSeconds: number
   try {
     durationSeconds = await probeMediaDuration(

@@ -71,6 +71,57 @@ const request: MarketingOpsCampaignRequest = {
   },
 }
 
+function resultEnvelope(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    campaignId: request.campaignId,
+    failures: [],
+    handoffs: [],
+    limitations: [],
+    projectId: request.projectId,
+    receipts: [],
+    ...overrides,
+  }
+}
+
+function receiptEnvelope(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    activityId: 'activity-quick-sort',
+    campaignId: request.campaignId,
+    channel: 'bilibili',
+    contentFormat: 'image-text',
+    contentHash: 'c'.repeat(64),
+    contentStudioContentHash: 'b'.repeat(64),
+    idempotencyKey: 'campaign-v3/algorithm-visualizer/quick-sort-launch/bilibili/package/hash',
+    packageId: 'bilibili-image-text-zh',
+    postId: '123456789',
+    projectId: request.projectId,
+    publicUrl: 'https://www.bilibili.com/opus/123456789',
+    publicationId: 'bilibili-image-text-zh',
+    publishedAt: '2026-08-10T10:01:00.000Z',
+    status: 'published',
+    ...overrides,
+  }
+}
+
+function handoffEnvelope(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    channel: 'bilibili',
+    contentHash: 'c'.repeat(64),
+    contentStudioContentHash: 'b'.repeat(64),
+    form: 'image-text',
+    idempotencyKey: 'campaign-v3/algorithm-visualizer/quick-sort-launch/bilibili/package/hash',
+    packageId: 'bilibili-image-text-zh',
+    publicationId: 'bilibili-image-text-zh',
+    status: 'awaiting-owner',
+    ...overrides,
+  }
+}
+
+async function publishReturned(value: unknown, input = request): Promise<unknown> {
+  return createMarketingOpsPublishClient({ publishCampaign: async () => value })
+    .publishCampaign(input)
+}
+
 describe('marketing-ops publish client', () => {
   it('passes only the validated campaign request to the transport and parses handoffs', async () => {
     const publishCampaign = vi.fn(async () => ({
@@ -401,6 +452,154 @@ describe('marketing-ops publish client', () => {
       content: [{ type: 'text', text: 'failure' }],
     }))
     const client = createMarketingOpsPublishClient({ publishCampaign })
-    await expect(client.publishCampaign(request)).rejects.toThrow(/failed/i)
+    await expect(client.publishCampaign(request)).rejects.toThrow(/failure/)
+  })
+
+  it('preserves transport failure details for assisted browser diagnostics', async () => {
+    const client = createMarketingOpsPublishClient({
+      publishCampaign: async () => {
+        throw new Error('image paste timed out')
+      },
+    })
+    await expect(client.publishCampaign(request)).rejects.toThrow(/image paste timed out/)
+
+    const sensitiveClient = createMarketingOpsPublishClient({
+      publishCampaign: async () => {
+        throw new Error('Bearer private-token')
+      },
+    })
+    await expect(sensitiveClient.publishCampaign(request)).rejects.toThrow(
+      /^Marketing-ops publish failed$/,
+    )
+  })
+
+  it('rejects malformed result envelopes and normalizes non-text failures safely', async () => {
+    for (const content of [
+      undefined,
+      [null, [], { type: 'image', text: 'ignored' }, { type: 'text', text: '' }],
+    ]) {
+      await expect(publishReturned({ content, isError: true }))
+        .rejects
+        .toThrow(/^Marketing-ops publish failed$/)
+    }
+    await expect(publishReturned({
+      content: [{ type: 'text', text: ' first ' }, { type: 'text', text: 'second' }],
+      isError: true,
+    })).rejects.toThrow(/first second/u)
+
+    for (const malformed of [
+      null,
+      [],
+      resultEnvelope({ unexpected: true }),
+      resultEnvelope({ projectId: 'other-project' }),
+      resultEnvelope({ campaignId: 'other-campaign' }),
+      resultEnvelope({ receipts: null }),
+      resultEnvelope({ failures: null }),
+      resultEnvelope({ handoffs: null }),
+    ]) {
+      await expect(publishReturned(malformed)).rejects.toThrow(/schema|scope/i)
+    }
+    await expect(publishReturned(resultEnvelope({ limitations: null }))).resolves.toMatchObject({
+      limitations: [],
+    })
+    await expect(publishReturned(resultEnvelope({ limitations: ['kept', 1, null] }))).resolves.toMatchObject({
+      limitations: ['kept'],
+    })
+  })
+
+  it('validates every locked receipt boundary and accepts a failed receipt without a public URL', async () => {
+    const invalidCases: Array<[string, Record<string, unknown>, RegExp]> = [
+      ['project', { projectId: 'other-project' }, /scope/i],
+      ['campaign', { campaignId: 'other-campaign' }, /scope/i],
+      ['channel', { channel: 'youtube' }, /channel|package/i],
+      ['status', { status: 'pending' }, /status/i],
+      ['URL type', { publicUrl: 1 }, /URL/i],
+      ['URL syntax', { publicUrl: 'not-a-url' }, /URL/i],
+      ['URL protocol', { publicUrl: 'http://www.bilibili.com/opus/123456789' }, /URL/i],
+      ['URL credentials', { publicUrl: 'https://owner:secret@www.bilibili.com/opus/123456789' }, /sensitive|URL/i],
+      ['URL fragment', { publicUrl: 'https://www.bilibili.com/opus/123456789#secret' }, /URL/i],
+      ['timestamp missing', { publishedAt: undefined }, /timestamp/i],
+      ['timestamp invalid', { publishedAt: 'not-a-date' }, /timestamp/i],
+      ['post identity', { postId: undefined, idempotencyKey: undefined }, /identity/i],
+      ['package', { packageId: 'other-package' }, /package/i],
+      ['publication', { publicationId: 'other-publication' }, /provenance/i],
+      ['activity', { activityId: 'other-activity' }, /provenance/i],
+      ['content hash missing', { contentHash: undefined }, /content hash/i],
+      ['content hash malformed', { contentHash: 'bad' }, /content hash/i],
+      ['source hash missing', { contentStudioContentHash: undefined }, /source content hash/i],
+      ['source hash mismatch', { contentStudioContentHash: 'd'.repeat(64) }, /source content hash/i],
+      ['form', { contentFormat: 'video' }, /form/i],
+      ['orientation syntax', { videoOrientation: 'diagonal' }, /orientation/i],
+      ['unexpected orientation', { videoOrientation: 'landscape' }, /orientation/i],
+      ['account type', { accountRef: 1 }, /account/i],
+      ['account mismatch', { accountRef: 'other-account' }, /account/i],
+    ]
+    for (const [_name, override, message] of invalidCases) {
+      await expect(publishReturned(resultEnvelope({ receipts: [receiptEnvelope(override)] })))
+        .rejects
+        .toThrow(message)
+    }
+
+    await expect(publishReturned(resultEnvelope({
+      receipts: [receiptEnvelope({
+        idempotencyKey: 'fallback-receipt-id',
+        publicUrl: undefined,
+        receiptId: undefined,
+        status: 'failed',
+      })],
+    }))).resolves.toMatchObject({
+      receipts: [{ publicUrl: undefined, receiptId: 'fallback-receipt-id', status: 'failed' }],
+    })
+  })
+
+  it('validates failure and handoff identities without accepting ambiguous package mappings', async () => {
+    const validFailure = {
+      channel: 'bilibili',
+      code: 'OWNER_ACTION_REQUIRED',
+      message: 'Owner action is required',
+      packageId: 'bilibili-image-text-zh',
+      retryable: false,
+    }
+    await expect(publishReturned(resultEnvelope({ failures: [validFailure] }))).resolves.toMatchObject({
+      failures: [{ code: 'OWNER_ACTION_REQUIRED', retryable: false }],
+    })
+    for (const override of [
+      { channel: 'youtube' },
+      { code: undefined },
+      { message: undefined },
+      { retryable: 'false' },
+    ]) {
+      await expect(publishReturned(resultEnvelope({ failures: [{ ...validFailure, ...override }] })))
+        .rejects
+        .toThrow(/channel|schema|package/i)
+    }
+
+    await expect(publishReturned(resultEnvelope({
+      handoffs: [handoffEnvelope({ nextAction: undefined, status: 'confirmed' })],
+    }))).resolves.toMatchObject({
+      handoffs: [{ status: 'confirmed' }],
+    })
+    const invalidHandoffs: Array<[Record<string, unknown>, RegExp]> = [
+      [{ status: 'published' }, /status/i],
+      [{ contentHash: 'bad' }, /identity/i],
+      [{ contentStudioContentHash: undefined }, /identity/i],
+      [{ contentStudioContentHash: 'd'.repeat(64) }, /identity/i],
+      [{ idempotencyKey: undefined }, /identity/i],
+      [{ idempotencyKey: 'bad key' }, /identity/i],
+      [{ form: 'video' }, /form/i],
+      [{ videoOrientation: 'square' }, /orientation/i],
+    ]
+    for (const [override, message] of invalidHandoffs) {
+      await expect(publishReturned(resultEnvelope({ handoffs: [handoffEnvelope(override)] })))
+        .rejects
+        .toThrow(message)
+    }
+
+    await expect(publishReturned(resultEnvelope({ handoffs: [{ ...handoffEnvelope(), packageId: undefined, channel: undefined }] })))
+      .resolves
+      .toMatchObject({ handoffs: [{ packageId: 'bilibili-image-text-zh' }] })
+    await expect(publishReturned(resultEnvelope({ handoffs: [handoffEnvelope({ packageId: 'missing' })] })))
+      .rejects
+      .toThrow(/mapped|package/i)
   })
 })

@@ -389,6 +389,7 @@ async function runMcp(
       return await runMcpHttp(execution, project.projectId, options, runtime)
     await serveMcpStdio(
       createContentStudioMcpServer({
+        marketingOpsAssetBundleRoot: runtime.marketingOpsRuntime?.assetBundleRoot,
         marketingOpsPublish: marketingOpsPublishClient(runtime),
         marketingOpsStatus: marketingOpsStatusClient(runtime),
         ownerTakeovers: execution.ownerTakeovers,
@@ -400,6 +401,7 @@ async function runMcp(
           task,
         ),
         service: execution.handle.service,
+        marketingOpsSourceRoot: execution.outputRoot,
       }),
       {
         input: runtime.input ?? process.stdin,
@@ -489,6 +491,7 @@ async function runMcpHttp(
 ): Promise<number> {
   const http = createContentStudioMcpHttpServer({
     server: createContentStudioMcpServer({
+      marketingOpsAssetBundleRoot: runtime.marketingOpsRuntime?.assetBundleRoot,
       marketingOpsPublish: marketingOpsPublishClient(runtime),
       marketingOpsStatus: marketingOpsStatusClient(runtime),
       ownerTakeovers: execution.ownerTakeovers,
@@ -500,6 +503,7 @@ async function runMcpHttp(
         task,
       ),
       service: execution.handle.service,
+      marketingOpsSourceRoot: execution.outputRoot,
     }),
   })
   const port = parsePort(options.get('port'), 11002)

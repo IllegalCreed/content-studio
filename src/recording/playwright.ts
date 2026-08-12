@@ -33,6 +33,7 @@ import {
   execFileSync,
 } from 'node:child_process'
 import {
+  chmod,
   mkdir,
   rename,
   unlink,
@@ -816,6 +817,7 @@ class PlaywrightRecordingSession implements RecordingSession {
         resolveManagedRecorderFfmpegPath(),
       )
     }
+    await chmod(finalPath, 0o600)
     this.screencastSegments.length = 0
     this.artifacts.push(
       await createRecorderArtifact(

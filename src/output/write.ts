@@ -1,7 +1,7 @@
 // @env node
 
 import type { ContentPackage, StudioBundle } from '../types'
-import { mkdir, rename, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, parse, relative, resolve } from 'node:path'
 import process from 'node:process'
@@ -107,6 +107,7 @@ async function atomicWrite(path: string, content: string): Promise<void> {
     mode: 0o600,
   })
   await rename(temporaryPath, path)
+  await chmod(path, 0o600)
 }
 
 function isWithin(parent: string, child: string): boolean {

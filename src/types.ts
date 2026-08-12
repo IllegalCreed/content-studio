@@ -921,12 +921,15 @@ export interface MarketingOpsMcpPublishClientOptions {
  * Content Studio never discovers or starts the managed process itself.
  */
 export interface MarketingOpsManagedRuntime {
+  /** Installer-owned private directory used for path-free artifact handoff. */
+  assetBundleRoot?: string
   close: () => Promise<void> | void
   publishClient?: MarketingOpsPublishClient
   statusClient: MarketingOpsStatusClient
 }
 
 export interface MarketingOpsManagedRuntimeOptions {
+  assetBundleRoot?: string
   close: () => Promise<void> | void
   mcp: MarketingOpsMcpClient
   now?: () => Date

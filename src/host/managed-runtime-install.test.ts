@@ -44,6 +44,8 @@ async function createRuntimeStaging(): Promise<{
   const root = await createTemporaryDirectory('content-studio-runtime-staging-')
   const server = 'managed marketing-ops staging server\n'
   const helper = 'managed marketing-ops staging keychain helper\n'
+  const browsers = '{"browsers":[]}\n'
+  const bundle = 'managed marketing-ops staging playwright bundle\n'
   const packageJson = JSON.stringify({
     name: '@illegalcreed/marketing-ops',
     private: true,
@@ -52,14 +54,18 @@ async function createRuntimeStaging(): Promise<{
   })
   await mkdir(join(root, 'dist'), { mode: 0o700 })
   await chmod(join(root, 'dist'), 0o700)
+  await writeFile(join(root, 'browsers.json'), browsers, { mode: 0o600 })
   await writeFile(join(root, 'dist/server.js'), server, { mode: 0o600 })
   await writeFile(join(root, 'dist/keychain-helper'), helper, { mode: 0o700 })
   await chmod(join(root, 'dist/keychain-helper'), 0o700)
+  await writeFile(join(root, 'dist/playwright-core.bundle.cjs'), bundle, { mode: 0o600 })
   await writeFile(join(root, 'package.json'), packageJson, { mode: 0o600 })
   const manifest = JSON.stringify({
     contractVersion: 3,
     files: [
+      { path: 'browsers.json', sha256: sha256(browsers) },
       { path: 'dist/keychain-helper', sha256: sha256(helper) },
+      { path: 'dist/playwright-core.bundle.cjs', sha256: sha256(bundle) },
       { path: 'dist/server.js', sha256: sha256(server) },
       { path: 'package.json', sha256: sha256(packageJson) },
     ],
@@ -101,20 +107,27 @@ describe.runIf(process.platform !== 'win32')('installer-owned marketing-ops runt
     })
 
     await expect(readdir(destination)).resolves.toEqual([
+      'browsers.json',
       'dist',
       'package.json',
       'runtime-manifest.json',
     ])
     await expect(readdir(join(destination, 'dist'))).resolves.toEqual([
       'keychain-helper',
+      'playwright-core.bundle.cjs',
       'server.js',
     ])
+    await expect(readFile(join(destination, 'browsers.json'), 'utf8')).resolves.toBe(
+      await readFile(join(staging.root, 'browsers.json'), 'utf8'),
+    )
     await expect(readFile(join(destination, 'dist/server.js'), 'utf8')).resolves.toBe(staging.server)
     await expect(lstat(destination)).resolves.toMatchObject({ mode: expect.any(Number) })
     expect((await lstat(destination)).mode & 0o777).toBe(0o700)
     expect((await lstat(join(destination, 'dist'))).mode & 0o777).toBe(0o700)
+    expect((await lstat(join(destination, 'browsers.json'))).mode & 0o777).toBe(0o600)
     expect((await lstat(join(destination, 'dist/server.js'))).mode & 0o777).toBe(0o600)
     expect((await lstat(join(destination, 'dist/keychain-helper'))).mode & 0o777).toBe(0o700)
+    expect((await lstat(join(destination, 'dist/playwright-core.bundle.cjs'))).mode & 0o777).toBe(0o600)
     expect((await lstat(join(destination, 'package.json'))).mode & 0o777).toBe(0o600)
     expect((await lstat(join(destination, 'runtime-manifest.json'))).mode & 0o777).toBe(0o600)
   })

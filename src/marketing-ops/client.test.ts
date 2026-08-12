@@ -110,6 +110,36 @@ describe('marketing-ops client boundary', () => {
       arguments: request,
       name: 'publish_campaign',
     }])
+
+    const failingClient = createMarketingOpsMcpPublishClient({
+      mcp: {
+        callTool: async () => ({
+          content: [{ text: JSON.stringify({ code: 'UNKNOWN_RESULT', message: 'image paste timed out' }), type: 'text' }],
+          isError: true,
+          structuredContent: {
+            code: 'UNKNOWN_RESULT',
+            message: 'image paste timed out',
+          },
+        }),
+      },
+    })
+    await expect(failingClient.publishCampaign(request)).rejects.toThrow(/image paste timed out/)
+
+    const sensitiveFailure = createMarketingOpsMcpPublishClient({
+      mcp: {
+        callTool: async () => ({
+          content: [{ text: 'Bearer private-token', type: 'text' }],
+          isError: true,
+          structuredContent: {
+            code: 'UNKNOWN_RESULT',
+            message: 'Bearer private-token',
+          },
+        }),
+      },
+    })
+    await expect(sensitiveFailure.publishCampaign(request)).rejects.toThrow(
+      /^Marketing-ops publish failed: Marketing-ops MCP tool failed: UNKNOWN_RESULT$/,
+    )
   })
 
   it('creates a deterministic local receipt without touching a channel', async () => {
@@ -486,6 +516,7 @@ describe('marketing-ops client boundary', () => {
   it('wraps an installer-initialized MCP client with an idempotent lifecycle close', async () => {
     let closeCalls = 0
     const managed = createMarketingOpsManagedRuntime({
+      assetBundleRoot: '/tmp/marketing-ops-bundles',
       close: async () => {
         closeCalls += 1
       },
@@ -509,6 +540,7 @@ describe('marketing-ops client boundary', () => {
     await expect(managed.statusClient.getChannelsStatus('project-a'))
       .resolves
       .toMatchObject({ projectId: 'project-a' })
+    expect(managed.assetBundleRoot).toBe('/tmp/marketing-ops-bundles')
     await Promise.all([managed.close(), managed.close()])
     expect(closeCalls).toBe(1)
   })

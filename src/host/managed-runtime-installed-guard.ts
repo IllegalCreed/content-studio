@@ -10,8 +10,9 @@ const RUNTIMES_DIRECTORY = 'runtimes'
 const PRIVATE_DIRECTORY_MODE = 0o700
 const PRIVATE_FILE_MODE = 0o600
 const PRIVATE_EXECUTABLE_MODE = 0o700
-const ROOT_ENTRIES = ['dist', 'package.json', 'runtime-manifest.json']
-const DIST_ENTRIES = ['keychain-helper', 'server.js']
+const ROOT_ENTRIES = ['browsers.json', 'dist', 'package.json', 'runtime-manifest.json']
+const ROOT_ENTRIES_WITH_ASSET_BUNDLES = ['asset-bundles', ...ROOT_ENTRIES]
+const DIST_ENTRIES = ['keychain-helper', 'playwright-core.bundle.cjs', 'server.js']
 
 /**
  * Checks the immutable-on-disk shape expected of an installed runtime.
@@ -44,8 +45,14 @@ export async function verifyInstalledManagedMarketingOpsRuntime(
     if (!await isPrivateDirectory(marketingOps, currentUid, PRIVATE_DIRECTORY_MODE))
       return false
 
-    if (!await hasExactEntries(root, ROOT_ENTRIES))
+    const rootEntries = (await readdir(root)).sort()
+    if (!sameEntries(rootEntries, ROOT_ENTRIES) && !sameEntries(rootEntries, ROOT_ENTRIES_WITH_ASSET_BUNDLES))
       return false
+    if (rootEntries.includes('asset-bundles')) {
+      const assetBundles = resolve(root, 'asset-bundles')
+      if (!await isPrivateDirectory(assetBundles, currentUid, PRIVATE_DIRECTORY_MODE))
+        return false
+    }
     const dist = resolve(root, 'dist')
     if (!await isPrivateDirectory(dist, currentUid, PRIVATE_DIRECTORY_MODE))
       return false
@@ -107,9 +114,7 @@ async function isPrivateDirectory(
 
 async function hasExactEntries(path: string, expected: readonly string[]): Promise<boolean> {
   const entries = (await readdir(path)).sort()
-  const sortedExpected = [...expected].sort()
-  return entries.length === sortedExpected.length
-    && entries.every((entry, index) => entry === sortedExpected[index])
+  return sameEntries(entries, expected)
 }
 
 function isOwnedPrivateMode(
@@ -134,4 +139,9 @@ function isCanonicalFixedRuntimeRoot(path: string): boolean {
   }
   const segments = path.split('/').filter(Boolean)
   return segments.slice(-3).join('/') === `${RUNTIMES_DIRECTORY}/${RUNTIME_NAME}/${RUNTIME_VERSION}`
+}
+
+function sameEntries(actual: string[], expected: readonly string[]): boolean {
+  return actual.length === expected.length
+    && actual.every((entry, index) => entry === expected[index])
 }

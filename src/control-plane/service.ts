@@ -1731,11 +1731,19 @@ export class ContentStudioApplicationService {
     packageValue: MarketingOpsPublicationPackage,
   ): OwnerHandoff {
     this.assertMarketingOpsPublicationHandoffPackage(packageValue)
+    const now = Date.now()
     const existing = this.repository.listOwnerHandoffs(packageValue.projectId)
       .find(handoff =>
         handoff.marketingOpsPackage?.packageId === packageValue.packageId
         && handoff.marketingOpsPackage.contentHash === packageValue.contentHash
-        && (handoff.status === 'pending' || handoff.status === 'completed'),
+        && (
+          handoff.status === 'completed'
+          || (
+            handoff.status === 'pending'
+            && Number.isFinite(Date.parse(handoff.expiresAt))
+            && Date.parse(handoff.expiresAt) > now
+          )
+        ),
       )
     if (existing !== undefined)
       return existing
@@ -1815,6 +1823,26 @@ export class ContentStudioApplicationService {
       ...handoff,
       marketingOpsConfirmation: confirmation,
     })
+  }
+
+  releaseMarketingOpsPublicationConfirmation(
+    projectId: string,
+    handoffId: string,
+    publicUrl: string,
+  ): OwnerHandoff {
+    assertOwnerConfirmationUrl(publicUrl)
+    const handoff = this.getMarketingOpsPublicationHandoff(projectId, handoffId)
+    const confirmation = handoff.marketingOpsConfirmation
+    if (
+      handoff.status !== 'pending'
+      || confirmation?.status !== 'pending'
+      || confirmation.publicUrl !== publicUrl
+    ) {
+      return handoff
+    }
+    const released: OwnerHandoff = { ...handoff }
+    delete released.marketingOpsConfirmation
+    return this.repository.updateOwnerHandoff(released)
   }
 
   completeMarketingOpsPublicationHandoff(

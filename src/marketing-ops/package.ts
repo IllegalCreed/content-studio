@@ -23,8 +23,8 @@ export function compileMarketingOpsPublicationPackage(
   assertRendererOutput(input)
   const videoOrientation = resolveVideoOrientation(input)
 
-  const artifactRefs = resolveArtifactReferences(input)
   const artifacts = resolveArtifacts(input)
+  const artifactRefs = resolveArtifactReferences(input, artifacts)
   const readiness = assessChannelContentReadiness(
     input.content.channel,
     input.content.format,
@@ -217,8 +217,13 @@ function assertRendererOutput(input: MarketingOpsPublicationPackageInput): void 
 
 function resolveArtifactReferences(
   input: MarketingOpsPublicationPackageInput,
+  resolvedArtifacts: readonly ActivityArtifact[] = resolveArtifacts(input),
 ): MarketingOpsArtifactReference[] {
-  return resolveArtifacts(input).map((artifact) => {
+  const artifacts = [
+    ...resolvedArtifacts,
+    ...resolveBilibiliAuxiliaryArtifacts(input, resolvedArtifacts),
+  ]
+  return artifacts.map((artifact) => {
     const mediaKind = mediaKindForArtifact(artifact)
     return {
       artifactId: artifact.artifactId,
@@ -229,6 +234,111 @@ function resolveArtifactReferences(
       version: artifact.version,
     }
   })
+}
+
+function resolveBilibiliAuxiliaryArtifacts(
+  input: MarketingOpsPublicationPackageInput,
+  resolvedArtifacts: readonly ActivityArtifact[],
+): ActivityArtifact[] {
+  if (input.content.channel !== 'bilibili')
+    return []
+  const selected = new Set(resolvedArtifacts.map(artifact => artifact.artifactId))
+  const latestById = new Map<string, ActivityArtifact>()
+  for (const artifact of input.artifacts) {
+    const current = latestById.get(artifact.artifactId)
+    if (current === undefined || current.version < artifact.version)
+      latestById.set(artifact.artifactId, artifact)
+  }
+  const candidates = [...latestById.values()]
+    .filter((artifact) => {
+      if (selected.has(artifact.artifactId) || artifact.kind !== 'image')
+        return false
+      if (
+        artifact.locale !== undefined
+        && artifact.locale !== 'neutral'
+        && artifact.locale !== input.content.locale
+      ) {
+        return false
+      }
+      return hasCoverToken(artifact)
+    })
+    .sort((left, right) => left.artifactId.localeCompare(right.artifactId))
+
+  if (input.content.format === 'video') {
+    const selectedLandscape = resolvedArtifacts.filter(artifact =>
+      artifact.kind === 'image' && hasCoverSlotToken(artifact, '16x9'))
+    const selectedFourByThree = resolvedArtifacts.filter(artifact =>
+      artifact.kind === 'image' && hasCoverSlotToken(artifact, '4x3'))
+    const landscape = selectedLandscape.length > 0
+      ? selectExactlyOneCover(selectedLandscape, '16:9')
+      : selectExactlyOneCover(
+          candidates.filter(artifact => hasCoverSlotToken(artifact, '16x9')),
+          '16:9',
+        )
+    const fourByThree = selectedFourByThree.length > 0
+      ? selectExactlyOneCover(selectedFourByThree, '4:3')
+      : selectExactlyOneCover(
+          candidates.filter(artifact => hasCoverSlotToken(artifact, '4x3')),
+          '4:3',
+        )
+    assertResolvedArtifact(input, landscape)
+    assertResolvedArtifact(input, fourByThree)
+    const appended = new Set(resolvedArtifacts.map(artifact => artifact.artifactId))
+    return [landscape, fourByThree].filter(artifact => !appended.has(artifact.artifactId))
+  }
+
+  if (input.content.format !== 'image-text')
+    return []
+  const selectedImageTextCovers = resolvedArtifacts.filter(artifact =>
+    artifact.kind === 'image' && hasCoverToken(artifact))
+  if (selectedImageTextCovers.length > 0) {
+    selectExactlyOneCover(selectedImageTextCovers, 'image-text')
+    return []
+  }
+  const dedicated = candidates.filter(artifact => hasImageTextCoverToken(artifact))
+  const cover = selectExactlyOneCover(
+    dedicated.length > 0 ? dedicated : candidates,
+    'image-text',
+  )
+  assertResolvedArtifact(input, cover)
+  return [cover]
+}
+
+function selectExactlyOneCover(
+  candidates: readonly ActivityArtifact[],
+  slot: string,
+): ActivityArtifact {
+  if (candidates.length !== 1) {
+    throw new Error(
+      `Bilibili ${slot} package requires exactly one registered locale-matching cover artifact`,
+    )
+  }
+  return candidates[0]!
+}
+
+function artifactIdentity(artifact: ActivityArtifact): string {
+  return `${artifact.artifactId}/${artifact.relativePath}`.toLowerCase()
+}
+
+function hasCoverToken(artifact: ActivityArtifact): boolean {
+  return /(?:^|[-_./])cover(?:[-_./]|$)/u.test(artifactIdentity(artifact))
+}
+
+function hasCoverSlotToken(
+  artifact: ActivityArtifact,
+  slot: '16x9' | '4x3',
+): boolean {
+  const identity = artifactIdentity(artifact)
+  const token = slot === '16x9'
+    ? /(?:^|[-_./])(?:16x9|16-9|16_9|landscape)(?:[-_./]|$)/u
+    : /(?:^|[-_./])(?:4x3|4-3|4_3)(?:[-_./]|$)/u
+  return hasCoverToken(artifact) && token.test(identity)
+}
+
+function hasImageTextCoverToken(artifact: ActivityArtifact): boolean {
+  const identity = artifactIdentity(artifact)
+  return hasCoverToken(artifact)
+    && /(?:^|[-_./])(?:image-text|imagetext|article)(?:[-_./]|$)/u.test(identity)
 }
 
 function resolveArtifacts(
@@ -252,35 +362,40 @@ function resolveArtifacts(
         `Marketing-ops artifact reference was not resolved: ${artifactId}`,
       )
     }
-    if (
-      artifact.projectId !== input.content.projectId
-      || artifact.activityId !== input.content.activityId
-    ) {
-      throw new Error(
-        'Marketing-ops artifact references must match the project and activity',
-      )
-    }
-    if (
-      artifact.locale !== undefined
-      && artifact.locale !== 'neutral'
-      && artifact.locale !== input.content.locale
-    ) {
-      throw new Error(
-        `Marketing-ops artifact locale ${artifact.locale} does not match content locale ${input.content.locale}`,
-      )
-    }
-    if (!/^[a-f0-9]{64}$/.test(artifact.sha256)) {
-      throw new Error(
-        `Marketing-ops artifact must have a valid sha256: ${artifactId}`,
-      )
-    }
-    if (!Number.isInteger(artifact.version) || artifact.version < 1) {
-      throw new Error(
-        `Marketing-ops artifact must have a positive version: ${artifactId}`,
-      )
-    }
+    assertResolvedArtifact(input, artifact)
     return artifact
   })
+}
+
+function assertResolvedArtifact(
+  input: MarketingOpsPublicationPackageInput,
+  artifact: ActivityArtifact,
+): void {
+  if (
+    artifact.projectId !== input.content.projectId
+    || artifact.activityId !== input.content.activityId
+  ) {
+    throw new Error(
+      'Marketing-ops artifact references must match the project and activity',
+    )
+  }
+  if (
+    artifact.locale !== undefined
+    && artifact.locale !== 'neutral'
+    && artifact.locale !== input.content.locale
+  ) {
+    throw new Error(
+      `Marketing-ops artifact locale ${artifact.locale} does not match content locale ${input.content.locale}`,
+    )
+  }
+  if (!/^[a-f0-9]{64}$/.test(artifact.sha256)) {
+    throw new Error(
+      `Marketing-ops artifact must have a valid sha256: ${artifact.artifactId}`,
+    )
+  }
+  if (!Number.isInteger(artifact.version) || artifact.version < 1) {
+    throw new Error(`Marketing-ops artifact must have a positive version: ${artifact.artifactId}`)
+  }
 }
 
 function mediaKindsForArtifacts(

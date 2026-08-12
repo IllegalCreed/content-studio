@@ -27,6 +27,8 @@ async function createRuntimeAsset(
   temporaryDirectories.push(parent)
   const root = join(parent, 'runtimes', 'marketing-ops', '0.1.0')
   const helper = 'managed marketing-ops keychain helper fixture\n'
+  const browsers = '{"browsers":[]}\n'
+  const bundle = 'managed marketing-ops playwright bundle fixture\n'
   const packageJson = JSON.stringify({
     name: '@illegalcreed/marketing-ops',
     private: true,
@@ -34,13 +36,17 @@ async function createRuntimeAsset(
     version: '0.1.0',
   })
   await mkdir(join(root, 'dist'), { recursive: true, mode: 0o700 })
+  await writeFile(join(root, 'browsers.json'), browsers, { encoding: 'utf8', mode: 0o600 })
   await writeFile(join(root, 'dist/server.js'), server, { encoding: 'utf8', mode: 0o600 })
   await writeFile(join(root, 'dist/keychain-helper'), helper, { encoding: 'utf8', mode: 0o700 })
+  await writeFile(join(root, 'dist/playwright-core.bundle.cjs'), bundle, { encoding: 'utf8', mode: 0o600 })
   await writeFile(join(root, 'package.json'), packageJson, { encoding: 'utf8', mode: 0o600 })
   const manifest = JSON.stringify({
     contractVersion: 3,
     files: [
+      { path: 'browsers.json', sha256: sha256(browsers) },
       { path: 'dist/keychain-helper', sha256: sha256(helper) },
+      { path: 'dist/playwright-core.bundle.cjs', sha256: sha256(bundle) },
       { path: 'dist/server.js', sha256: sha256(server) },
       { path: 'package.json', sha256: sha256(packageJson) },
     ],
@@ -186,8 +192,14 @@ describe('managed marketing-ops stdio connector', () => {
           'XDG_CONFIG_HOME',
         ]
     expect(Object.keys(parameters?.env ?? {}).sort()).toEqual(
-      expectedEnvironmentKeys.filter(key => process.env[key] !== undefined).sort(),
+      [
+        ...expectedEnvironmentKeys.filter(key => process.env[key] !== undefined),
+        'MARKETING_OPS_BILIBILI_ASSET_BUNDLE_ROOT',
+      ].sort(),
     )
+    expect(parameters?.env).toMatchObject({
+      MARKETING_OPS_BILIBILI_ASSET_BUNDLE_ROOT: join(asset.runtimeRoot, 'asset-bundles'),
+    })
     expect(parameters?.env).not.toHaveProperty('LOGNAME')
     expect(parameters?.env).not.toHaveProperty('SHELL')
     expect(parameters?.env).not.toHaveProperty('TERM')
@@ -203,10 +215,14 @@ describe('managed marketing-ops stdio connector', () => {
       arguments: { projectId: 'project-a' },
       name: 'channels_status',
     })).resolves.toEqual({ structuredContent: { ok: true } })
-    expect(fake.client.callTool).toHaveBeenCalledWith({
-      arguments: { projectId: 'project-a' },
-      name: 'channels_status',
-    })
+    expect(fake.client.callTool).toHaveBeenCalledWith(
+      {
+        arguments: { projectId: 'project-a' },
+        name: 'channels_status',
+      },
+      undefined,
+      { timeout: 300_000 },
+    )
 
     await session.close()
     await session.close()
@@ -240,7 +256,8 @@ describe('managed marketing-ops stdio connector', () => {
     await connector.connect(asset)
     const environment = parameters?.env as Record<string, string> | undefined
     expect(environment).toBeDefined()
-    expect(Object.keys(environment ?? {}).some(key => /MARKETING_OPS|BLUESKY|NODE_OPTIONS|PASSWORD|TOKEN/u.test(key))).toBe(false)
+    expect(Object.keys(environment ?? {}).some(key => /MARKETING_OPS_COMMAND|MARKETING_OPS_RUNTIME_PATH|MARKETING_OPS_TOKEN|BLUESKY|NODE_OPTIONS|PASSWORD|TOKEN/u.test(key))).toBe(false)
+    expect(environment?.MARKETING_OPS_BILIBILI_ASSET_BUNDLE_ROOT).toBe(join(asset.runtimeRoot, 'asset-bundles'))
     expect(parameters?.command).toBe(process.execPath)
     expect(parameters?.args).toEqual([asset.entrypoint])
   })
@@ -330,10 +347,14 @@ describe('managed marketing-ops stdio connector', () => {
       },
       name: 'publish_campaign',
     })).resolves.toEqual({ structuredContent: { ok: true } })
-    expect(fake.client.callTool).toHaveBeenCalledWith({
-      arguments: expect.objectContaining({ campaignId: 'campaign-a' }),
-      name: 'publish_campaign',
-    })
+    expect(fake.client.callTool).toHaveBeenCalledWith(
+      {
+        arguments: expect.objectContaining({ campaignId: 'campaign-a' }),
+        name: 'publish_campaign',
+      },
+      undefined,
+      { timeout: 300_000 },
+    )
 
     await expect(session.callTool({
       arguments: { projectId: 'project-a' },
@@ -355,6 +376,22 @@ describe('managed marketing-ops stdio connector', () => {
       } as never,
       name: 'publish_campaign',
     })).rejects.toThrow('Unsupported marketing-ops tool')
+  })
+
+  it('does not expose sensitive upstream tool failure details', async () => {
+    const asset = await createRuntimeAsset()
+    const fake = createFakeConnection()
+    vi.mocked(fake.client.callTool).mockRejectedValueOnce(new Error('Bearer private-token'))
+    const connector = createManagedMarketingOpsStdioConnector({
+      createClient: () => fake.client,
+      createTransport: () => fake.transport,
+    })
+    const session = await connector.connect(asset)
+
+    await expect(session.callTool({
+      arguments: { projectId: 'project-a' },
+      name: 'channels_status',
+    })).rejects.toThrow(/^Marketing-ops tool unavailable$/)
   })
 
   it('bounds status calls and shares one shutdown promise', async () => {

@@ -9,6 +9,7 @@ import { execFile as execFileCallback } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
   access,
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -84,6 +85,7 @@ export async function generateDeterministicCover(
     const frame = await readFile(framePath)
     const svg = createCoverSvg(input, frame.toString('base64'))
     await writeFile(input.outputPath, svg, 'utf8')
+    await chmod(input.outputPath, 0o600)
   }
   catch (error: unknown) {
     if (error instanceof MediaCoverError)

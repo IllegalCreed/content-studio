@@ -185,6 +185,7 @@ export function createMarketingOpsManagedRuntime(
     : createMarketingOpsMcpPublishClient({ mcp: options.publishMcp })
   let closePromise: Promise<void> | undefined
   return {
+    assetBundleRoot: options.assetBundleRoot,
     close: () => {
       closePromise ??= Promise.resolve()
         .then(() => options.close())
@@ -291,10 +292,33 @@ function parseMarketingOpsMcpToolResult(input: unknown): unknown {
   if (value.isError !== undefined && typeof value.isError !== 'boolean')
     throw new Error('Marketing-ops MCP tool isError must be a boolean')
   if (value.isError === true)
-    throw new Error('Marketing-ops MCP tool failed')
+    throw new Error(`Marketing-ops MCP tool failed${parseMcpToolErrorDetails(value)}`)
   if (value.structuredContent === undefined)
     throw new Error('Marketing-ops MCP tool must return structuredContent')
   return value.structuredContent
+}
+
+function parseMcpToolErrorDetails(value: Record<string, unknown>): string {
+  const structured = value.structuredContent
+  if (typeof structured === 'object' && structured !== null && !Array.isArray(structured)) {
+    const record = structured as Record<string, unknown>
+    const code = typeof record.code === 'string' && record.code.trim() !== ''
+      ? record.code.trim()
+      : undefined
+    const message = typeof record.message === 'string'
+      ? record.message.replace(/\s+/gu, ' ').trim()
+      : undefined
+    if (message !== undefined && message !== '') {
+      if (containsSensitiveDiagnostic(message))
+        return code === undefined ? '' : `: ${code}`
+      return code === undefined ? `: ${message.slice(0, 500)}` : `: ${code}: ${message.slice(0, 500)}`
+    }
+  }
+  return ''
+}
+
+function containsSensitiveDiagnostic(value: string): boolean {
+  return /bearer|cookie|credential|keychain|password|secret|token|api[-_]?key|\/private\//iu.test(value)
 }
 
 function parseChannelsStatusResponse(

@@ -8,6 +8,8 @@ import { resolveManagedMarketingOpsRuntimeAsset } from './managed-runtime-asset'
 const temporaryDirectories: string[] = []
 const serverContents = 'managed marketing-ops server fixture\n'
 const helperContents = 'managed marketing-ops keychain helper fixture\n'
+const browsersContents = '{"browsers":[]}\n'
+const bundleContents = 'managed marketing-ops playwright bundle fixture\n'
 
 function sha256(contents: string): string {
   return createHash('sha256').update(contents).digest('hex')
@@ -19,8 +21,10 @@ async function createRuntimeAsset(
   const root = await mkdtemp(join(tmpdir(), 'content-studio-managed-runtime-'))
   temporaryDirectories.push(root)
   await mkdir(join(root, 'dist'), { recursive: true })
+  await writeFile(join(root, 'browsers.json'), browsersContents, 'utf8')
   await writeFile(join(root, 'dist/server.js'), serverContents, 'utf8')
   await writeFile(join(root, 'dist/keychain-helper'), helperContents, 'utf8')
+  await writeFile(join(root, 'dist/playwright-core.bundle.cjs'), bundleContents, 'utf8')
   const packageJson = JSON.stringify({
     name: '@illegalcreed/marketing-ops',
     version: '0.1.0',
@@ -29,7 +33,9 @@ async function createRuntimeAsset(
   const manifest = JSON.stringify({
     contractVersion: 3,
     files: [
+      { path: 'browsers.json', sha256: sha256(browsersContents) },
       { path: 'dist/keychain-helper', sha256: sha256(helperContents) },
+      { path: 'dist/playwright-core.bundle.cjs', sha256: sha256(bundleContents) },
       { path: 'dist/server.js', sha256: sha256(serverContents) },
       { path: 'package.json', sha256: sha256(packageJson) },
     ],

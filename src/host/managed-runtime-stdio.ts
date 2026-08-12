@@ -9,7 +9,7 @@ import type {
   ManagedMarketingOpsRuntimeConnector,
 } from './managed-runtime-bootstrap'
 import { Buffer } from 'node:buffer'
-import { isAbsolute, resolve } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import {
@@ -24,7 +24,7 @@ const CLIENT_NAME = 'content-studio-host'
 const CLIENT_VERSION = '0.1.0'
 const RUNTIME_VERSION = '0.1.0'
 const DEFAULT_CONNECT_TIMEOUT_MS = 5_000
-const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
+const DEFAULT_REQUEST_TIMEOUT_MS = 300_000
 const CLOSE_TIMEOUT_MS = 2_000
 const MAX_STDERR_BYTES = 16 * 1024
 const MAX_STDOUT_BUFFER_BYTES = 256 * 1024
@@ -56,7 +56,7 @@ export interface ManagedMarketingOpsStdioClient {
   callTool: (input: {
     arguments?: Record<string, unknown>
     name: string
-  }) => Promise<unknown>
+  }, resultSchema?: unknown, options?: { timeout?: number }) => Promise<unknown>
   close: () => Promise<void>
   connect: (transport: ManagedMarketingOpsStdioTransport) => Promise<void>
   getServerVersion: () => unknown
@@ -112,7 +112,12 @@ export function createManagedMarketingOpsStdioConnector(
         const connectedClient = createClient()
         client = connectedClient
         await connectWithTimeout(connectedClient, transport, timeoutMs)
-        return createSession(connectedClient, transport, requestTimeoutMs)
+        return createSession(
+          connectedClient,
+          transport,
+          requestTimeoutMs,
+          join(verifiedAsset.runtimeRoot, 'asset-bundles'),
+        )
       }
       catch {
         await closeResources(client, transport)
@@ -161,23 +166,25 @@ function isFixedRuntimeRoot(path: string): boolean {
 function createServerParameters(
   asset: ManagedMarketingOpsRuntimeAsset,
 ): StdioServerParameters {
+  const assetBundleRoot = join(asset.runtimeRoot, 'asset-bundles')
   return {
     args: [asset.entrypoint],
     command: process.execPath,
     cwd: asset.runtimeRoot,
-    env: safeEnvironment(),
+    env: safeEnvironment(assetBundleRoot),
     maxBufferSize: MAX_STDOUT_BUFFER_BYTES,
     stderr: 'pipe',
   }
 }
 
-function safeEnvironment(): Record<string, string> {
+function safeEnvironment(assetBundleRoot: string): Record<string, string> {
   const environment: Record<string, string> = {}
   for (const key of SAFE_ENVIRONMENT_KEYS) {
     const value = process.env[key]
     if (value !== undefined && !value.startsWith('()'))
       environment[key] = value
   }
+  environment.MARKETING_OPS_BILIBILI_ASSET_BUNDLE_ROOT = assetBundleRoot
   return environment
 }
 
@@ -230,9 +237,11 @@ function createSession(
   client: ManagedMarketingOpsStdioClient,
   transport: ManagedMarketingOpsStdioTransport,
   requestTimeoutMs: number,
+  assetBundleRoot: string,
 ): ManagedMarketingOpsMcpSession {
   let closePromise: Promise<void> | undefined
   return {
+    assetBundleRoot,
     callTool: async (input) => {
       const toolInput = managedToolInput(input)
       if (toolInput === null)
@@ -242,12 +251,17 @@ function createSession(
           client.callTool(toolInput as unknown as {
             arguments: Record<string, unknown>
             name: string
-          }),
+          }, undefined, { timeout: requestTimeoutMs }),
           requestTimeoutMs,
         )
       }
-      catch {
-        throw new Error('Marketing-ops tool unavailable')
+      catch (error) {
+        const message = error instanceof Error ? error.message.trim().slice(0, 300) : ''
+        throw new Error(
+          message === '' || containsSensitiveDiagnostic(message)
+            ? 'Marketing-ops tool unavailable'
+            : `Marketing-ops tool unavailable: ${message}`,
+        )
       }
     },
     close: () => {
@@ -256,6 +270,10 @@ function createSession(
     },
     getServerVersion: async () => client.getServerVersion(),
   }
+}
+
+function containsSensitiveDiagnostic(value: string): boolean {
+  return /bearer|cookie|credential|keychain|password|secret|token|api[-_]?key|\/private\//iu.test(value)
 }
 
 function managedToolInput(

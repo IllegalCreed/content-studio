@@ -27,15 +27,18 @@ const WRITE_NEW_FILE_FLAGS = constants.O_WRONLY
 const READ_NOFOLLOW_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW
 
 const RUNTIME_FILES = [
+  { executable: false, mode: PRIVATE_FILE_MODE, path: 'browsers.json' },
   { executable: true, mode: PRIVATE_DIRECTORY_MODE, path: 'dist/keychain-helper' },
+  { executable: false, mode: PRIVATE_FILE_MODE, path: 'dist/playwright-core.bundle.cjs' },
   { executable: false, mode: PRIVATE_FILE_MODE, path: 'dist/server.js' },
   { executable: false, mode: PRIVATE_FILE_MODE, path: 'package.json' },
   // This is deliberately last: an interrupted installation is not a valid runtime.
   { executable: false, mode: PRIVATE_FILE_MODE, path: 'runtime-manifest.json' },
 ] as const
 
-const ROOT_ENTRIES = ['dist', 'package.json', 'runtime-manifest.json']
-const DIST_ENTRIES = ['keychain-helper', 'server.js']
+const ROOT_ENTRIES = ['browsers.json', 'dist', 'package.json', 'runtime-manifest.json']
+const ROOT_ENTRIES_WITH_ASSET_BUNDLES = ['asset-bundles', ...ROOT_ENTRIES]
+const DIST_ENTRIES = ['keychain-helper', 'playwright-core.bundle.cjs', 'server.js']
 
 export interface InstallManagedMarketingOpsRuntimeOptions {
   /** A digest from the installer's signed or embedded trust source. */
@@ -281,8 +284,14 @@ async function hasExactPrivateRuntimeLayout(
   if (safeRoot !== root || !hasMode(await lstat(root), PRIVATE_DIRECTORY_MODE))
     return false
   const rootEntries = (await readdir(root)).sort()
-  if (!sameEntries(rootEntries, ROOT_ENTRIES))
+  if (!sameEntries(rootEntries, ROOT_ENTRIES) && !sameEntries(rootEntries, ROOT_ENTRIES_WITH_ASSET_BUNDLES))
     return false
+  if (rootEntries.includes('asset-bundles')) {
+    const assetBundles = join(root, 'asset-bundles')
+    const safeAssetBundles = await readOwnedPrivateDirectory(assetBundles, currentUid)
+    if (safeAssetBundles !== assetBundles || !hasMode(await lstat(assetBundles), PRIVATE_DIRECTORY_MODE))
+      return false
+  }
   const dist = join(root, 'dist')
   const safeDist = await readOwnedPrivateDirectory(dist, currentUid)
   if (safeDist !== dist || !hasMode(await lstat(dist), PRIVATE_DIRECTORY_MODE))

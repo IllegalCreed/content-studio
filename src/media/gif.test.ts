@@ -10,6 +10,7 @@ import {
   mkdtemp,
   readFile,
   rm,
+  stat,
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -135,6 +136,8 @@ describe.skipIf(!ffmpegIsAvailable)('deterministic GIF generation', () => {
       })
 
       await expect(access(outputPath)).resolves.toBeUndefined()
+      if (process.platform !== 'win32')
+        expect((await stat(outputPath)).mode & 0o777).toBe(0o600)
       expect(result).toMatchObject({
         artifactPath: outputPath,
         fps: 8,

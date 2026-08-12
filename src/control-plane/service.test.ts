@@ -12,7 +12,7 @@ import type {
   RecorderAttemptReceipt,
 } from '../types'
 import { join, resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CHANNEL_BLUEPRINTS } from '../constants'
 import { InMemoryExecutionTaskStore } from '../jobs/task'
 import {
@@ -21,6 +21,10 @@ import {
   ProjectScopeError,
   RecordNotFoundError,
 } from './service'
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 function registerProject(
   service: ContentStudioApplicationService,
@@ -144,6 +148,56 @@ function createPublication(
     publicationId: `${projectId}-report-publication`,
   })
   return { activity, publication }
+}
+
+function createMarketingOpsPublicationHandoffFixture(): {
+  handoff: OwnerHandoff
+  packageValue: MarketingOpsPublicationPackage
+  publication: ReturnType<ContentStudioApplicationService['createPublicationPlan']>
+  service: ContentStudioApplicationService
+} {
+  const repository = new InMemoryContentStudioRepository()
+  const service = new ContentStudioApplicationService(repository)
+  registerProject(service, 'project-a')
+  enableYouTube(service, 'project-a')
+  const { activity, publication } = createPublication(service)
+  const packageValue: MarketingOpsPublicationPackage = {
+    activityId: activity.activityId,
+    artifactRefs: [{
+      artifactId: 'project-a-report-video',
+      kind: 'video',
+      locale: 'en',
+      mediaKind: 'video',
+      sha256: 'f'.repeat(64),
+      version: 1,
+    }],
+    body: 'A video script',
+    campaignId: 'project-a-campaign',
+    channel: 'youtube',
+    contentFormat: 'video',
+    contentHash: 'a'.repeat(64),
+    contentId: 'project-a-report-content',
+    contentVersion: 1,
+    locale: 'en',
+    packageId: publication.publicationId,
+    projectId: 'project-a',
+    publicationId: publication.publicationId,
+    renderer: {
+      canonicalUrl: 'https://project-a.example.com/',
+      format: 'manual-package',
+      links: ['https://project-a.example.com/'],
+      media: ['video'],
+      utmMedium: 'social',
+    },
+    schemaVersion: 1,
+    title: 'Quick sort explained',
+  }
+  return {
+    handoff: service.createMarketingOpsPublicationHandoff(packageValue),
+    packageValue,
+    publication,
+    service,
+  }
 }
 
 function registerFinalVideoArtifact(
@@ -3034,45 +3088,11 @@ describe('content studio application service', () => {
     })).toThrow(/conflicts with an existing receipt/i)
   })
 
-  it('persists and reuses the immutable package behind an owner-assisted marketing-ops handoff', () => {
-    const repository = new InMemoryContentStudioRepository()
-    const service = new ContentStudioApplicationService(repository)
-    registerProject(service, 'project-a')
-    enableYouTube(service, 'project-a')
-    const { activity, publication } = createPublication(service)
-    const packageValue: MarketingOpsPublicationPackage = {
-      activityId: activity.activityId,
-      artifactRefs: [{
-        artifactId: 'project-a-report-video',
-        kind: 'video',
-        locale: 'en',
-        mediaKind: 'video',
-        sha256: 'f'.repeat(64),
-        version: 1,
-      }],
-      body: 'A video script',
-      campaignId: 'project-a-campaign',
-      channel: 'youtube',
-      contentFormat: 'video',
-      contentHash: 'a'.repeat(64),
-      contentId: 'project-a-report-content',
-      contentVersion: 1,
-      locale: 'en',
-      packageId: publication.publicationId,
-      projectId: 'project-a',
-      publicationId: publication.publicationId,
-      renderer: {
-        canonicalUrl: 'https://project-a.example.com/',
-        format: 'manual-package',
-        links: ['https://project-a.example.com/'],
-        media: ['video'],
-        utmMedium: 'social',
-      },
-      schemaVersion: 1,
-      title: 'Quick sort explained',
-    }
-
-    const handoff = service.createMarketingOpsPublicationHandoff(packageValue)
+  it('persists, reuses, and renews the immutable package behind an owner-assisted marketing-ops handoff', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-10T00:00:00.000Z'))
+    const { handoff, packageValue, publication, service }
+      = createMarketingOpsPublicationHandoffFixture()
     expect(handoff).toMatchObject({
       artifactChecksums: ['f'.repeat(64)],
       channel: 'youtube',
@@ -3084,6 +3104,14 @@ describe('content studio application service', () => {
       .toEqual(handoff)
     expect(service.createMarketingOpsPublicationHandoff({ ...packageValue }))
       .toEqual(handoff)
+    vi.setSystemTime(new Date('2026-08-12T00:00:00.000Z'))
+    const renewed = service.createMarketingOpsPublicationHandoff({ ...packageValue })
+    expect(renewed).toMatchObject({
+      marketingOpsPackage: packageValue,
+      status: 'pending',
+    })
+    expect(renewed.handoffId).not.toBe(handoff.handoffId)
+    expect(Date.parse(renewed.expiresAt)).toBeGreaterThan(Date.now())
     expect(() => service.createMarketingOpsPublicationHandoff({
       ...packageValue,
       contentFormat: 'image-text',
@@ -3095,6 +3123,79 @@ describe('content studio application service', () => {
         taskId: `publication-${publication.publicationId}`,
       }),
     ]))
+  })
+
+  it('releases only the matching pending marketing-ops confirmation for retry', () => {
+    const { handoff, service } = createMarketingOpsPublicationHandoffFixture()
+    const firstUrl = 'https://www.youtube.com/watch?v=12345678901'
+    const secondUrl = 'https://www.youtube.com/watch?v=10987654321'
+    const claimed = service.claimMarketingOpsPublicationConfirmation(
+      'project-a',
+      handoff.handoffId,
+      firstUrl,
+    )
+    expect(claimed.marketingOpsConfirmation).toEqual({
+      publicUrl: firstUrl,
+      status: 'pending',
+    })
+
+    expect(service.releaseMarketingOpsPublicationConfirmation(
+      'project-a',
+      handoff.handoffId,
+      secondUrl,
+    )).toEqual(claimed)
+    expect(service.getMarketingOpsPublicationHandoff('project-a', handoff.handoffId))
+      .toEqual(claimed)
+
+    const released = service.releaseMarketingOpsPublicationConfirmation(
+      'project-a',
+      handoff.handoffId,
+      firstUrl,
+    )
+    expect(released.marketingOpsConfirmation).toBeUndefined()
+    expect(service.getMarketingOpsPublicationHandoff('project-a', handoff.handoffId))
+      .toEqual(released)
+    expect(service.releaseMarketingOpsPublicationConfirmation(
+      'project-a',
+      handoff.handoffId,
+      firstUrl,
+    )).toEqual(released)
+
+    expect(service.claimMarketingOpsPublicationConfirmation(
+      'project-a',
+      handoff.handoffId,
+      secondUrl,
+    ).marketingOpsConfirmation).toEqual({
+      publicUrl: secondUrl,
+      status: 'pending',
+    })
+  })
+
+  it('does not release a completed marketing-ops confirmation', () => {
+    const { handoff, service } = createMarketingOpsPublicationHandoffFixture()
+    const publicUrl = 'https://www.youtube.com/watch?v=12345678901'
+    service.claimMarketingOpsPublicationConfirmation(
+      'project-a',
+      handoff.handoffId,
+      publicUrl,
+    )
+    const completed = service.completeMarketingOpsPublicationHandoff(
+      'project-a',
+      handoff.handoffId,
+      publicUrl,
+    )
+
+    expect(service.releaseMarketingOpsPublicationConfirmation(
+      'project-a',
+      handoff.handoffId,
+      publicUrl,
+    )).toEqual(completed)
+    expect(service.getMarketingOpsPublicationHandoff('project-a', handoff.handoffId))
+      .toEqual(completed)
+    expect(completed.marketingOpsConfirmation).toMatchObject({
+      publicUrl,
+      status: 'confirmed',
+    })
   })
 
   it('rejects mismatched ownership and duplicate immutable records', () => {

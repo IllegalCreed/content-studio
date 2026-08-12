@@ -1,5 +1,5 @@
 import type { StudioBundle } from '../types'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -64,6 +64,12 @@ describe('bundle writer', () => {
       expect(content).toContain('# Understand quick sort')
       expect(content).toContain('Delivery: owner-assisted')
       expect(video).toEqual(bundle.videoPlan)
+      if (process.platform !== 'win32') {
+        for (const relativeFile of result.files) {
+          expect((await stat(join(outputDirectory, relativeFile))).mode & 0o777)
+            .toBe(0o600)
+        }
+      }
     }
     finally {
       await rm(temporaryDirectory, {

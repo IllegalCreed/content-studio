@@ -26,8 +26,8 @@ export function createMarketingOpsPublishClient(
       try {
         value = await options.publishCampaign(input)
       }
-      catch {
-        throw new Error('Marketing-ops publish failed')
+      catch (error: unknown) {
+        throw publishFailure(error instanceof Error ? error.message : undefined)
       }
       return parsePublishResult(value, input)
     },
@@ -40,7 +40,7 @@ function parsePublishResult(
 ): MarketingOpsPublishResult {
   const value = asRecord(input)
   if (value.isError === true)
-    throw new Error('Marketing-ops publish failed')
+    throw publishFailure(toolText(value.content))
   const allowed = new Set([
     'campaignId',
     'failures',
@@ -71,6 +71,37 @@ function parsePublishResult(
     projectId: request.projectId,
     receipts,
   }
+}
+
+function publishFailure(details?: string): Error {
+  const normalized = details?.replace(/\s+/gu, ' ').trim()
+  return new Error(
+    normalized === undefined || normalized === '' || containsSensitiveDiagnostic(normalized)
+      ? 'Marketing-ops publish failed'
+      : `Marketing-ops publish failed: ${normalized.slice(0, 500)}`,
+  )
+}
+
+function containsSensitiveDiagnostic(value: string): boolean {
+  return /bearer|cookie|credential|keychain|password|secret|token|api[-_]?key|\/private\//iu.test(value)
+}
+
+function toolText(input: unknown): string | undefined {
+  if (!Array.isArray(input))
+    return undefined
+  const text = input
+    .map((item) => {
+      if (typeof item !== 'object' || item === null || Array.isArray(item))
+        return undefined
+      const record = item as Record<string, unknown>
+      if (record.type !== 'text' || typeof record.text !== 'string')
+        return undefined
+      return record.text
+    })
+    .filter((item): item is string => item !== undefined)
+    .join(' ')
+    .trim()
+  return text === '' ? undefined : text
 }
 
 function parseReceipt(

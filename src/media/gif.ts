@@ -9,6 +9,7 @@ import { execFile as execFileCallback } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
   access,
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -125,6 +126,7 @@ export async function generateDeterministicGif(
     )
     throwIfAborted(input.signal)
     await rename(temporaryOutputPath, input.outputPath)
+    await chmod(input.outputPath, 0o600)
     return {
       artifactPath: input.outputPath,
       durationSeconds: actualDurationSeconds,

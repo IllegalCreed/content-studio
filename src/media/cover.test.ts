@@ -2,7 +2,7 @@
 
 import type { GenerateDeterministicCoverInput } from './cover'
 import { execFile as execFileCallback, execFileSync } from 'node:child_process'
-import { access, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { access, mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -59,6 +59,8 @@ describe.skipIf(!ffmpegIsAvailable)('deterministic media covers', () => {
       })
 
       await expect(access(result.artifactPath)).resolves.toBeUndefined()
+      if (process.platform !== 'win32')
+        expect((await stat(result.artifactPath)).mode & 0o777).toBe(0o600)
       expect(result).toMatchObject({
         height: 360,
         width: 640,

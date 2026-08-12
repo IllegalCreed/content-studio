@@ -7,7 +7,9 @@ import { isAbsolute, relative, resolve } from 'node:path'
 
 const MANAGED_RUNTIME_MANIFEST_FILE = 'runtime-manifest.json'
 const MANAGED_RUNTIME_FILES = [
+  'browsers.json',
   'dist/keychain-helper',
+  'dist/playwright-core.bundle.cjs',
   'dist/server.js',
   'package.json',
 ] as const

@@ -168,6 +168,7 @@ describe('marketing-ops publication package compiler', () => {
       artifacts: [
         artifact('article-zh', 'article-version', 'articles/zh-CN.md', 'zh-CN'),
         artifact('demo-gif', 'image', 'media/quick-sort.gif', 'zh-CN'),
+        artifact('bilibili-cover-image-text-zh-v2', 'image', 'media/quick-sort-cover-image-text-v2.png', 'zh-CN'),
       ],
       content: currentContent,
       publication: {
@@ -194,9 +195,11 @@ describe('marketing-ops publication package compiler', () => {
       renderer: { format: 'manual-package', media: ['gif'], utmMedium: 'social' },
     })
     expect(compiled.artifactRefs.map(reference => reference.locale))
-      .toEqual(['zh-CN', 'zh-CN'])
+      .toEqual(['zh-CN', 'zh-CN', 'zh-CN'])
     expect(compiled.artifactRefs.find(reference => reference.artifactId === 'demo-gif'))
       .toMatchObject({ mediaKind: 'gif' })
+    expect(compiled.artifactRefs.find(reference => reference.artifactId === 'bilibili-cover-image-text-zh-v2'))
+      .toMatchObject({ mediaKind: 'image' })
   })
 
   it('derives and locks Bilibili video orientation from the activity video plan', () => {
@@ -223,7 +226,11 @@ describe('marketing-ops publication package compiler', () => {
     }
     const baseInput = input({
       activity: currentActivity,
-      artifacts: [artifact('video-en', 'video', 'media/quick-sort.mp4', 'en')],
+      artifacts: [
+        artifact('video-en', 'video', 'media/quick-sort.mp4', 'en'),
+        artifact('bilibili-cover-video-16x9-en-v2', 'image', 'media/bilibili-cover-video-16x9-v2.png', 'en'),
+        artifact('bilibili-cover-video-4x3-en-v2', 'image', 'media/bilibili-cover-video-4x3-v2.png', 'en'),
+      ],
       content: currentContent,
       publication: {
         activityId,
@@ -241,6 +248,12 @@ describe('marketing-ops publication package compiler', () => {
 
     const compiled = compileMarketingOpsPublicationPackage(baseInput)
     expect(compiled.videoOrientation).toBe('landscape')
+    expect(compiled.artifactRefs.map(reference => reference.artifactId)).toEqual([
+      'video-en',
+      'bilibili-cover-video-16x9-en-v2',
+      'bilibili-cover-video-4x3-en-v2',
+    ])
+    expect(compiled.renderer.media).toEqual(['video'])
     expect(compiled.contentHash).toMatch(/^[a-f0-9]{64}$/)
     expect(compileMarketingOpsPublicationPackage({
       ...baseInput,
@@ -269,6 +282,167 @@ describe('marketing-ops publication package compiler', () => {
       ...baseInput,
       activity: { ...currentActivity, video: { flowIds: [], format: 'square' } },
     })).toThrow(/landscape|portrait/i)
+    expect(() => compileMarketingOpsPublicationPackage({
+      ...baseInput,
+      artifacts: [
+        artifact('video-en', 'video', 'media/quick-sort.mp4', 'en'),
+        artifact('bilibili-cover-video-16x9-en-v2', 'image', 'media/bilibili-cover-video-16x9-v2.png', 'en'),
+      ],
+    })).toThrow(/4:3|cover/i)
+  })
+
+  it('prefers the dedicated Bilibili image-text cover over an older generic cover', () => {
+    const currentContent = content({
+      artifactIds: ['article-zh', 'demo-gif'],
+      body: `中文说明：${origin}/zh/quick-sort/`,
+      channel: 'bilibili',
+      contentId: 'bilibili-zh-cover-preference',
+      format: 'image-text',
+      locale: 'zh-CN',
+    })
+    const compiled = compileMarketingOpsPublicationPackage(input({
+      artifacts: [
+        artifact('article-zh', 'article-version', 'articles/zh.md', 'zh-CN'),
+        artifact('demo-gif', 'image', 'media/quick-sort.gif', 'zh-CN'),
+        artifact('bilibili-quick-sort-cover-zh', 'image', 'media/quick-sort-cover.png', 'zh-CN'),
+        artifact('bilibili-cover-image-text-zh-v2', 'image', 'media/quick-sort-cover-image-text-v2.png', 'zh-CN'),
+      ],
+      content: currentContent,
+      publication: {
+        activityId,
+        channel: 'bilibili',
+        contentId: currentContent.contentId,
+        projectId,
+        publicationId: 'bilibili-zh-cover-preference',
+      },
+      renderer: renderer({
+        canonicalUrl: `${origin}/zh/quick-sort/`,
+        format: 'manual-package',
+        links: [`${origin}/zh/quick-sort/`],
+        media: ['gif'],
+        utmMedium: 'social',
+      }),
+    }))
+    expect(compiled.artifactRefs.at(-1)?.artifactId)
+      .toBe('bilibili-cover-image-text-zh-v2')
+  })
+
+  it('locks selected Bilibili cover slots and ignores ineligible auxiliary artifacts', () => {
+    const currentContent = content({
+      artifactIds: ['video-en', 'selected-cover-landscape', 'selected-cover-4x3'],
+      body: `Watch the video at ${origin}/en/quick-sort/`,
+      channel: 'bilibili',
+      contentId: 'bilibili-selected-video',
+      format: 'video',
+    })
+    const currentActivity = {
+      ...activity(),
+      channels: activity().channels.map(channel =>
+        channel.id === 'bilibili' && channel.locale === 'en'
+          ? { ...channel, contentFormats: [...(channel.contentFormats ?? []), 'video-metadata' as const] }
+          : channel),
+      video: { flowIds: [], format: 'landscape' as const },
+    }
+    const compiled = compileMarketingOpsPublicationPackage(input({
+      activity: currentActivity,
+      artifacts: [
+        artifact('video-en', 'video', 'media/quick-sort.mp4', 'en'),
+        artifact('selected-cover-landscape', 'image', 'media/selected-cover-landscape.png', 'en'),
+        artifact('selected-cover-4x3', 'image', 'media/selected-cover-4x3.png', 'en'),
+        artifact('selected-cover-landscape', 'image', 'media/old-cover-landscape.png', 'en'),
+        artifact('ignored-cover-image-text', 'article-version', 'media/ignored-cover-image-text.png', 'en'),
+        artifact('foreign-cover-image-text', 'image', 'media/foreign-cover-image-text.png', 'zh-CN'),
+      ].map((value, index) => index === 3 ? { ...value, version: 0 } : value),
+      content: currentContent,
+      publication: {
+        activityId,
+        channel: 'bilibili',
+        contentId: currentContent.contentId,
+        projectId,
+        publicationId: 'bilibili-selected-video',
+      },
+      renderer: renderer({ format: 'manual-package', media: ['video', 'image'], utmMedium: 'social' }),
+    }))
+
+    expect(compiled.artifactRefs.map(reference => reference.artifactId)).toEqual([
+      'video-en',
+      'selected-cover-landscape',
+      'selected-cover-4x3',
+    ])
+  })
+
+  it('uses one generic image-text cover and rejects ambiguous selected or auxiliary covers', () => {
+    const currentContent = content({
+      artifactIds: ['article-en', 'generic-cover'],
+      body: `English image-text: ${origin}/en/quick-sort/`,
+      channel: 'bilibili',
+      contentId: 'bilibili-generic-cover',
+      format: 'image-text',
+    })
+    const base = input({
+      artifacts: [
+        artifact('article-en', 'article-version', 'articles/en.md', 'en'),
+        artifact('generic-cover', 'image', 'media/generic-cover.png', 'en'),
+      ],
+      content: currentContent,
+      publication: {
+        activityId,
+        channel: 'bilibili',
+        contentId: currentContent.contentId,
+        projectId,
+        publicationId: 'bilibili-generic-cover',
+      },
+      renderer: renderer({ format: 'manual-package', media: ['image'], utmMedium: 'social' }),
+    })
+    expect(compileMarketingOpsPublicationPackage(base).artifactRefs.at(-1)?.artifactId)
+      .toBe('generic-cover')
+
+    expect(() => compileMarketingOpsPublicationPackage({
+      ...base,
+      content: { ...currentContent, artifactIds: ['article-en', 'cover-a', 'cover-b'] },
+      artifacts: [
+        artifact('article-en', 'article-version', 'articles/en.md', 'en'),
+        artifact('cover-a', 'image', 'media/cover-a.png', 'en'),
+        artifact('cover-b', 'image', 'media/cover-b.png', 'en'),
+      ],
+    })).toThrow(/exactly one.*cover/i)
+    expect(() => compileMarketingOpsPublicationPackage({
+      ...base,
+      content: { ...currentContent, artifactIds: ['article-en'] },
+      artifacts: [
+        ...base.artifacts,
+        artifact('another-generic-cover', 'image', 'media/another-generic-cover.png', 'en'),
+      ],
+    })).toThrow(/exactly one.*cover/i)
+  })
+
+  it('ignores Bilibili auxiliary covers for short posts and non-Bilibili packages', () => {
+    const shortPost = content({
+      artifactIds: [],
+      body: `English post: ${origin}/en/quick-sort/`,
+      channel: 'bilibili',
+      contentId: 'bilibili-short-post-cover-ignore',
+      format: 'short-post',
+    })
+    expect(compileMarketingOpsPublicationPackage(input({
+      artifacts: [artifact('unused-cover', 'image', 'media/unused-cover.png', 'en')],
+      content: shortPost,
+      publication: {
+        activityId,
+        channel: 'bilibili',
+        contentId: shortPost.contentId,
+        projectId,
+        publicationId: 'bilibili-short-post-cover-ignore',
+      },
+      renderer: renderer({ format: 'manual-package', utmMedium: 'social' }),
+    })).artifactRefs).toEqual([])
+
+    expect(compileMarketingOpsPublicationPackage(input({
+      artifacts: [
+        artifact('article-en', 'article-version', 'articles/en.md'),
+        artifact('unused-cover', 'image', 'media/unused-cover.png', 'en'),
+      ],
+    })).artifactRefs.map(reference => reference.artifactId)).toEqual(['article-en'])
   })
 
   it('allows multiple locales and forms for one channel in a batch', () => {
@@ -389,6 +563,24 @@ describe('marketing-ops publication package compiler', () => {
         activityId: 'other-activity',
       }],
     }))).toThrow(/project and activity/i)
+    expect(() => compileMarketingOpsPublicationPackage(input({
+      content: content({ artifactIds: ['article-en', 'article-en'] }),
+    }))).toThrow(/duplicate/i)
+    expect(() => compileMarketingOpsPublicationPackage(input({
+      content: content({ artifactIds: ['missing'] }),
+    }))).toThrow(/not resolved/i)
+    expect(() => compileMarketingOpsPublicationPackage(input({
+      artifacts: [{
+        ...artifact('article-en', 'article-version', 'articles/en.md'),
+        sha256: 'invalid',
+      }],
+    }))).toThrow(/sha256/i)
+    expect(() => compileMarketingOpsPublicationPackage(input({
+      artifacts: [{
+        ...artifact('article-en', 'article-version', 'articles/en.md'),
+        version: 0,
+      }],
+    }))).toThrow(/positive version/i)
     expect(() => compileMarketingOpsPublicationPackages([input(), input()]))
       .toThrow(/duplicate.*package id/i)
   })

@@ -22,6 +22,8 @@ const temporaryDirectories: string[] = []
 
 const SERVER = 'installed marketing-ops server fixture\n'
 const HELPER = 'installed marketing-ops keychain helper fixture\n'
+const BROWSERS = '{"browsers":[]}\n'
+const BUNDLE = 'installed marketing-ops playwright bundle fixture\n'
 const PACKAGE_JSON = JSON.stringify({
   name: '@illegalcreed/marketing-ops',
   private: true,
@@ -33,18 +35,22 @@ function sha256(contents: string): string {
   return createHash('sha256').update(contents).digest('hex')
 }
 
-async function createInstalledRuntime(): Promise<string> {
+async function createInstalledRuntime(includeAssetBundles = false): Promise<string> {
   const parent = await realpath(await mkdtemp(join(await realpath(tmpdir()), 'content-studio-installed-guard-')))
   temporaryDirectories.push(parent)
   const root = join(parent, 'runtimes', 'marketing-ops', '0.1.0')
   await mkdir(join(root, 'dist'), { recursive: true, mode: 0o700 })
+  await writeFile(join(root, 'browsers.json'), BROWSERS, { mode: 0o600 })
   await writeFile(join(root, 'dist/server.js'), SERVER, { mode: 0o600 })
   await writeFile(join(root, 'dist/keychain-helper'), HELPER, { mode: 0o700 })
+  await writeFile(join(root, 'dist/playwright-core.bundle.cjs'), BUNDLE, { mode: 0o600 })
   await writeFile(join(root, 'package.json'), PACKAGE_JSON, { mode: 0o600 })
   const manifest = JSON.stringify({
     contractVersion: 3,
     files: [
+      { path: 'browsers.json', sha256: sha256(BROWSERS) },
       { path: 'dist/keychain-helper', sha256: sha256(HELPER) },
+      { path: 'dist/playwright-core.bundle.cjs', sha256: sha256(BUNDLE) },
       { path: 'dist/server.js', sha256: sha256(SERVER) },
       { path: 'package.json', sha256: sha256(PACKAGE_JSON) },
     ],
@@ -59,6 +65,10 @@ async function createInstalledRuntime(): Promise<string> {
   await chmod(join(parent, 'runtimes', 'marketing-ops'), 0o700)
   await chmod(root, 0o700)
   await chmod(join(root, 'dist'), 0o700)
+  if (includeAssetBundles) {
+    await mkdir(join(root, 'asset-bundles'), { mode: 0o700 })
+    await chmod(join(root, 'asset-bundles'), 0o700)
+  }
   return root
 }
 
@@ -71,7 +81,7 @@ afterEach(async () => {
 
 describe.runIf(process.platform !== 'win32')('installed marketing-ops runtime guard', () => {
   it('accepts a complete private installed runtime', async () => {
-    const root = await createInstalledRuntime()
+    const root = await createInstalledRuntime(true)
 
     await expect(verifyInstalledManagedMarketingOpsRuntime(root)).resolves.toBe(true)
   })

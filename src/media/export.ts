@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import {
   access,
+  chmod,
   stat,
 } from 'node:fs/promises'
 import { extname, resolve } from 'node:path'
@@ -99,6 +100,7 @@ export async function exportBilibiliVideo(
       },
     )
     throwIfAborted(input.signal)
+    await chmod(outputPath, 0o600)
     const outputStatus = await stat(outputPath)
     const durationSeconds = await probeMediaDuration(outputPath, ffmpegPath, input.signal)
     const sha256 = await hashFile(outputPath, input.signal)

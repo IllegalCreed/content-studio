@@ -7,6 +7,7 @@ import {
   chmod,
   mkdtemp,
   rm,
+  stat,
   writeFile,
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -110,6 +111,8 @@ describe.skipIf(!ffmpegIsAvailable)('ffmpeg composition engine', () => {
       expect(result.durationSeconds).toBeGreaterThan(0.8)
       expect(result.durationSeconds).toBeLessThan(1.2)
       await expect(access(outputPath)).resolves.toBeUndefined()
+      if (process.platform !== 'win32')
+        expect((await stat(outputPath)).mode & 0o777).toBe(0o600)
     }
     finally {
       await rm(directory, { force: true, recursive: true })

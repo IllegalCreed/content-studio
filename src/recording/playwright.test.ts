@@ -1,4 +1,9 @@
 import type { SemanticLocator, VideoPlan } from '../types'
+import { Buffer } from 'node:buffer'
+import { chmod, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { chromium } from 'playwright'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createPlaywrightRecordingSession,
@@ -196,5 +201,89 @@ describe('playwright recording policy', () => {
       reducedMotion: 'reduce',
       viewport: { height: 900, width: 1600 },
     })
+  })
+
+  it('makes a finalized screencast clip private', async () => {
+    const artifactDirectory = await mkdtemp(join(tmpdir(), 'content-studio-playwright-'))
+    const page = {
+      close: vi.fn(async () => {}),
+      emulateMedia: vi.fn(async () => {}),
+      goto: vi.fn(async () => null),
+      on: vi.fn(),
+      screenshot: vi.fn(async () => Buffer.from('frame')),
+      screencast: {
+        showOverlay: vi.fn(async () => ({ dispose: async () => {} })),
+        start: vi.fn(async (options: { onFrame: () => void, path: string }) => {
+          await writeFile(options.path, 'screencast-segment', { mode: 0o644 })
+          await chmod(options.path, 0o644)
+          options.onFrame()
+        }),
+        stop: vi.fn(async () => {}),
+      },
+      url: vi.fn(() => 'https://example.com/demo'),
+    }
+    const browserContext = {
+      close: vi.fn(async () => {}),
+      newPage: vi.fn(async () => page),
+      on: vi.fn(),
+      setDefaultTimeout: vi.fn(),
+    }
+    const browser = {
+      close: vi.fn(async () => {}),
+      newContext: vi.fn(async () => browserContext),
+    }
+    const launch = vi.spyOn(chromium, 'launch').mockResolvedValue(browser as never)
+    const plan: VideoPlan = {
+      campaignId: 'private-clip-campaign',
+      durationMs: 0,
+      format: 'landscape',
+      recordingConfig: {
+        colorScheme: 'dark',
+        deviceScaleFactor: 1,
+        locale: 'en',
+        outputSize: { height: 360, width: 640 },
+        viewport: { height: 360, width: 640 },
+      },
+      scenes: [{
+        actions: [{ durationMs: 0, kind: 'wait', startMs: 0 }],
+        id: 'private-clip-scene',
+        startMs: 0,
+        startPath: '/demo',
+        title: 'Private clip',
+      }],
+    }
+    const scene = plan.scenes[0]!
+
+    try {
+      const session = await createPlaywrightRecordingSession({
+        artifactDirectory,
+        attempt: 1,
+        baseUrl: 'https://example.com',
+        jobId: 'private-clip-job',
+        plan,
+        projectId: 'project-a',
+      })
+      await session.beginScene(scene, { sceneIndex: 0 })
+      await session.runAction(scene.actions[0]!, {
+        actionIndex: 0,
+        sceneIndex: 0,
+      })
+      await session.endScene(scene, { sceneIndex: 0 })
+      const summary = await session.close()
+      const clip = summary.artifacts.find(artifact => artifact.kind === 'video-clip')
+
+      expect(clip).toMatchObject({
+        relativePath: 'clips/scene-001.webm',
+        sceneId: scene.id,
+      })
+      if (process.platform !== 'win32') {
+        expect((await stat(join(artifactDirectory, clip!.relativePath))).mode & 0o777)
+          .toBe(0o600)
+      }
+    }
+    finally {
+      launch.mockRestore()
+      await rm(artifactDirectory, { force: true, recursive: true })
+    }
   })
 })

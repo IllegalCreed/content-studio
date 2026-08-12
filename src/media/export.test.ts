@@ -7,6 +7,7 @@ import {
   mkdtemp,
   readFile,
   rm,
+  stat,
   writeFile,
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -60,6 +61,8 @@ describe.skipIf(!ffmpegIsAvailable)('bilibili video export', () => {
       expect(result.sha256).toMatch(/^[a-f0-9]{64}$/u)
       expect(result.durationSeconds).toBeGreaterThan(0.4)
       await expect(access(outputPath)).resolves.toBeUndefined()
+      if (process.platform !== 'win32')
+        expect((await stat(outputPath)).mode & 0o777).toBe(0o600)
       const probe = await probeMediaDuration(outputPath)
       expect(probe).toBeGreaterThan(0.4)
     }

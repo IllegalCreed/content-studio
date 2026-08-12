@@ -17,6 +17,8 @@ import { resolveManagedMarketingOpsRuntimeAsset } from './managed-runtime-asset'
 import { parseInstallerManagedRuntimeHandoff } from './managed-runtime-handoff'
 
 export interface ManagedMarketingOpsMcpSession {
+  /** Fixed child-runtime directory; never supplied by MCP callers. */
+  assetBundleRoot?: string
   callTool: (input:
     | Parameters<MarketingOpsMcpClient['callTool']>[0]
     | {
@@ -109,6 +111,7 @@ async function startManagedRuntime(
       return undefined
     }
     return createMarketingOpsManagedRuntime({
+      assetBundleRoot: connectedSession.assetBundleRoot,
       close: () => connectedSession.close(),
       mcp: {
         callTool: input => connectedSession.callTool(input),

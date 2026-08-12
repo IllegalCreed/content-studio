@@ -10,6 +10,7 @@ import type {
   ExecutionTaskEvent,
   ExecutionTaskStatus,
   MarketingOpsChannelsStatusSnapshot,
+  MarketingOpsChannelStatus,
   MarketingOpsPublicationPackage,
   MarketingOpsPublishClient,
   MarketingOpsPublishResult,
@@ -37,6 +38,7 @@ import {
   TaskScopeError,
   TaskStateError,
 } from '../jobs/task'
+import { stageMarketingOpsAssetBundle } from '../marketing-ops/assets'
 import { isMarketingOpsStatusSnapshotFresh } from '../marketing-ops/client'
 import {
   buildMarketingOpsCampaignRequest,
@@ -81,6 +83,8 @@ export interface McpJsonRpcResponse {
 }
 
 export interface ContentStudioMcpServerOptions {
+  marketingOpsAssetBundleRoot?: string
+  marketingOpsSourceRoot?: string
   marketingOpsPublish?: MarketingOpsPublishClient
   marketingOpsStatus?: MarketingOpsStatusClient
   ownerTakeovers?: OwnerTakeoverRegistry
@@ -1195,11 +1199,25 @@ async function executeMarketingOpsAssistedPreparation(
   parsed: ParsedMarketingOpsAssistedPreparation,
   options: ContentStudioMcpServerOptions,
 ): Promise<unknown> {
-  const status = await executeMarketingOpsStatus({ projectId: parsed.preparation.projectId }, options)
-  assertBilibiliAssistedReady(status)
+  const statusBefore = await executeMarketingOpsStatus({ projectId: parsed.preparation.projectId }, options)
+  syncBilibiliOwnerAssistedBinding(
+    options.service,
+    parsed.preparation.projectId,
+    statusBefore,
+  )
   const prepared = options.service.prepareMarketingOpsPublicationPackage(parsed.preparation)
   const packageValue = prepared.package
   assertBilibiliAssistedPackage(packageValue)
+  if (options.marketingOpsAssetBundleRoot === undefined)
+    throw new Error('Marketing Ops asset bundle root is unavailable')
+  if (options.marketingOpsSourceRoot === undefined)
+    throw new Error('Marketing Ops source root is unavailable')
+  await stageMarketingOpsAssetBundle({
+    artifacts: options.service.getProjectView(packageValue.projectId).activityArtifacts,
+    bundleRoot: options.marketingOpsAssetBundleRoot,
+    package: packageValue,
+    sourceRoot: options.marketingOpsSourceRoot,
+  })
   const result = await options.marketingOpsPublish!.publishCampaign(
     buildMarketingOpsCampaignRequest({
       authorization: parsed.authorization,
@@ -1210,6 +1228,8 @@ async function executeMarketingOpsAssistedPreparation(
       spec: createMarketingOpsCampaignSpec([packageValue]),
     }),
   )
+  const statusAfter = await executeMarketingOpsStatus({ projectId: packageValue.projectId }, options)
+  assertBilibiliStatusMatchesPackage(statusAfter, packageValue)
   if (
     result.failures.length > 0
     || !result.handoffs.some(handoff =>
@@ -1219,11 +1239,17 @@ async function executeMarketingOpsAssistedPreparation(
       && handoff.status === 'awaiting-owner',
     )
   ) {
-    throw new Error('Marketing Ops did not prepare the owner handoff')
+    const failureSummary = summarizeMarketingOpsFailures(result.failures)
+    throw new Error(
+      failureSummary === undefined
+        ? 'Marketing Ops did not prepare the owner handoff'
+        : `Marketing Ops did not prepare the owner handoff: ${failureSummary}`,
+    )
   }
   const handoff = options.service.createMarketingOpsPublicationHandoff(packageValue)
   return {
     ...result,
+    channelsStatus: { after: statusAfter, before: statusBefore },
     handoff,
     mode: 'assisted-prepare',
     package: packageValue,
@@ -1238,54 +1264,72 @@ async function executeMarketingOpsAssistedConfirmation(
     parsed.projectId,
     parsed.handoffId,
   )
-  const packageValue = handoff.marketingOpsPackage
-  if (packageValue === undefined)
+  const storedPackageValue = handoff.marketingOpsPackage
+  if (storedPackageValue === undefined)
     throw new Error('Owner handoff does not contain a marketing-ops package')
+  const statusBefore = await executeMarketingOpsStatus({ projectId: storedPackageValue.projectId }, options)
+  const accountRef = syncBilibiliOwnerAssistedBinding(
+    options.service,
+    storedPackageValue.projectId,
+    statusBefore,
+  )
+  const packageValue = withBilibiliPackageAccountRef(storedPackageValue, accountRef)
   assertBilibiliAssistedPackage(packageValue)
   assertCurrentBilibiliOwnerAssistedBinding(options.service, packageValue)
-  const status = await executeMarketingOpsStatus({ projectId: packageValue.projectId }, options)
-  assertBilibiliAssistedReady(status)
   options.service.claimMarketingOpsPublicationConfirmation(
     parsed.projectId,
     parsed.handoffId,
     parsed.execution.publicUrl,
   )
-  const result = await options.marketingOpsPublish!.publishCampaign(
-    buildMarketingOpsCampaignRequest({
-      authorization: parsed.authorization,
-      campaignId: packageValue.campaignId,
-      execution: {
-        confirmations: [{
-          channel: packageValue.channel,
-          form: packageValue.contentFormat,
-          packageId: packageValue.packageId,
-          publicUrl: parsed.execution.publicUrl,
-          publicationId: packageValue.publicationId,
-        }],
-        mode: 'assisted-confirm',
-      },
-      idempotencyKey: publicationIdempotencyKey(packageValue),
-      packages: [packageValue],
-      spec: createMarketingOpsCampaignSpec([packageValue]),
-    }),
-  )
-  const receipt = assertMarketingOpsAssistedConfirmationResult(
-    result,
-    packageValue,
-    parsed.execution.publicUrl,
-  )
-  const receipts = [options.service.recordPublicationReceipt(receipt)]
-  const completedHandoff = options.service.completeMarketingOpsPublicationHandoff(
-    parsed.projectId,
-    parsed.handoffId,
-    parsed.execution.publicUrl,
-  )
-  return {
-    ...result,
-    handoff: completedHandoff,
-    mode: 'assisted-confirm',
-    package: packageValue,
-    receipts,
+  try {
+    const result = await options.marketingOpsPublish!.publishCampaign(
+      buildMarketingOpsCampaignRequest({
+        authorization: parsed.authorization,
+        campaignId: packageValue.campaignId,
+        execution: {
+          confirmations: [{
+            channel: packageValue.channel,
+            form: packageValue.contentFormat,
+            packageId: packageValue.packageId,
+            publicUrl: parsed.execution.publicUrl,
+            publicationId: packageValue.publicationId,
+          }],
+          mode: 'assisted-confirm',
+        },
+        idempotencyKey: publicationIdempotencyKey(packageValue),
+        packages: [packageValue],
+        spec: createMarketingOpsCampaignSpec([packageValue]),
+      }),
+    )
+    const receipt = assertMarketingOpsAssistedConfirmationResult(
+      result,
+      packageValue,
+      parsed.execution.publicUrl,
+    )
+    const statusAfter = await executeMarketingOpsStatus({ projectId: packageValue.projectId }, options)
+    assertBilibiliStatusMatchesPackage(statusAfter, packageValue)
+    const receipts = [options.service.recordPublicationReceipt(receipt)]
+    const completedHandoff = options.service.completeMarketingOpsPublicationHandoff(
+      parsed.projectId,
+      parsed.handoffId,
+      parsed.execution.publicUrl,
+    )
+    return {
+      ...result,
+      channelsStatus: { after: statusAfter, before: statusBefore },
+      handoff: completedHandoff,
+      mode: 'assisted-confirm',
+      package: packageValue,
+      receipts,
+    }
+  }
+  catch (error) {
+    options.service.releaseMarketingOpsPublicationConfirmation(
+      parsed.projectId,
+      parsed.handoffId,
+      parsed.execution.publicUrl,
+    )
+    throw error
   }
 }
 
@@ -1308,13 +1352,77 @@ function assertCurrentBilibiliOwnerAssistedBinding(
   }
 }
 
+function syncBilibiliOwnerAssistedBinding(
+  service: ContentStudioApplicationService,
+  projectId: string,
+  status: MarketingOpsChannelsStatusSnapshot,
+): string {
+  const bilibili = assertBilibiliAssistedReady(status)
+  const accountRef = bilibili.accountRef
+  if (accountRef === undefined)
+    throw new Error(MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE)
+  const binding = service
+    .getProjectView(projectId)
+    .projectChannelBindings
+    .find(candidate => candidate.channel === 'bilibili')
+  if (binding?.enabled !== true || binding.delivery !== 'owner-assisted') {
+    throw new Error(
+      'Bilibili owner-assisted publication requires the current matching channel binding',
+    )
+  }
+  if (binding.accountRef !== undefined && binding.accountRef !== accountRef) {
+    throw new Error(
+      'Bilibili owner-assisted publication requires the current matching account scope',
+    )
+  }
+  if (binding.accountRef === undefined) {
+    service.updateProjectChannelBinding({
+      ...binding,
+      accountRef,
+    })
+  }
+  return accountRef
+}
+
+function withBilibiliPackageAccountRef(
+  packageValue: MarketingOpsPublicationPackage,
+  accountRef: string,
+): MarketingOpsPublicationPackage {
+  if (packageValue.accountRef !== undefined && packageValue.accountRef !== accountRef) {
+    throw new Error(
+      'Bilibili owner-assisted publication requires the current matching account scope',
+    )
+  }
+  return packageValue.accountRef === accountRef
+    ? packageValue
+    : { ...packageValue, accountRef }
+}
+
+function assertBilibiliStatusMatchesPackage(
+  status: MarketingOpsChannelsStatusSnapshot,
+  packageValue: MarketingOpsPublicationPackage,
+): void {
+  const bilibili = assertBilibiliAssistedReady(status)
+  if (bilibili.accountRef !== packageValue.accountRef) {
+    throw new Error(
+      'Bilibili owner-assisted publication requires the current matching account scope',
+    )
+  }
+}
+
 function assertMarketingOpsAssistedConfirmationResult(
   result: MarketingOpsPublishResult,
   packageValue: MarketingOpsPublicationPackage,
   publicUrl: string,
 ): MarketingOpsPublishResult['receipts'][number] {
-  if (result.failures.length > 0)
-    throw new Error('Marketing Ops returned failures for the owner confirmation')
+  if (result.failures.length > 0) {
+    const failureSummary = summarizeMarketingOpsFailures(result.failures)
+    throw new Error(
+      failureSummary === undefined
+        ? 'Marketing Ops returned failures for the owner confirmation'
+        : `Marketing Ops returned failures for the owner confirmation: ${failureSummary}`,
+    )
+  }
   if (result.receipts.length !== 1)
     throw new Error('Marketing Ops must return exactly one confirmation receipt')
   const receipt = result.receipts[0]!
@@ -1332,6 +1440,21 @@ function assertMarketingOpsAssistedConfirmationResult(
     throw new Error('Marketing Ops did not return a matching confirmation receipt')
   }
   return receipt
+}
+
+function summarizeMarketingOpsFailures(
+  failures: MarketingOpsPublishResult['failures'],
+): string | undefined {
+  if (failures.length === 0)
+    return undefined
+  return failures
+    .map((failure) => {
+      const parts = [failure.packageId, failure.code, failure.message]
+      if (failure.retryable === true)
+        parts.push('retryable=true')
+      return parts.join(': ')
+    })
+    .join(' | ')
 }
 
 function parseMarketingOpsAssistedPublicationInput(
@@ -1400,17 +1523,19 @@ function assertBilibiliAssistedPackage(
 
 function assertBilibiliAssistedReady(
   status: MarketingOpsChannelsStatusSnapshot,
-): void {
+): MarketingOpsChannelStatus {
   if (!status.capabilities?.includes('content-studio-assisted-publication-v1'))
     throw new Error(MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE)
   const bilibili = status.channels.find(channel => channel.channel === 'bilibili')
   if (
     bilibili === undefined
     || bilibili.health !== 'ready'
+    || bilibili.adapterReady !== true
     || bilibili.assistedPublicationReady !== true
   ) {
     throw new Error(MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE)
   }
+  return bilibili
 }
 
 function publicationIdempotencyKey(

@@ -8,6 +8,11 @@ import type {
   ProjectRecord,
   ProjectSnapshot,
 } from '../types'
+import { createHash } from 'node:crypto'
+import { mkdtempSync } from 'node:fs'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { Readable, Writable } from 'node:stream'
 import { describe, expect, it } from 'vitest'
 import {
@@ -77,6 +82,28 @@ const snapshot: ProjectSnapshot = {
   projectId,
   snapshotId: project.currentSnapshotId,
   version: 1,
+}
+
+function createMarketingOpsStagingRoots(): {
+  assetBundleRoot: string
+  sourceRoot: string
+} {
+  return {
+    assetBundleRoot: mkdtempSync(join(tmpdir(), 'content-studio-marketing-ops-bundle-')),
+    sourceRoot: mkdtempSync(join(tmpdir(), 'content-studio-marketing-ops-source-')),
+  }
+}
+
+async function writeMarketingOpsSourceArtifact(
+  sourceRoot: string,
+  projectIdValue: string,
+  relativePath: string,
+  contents: string,
+): Promise<string> {
+  const sourcePath = resolve(sourceRoot, projectIdValue, relativePath)
+  await mkdir(dirname(sourcePath), { recursive: true })
+  await writeFile(sourcePath, contents, { mode: 0o600 })
+  return createHash('sha256').update(contents).digest('hex')
 }
 
 function freshMarketingOpsStatus(
@@ -171,6 +198,7 @@ async function createBilibiliAssistedConfirmationFixture(): Promise<{
   const repository = new InMemoryContentStudioRepository()
   const service = new ContentStudioApplicationService(repository)
   service.registerProject(project, snapshot)
+  const { assetBundleRoot: marketingOpsAssetBundleRoot, sourceRoot: marketingOpsSourceRoot } = createMarketingOpsStagingRoots()
   const binding = {
     accountRef: 'bilibili-main',
     channel: 'bilibili' as const,
@@ -208,7 +236,12 @@ async function createBilibiliAssistedConfirmationFixture(): Promise<{
     locale: 'zh-CN',
     projectId,
     relativePath: '.content-studio/bilibili-confirmation/cover.png',
-    sha256: 'a'.repeat(64),
+    sha256: await writeMarketingOpsSourceArtifact(
+      marketingOpsSourceRoot,
+      projectId,
+      '.content-studio/bilibili-confirmation/cover.png',
+      'bilibili-confirmation-cover',
+    ),
   })
   const content = service.createChannelContent({
     activityId: activity.activityId,
@@ -273,7 +306,8 @@ async function createBilibiliAssistedConfirmationFixture(): Promise<{
         authorizesExternalWrite: false,
         capabilities: ['content-studio-assisted-publication-v1'],
         channels: [{
-          adapterReady: false,
+          accountRef: 'bilibili-main',
+          adapterReady: true,
           alias: null,
           assistedPublicationReady: true,
           channel: 'bilibili',
@@ -288,6 +322,8 @@ async function createBilibiliAssistedConfirmationFixture(): Promise<{
         runtimeVersion: '0.1.0',
       }),
     },
+    marketingOpsAssetBundleRoot,
+    marketingOpsSourceRoot,
     projectId,
     service,
   })
@@ -389,6 +425,7 @@ describe('content Studio local MCP server', () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)
     service.registerProject(project, snapshot)
+    const { assetBundleRoot, sourceRoot } = createMarketingOpsStagingRoots()
     service.bindProjectChannel({
       channel: 'bilibili',
       delivery: 'owner-assisted',
@@ -417,6 +454,12 @@ describe('content Studio local MCP server', () => {
       projectId,
       title: 'Bilibili package',
     })
+    const coverSha256 = await writeMarketingOpsSourceArtifact(
+      sourceRoot,
+      projectId,
+      '.content-studio/bilibili-assisted/cover.png',
+      'bilibili-assisted-cover',
+    )
     service.createActivityArtifact({
       activityId: activity.activityId,
       artifactId: 'bilibili-assisted-cover',
@@ -424,7 +467,7 @@ describe('content Studio local MCP server', () => {
       locale: 'zh-CN',
       projectId,
       relativePath: '.content-studio/bilibili-assisted/cover.png',
-      sha256: 'a'.repeat(64),
+      sha256: coverSha256,
     })
     const content = service.createChannelContent({
       activityId: activity.activityId,
@@ -462,6 +505,7 @@ describe('content Studio local MCP server', () => {
             projectId: input.projectId,
             receipts: [{
               activityId: packageValue.contentStudio.activityId,
+              accountRef: packageValue.contentStudio.accountRef,
               channel: packageValue.channel,
               contentFormat: packageValue.contentStudio.contentFormat,
               contentSha256: packageValue.contentStudio.contentHash,
@@ -502,7 +546,8 @@ describe('content Studio local MCP server', () => {
           authorizesExternalWrite: false,
           capabilities: ['content-studio-assisted-publication-v1'],
           channels: [{
-            adapterReady: false,
+            accountRef: 'bilibili-main',
+            adapterReady: true,
             alias: null,
             assistedPublicationReady: true,
             channel: 'bilibili',
@@ -517,6 +562,8 @@ describe('content Studio local MCP server', () => {
           runtimeVersion: '0.1.0',
         }),
       },
+      marketingOpsAssetBundleRoot: assetBundleRoot,
+      marketingOpsSourceRoot: sourceRoot,
       projectId,
       service,
     })
@@ -576,7 +623,7 @@ describe('content Studio local MCP server', () => {
         contentStudio: {
           artifactRefs: [{
             artifactId: 'bilibili-assisted-cover',
-            sha256: 'a'.repeat(64),
+            sha256: coverSha256,
           }],
           packageId: 'bilibili-assisted-publication',
           publicationId: 'bilibili-assisted-publication',
@@ -699,6 +746,149 @@ describe('content Studio local MCP server', () => {
     expect(service.getProjectView(projectId).publicationReceipts).toHaveLength(1)
   })
 
+  it('surfaces marketing-ops assisted preparation failures in the MCP error text', async () => {
+    const observedAt = new Date()
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    service.registerProject(project, snapshot)
+    const { assetBundleRoot, sourceRoot } = createMarketingOpsStagingRoots()
+    service.bindProjectChannel({
+      channel: 'bilibili',
+      delivery: 'owner-assisted',
+      enabled: true,
+      projectId,
+    })
+    const activity = service.createActivity({
+      activityId: 'bilibili-assisted-activity',
+      campaignId: 'bilibili-assisted-campaign',
+      channels: [{
+        contentFormats: ['image-text'],
+        id: 'bilibili',
+        locale: 'zh-CN',
+      }],
+      goal: 'education',
+      projectId,
+      projectSnapshotId: snapshot.snapshotId,
+      status: 'draft',
+      targetUrl: 'https://example.com/bilibili/',
+      topic: { 'en': 'Bilibili package', 'zh-CN': 'Bilibili 图文包' },
+    })
+    const group = service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'bilibili-assisted-group',
+      coreMessage: 'Prepare the image-text package.',
+      projectId,
+      title: 'Bilibili package',
+    })
+    service.createActivityArtifact({
+      activityId: activity.activityId,
+      artifactId: 'bilibili-assisted-cover',
+      kind: 'image',
+      locale: 'zh-CN',
+      projectId,
+      relativePath: '.content-studio/bilibili-assisted/cover.png',
+      sha256: await writeMarketingOpsSourceArtifact(
+        sourceRoot,
+        projectId,
+        '.content-studio/bilibili-assisted/cover.png',
+        'bilibili-assisted-cover',
+      ),
+    })
+    const content = service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: ['bilibili-assisted-cover'],
+      body: '快速排序图文：https://example.com/bilibili/',
+      channel: 'bilibili',
+      contentGroupId: group.contentGroupId,
+      contentId: 'bilibili-assisted-content',
+      format: 'image-text',
+      locale: 'zh-CN',
+      projectId,
+      title: '快速排序图文',
+    })
+    service.createPublicationPlan({
+      activityId: activity.activityId,
+      channel: 'bilibili',
+      contentId: content.contentId,
+      projectId,
+      publicationId: 'bilibili-assisted-publication',
+    })
+    const server = createContentStudioMcpServer({
+      marketingOpsPublish: {
+        publishCampaign: async () => ({
+          campaignId: 'bilibili-assisted-campaign',
+          failures: [{
+            code: 'UNKNOWN_RESULT',
+            message: 'image paste timed out',
+            packageId: 'bilibili-assisted-publication',
+            retryable: false,
+          }],
+          handoffs: [],
+          limitations: [],
+          projectId,
+          receipts: [],
+        }),
+      },
+      marketingOpsStatus: {
+        getChannelsStatus: async () => ({
+          authorizesExternalWrite: false,
+          capabilities: ['content-studio-assisted-publication-v1'],
+          channels: [{
+            accountRef: 'bilibili-main',
+            adapterReady: true,
+            alias: null,
+            assistedPublicationReady: true,
+            channel: 'bilibili',
+            health: 'ready',
+            nextAction: 'Publish in the official Bilibili UI, then confirm its public URL',
+            nextStep: 'ready',
+          }],
+          contractVersion: 3,
+          expiresAt: new Date(observedAt.getTime() + 30_000).toISOString(),
+          observedAt: observedAt.toISOString(),
+          projectId,
+          runtimeVersion: '0.1.0',
+        }),
+      },
+      marketingOpsAssetBundleRoot: assetBundleRoot,
+      marketingOpsSourceRoot: sourceRoot,
+      projectId,
+      service,
+    })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'bilibili-assisted-prepare-failure',
+      method: 'tools/call',
+      params: {
+        name: 'publish_marketing_ops_package',
+        arguments: {
+          authorization: {
+            authorizedAt: '2026-08-10T10:00:00.000Z',
+            source: 'owner-prompt',
+          },
+          execution: {
+            mode: 'assisted-prepare',
+          },
+          projectId,
+          publicationId: 'bilibili-assisted-publication',
+          renderer: {
+            canonicalUrl: 'https://example.com/bilibili/',
+            format: 'manual-package',
+            links: ['https://example.com/bilibili/'],
+            media: ['image'],
+            utmMedium: 'social',
+          },
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        content: [{ text: expect.stringContaining('image paste timed out') }],
+        isError: true,
+      },
+    })
+  })
+
   it('refuses confirmation without a stored owner handoff', async () => {
     const server = createFixture({
       includeBilibili: true,
@@ -749,11 +939,14 @@ describe('content Studio local MCP server', () => {
 
       await expect(fixture.confirm('https://www.bilibili.com/opus/100001')).resolves.toMatchObject({
         result: {
-          content: [{ text: expect.stringMatching(/binding/i) }],
+          content: [{ text: expect.stringMatching(/binding|account scope/i) }],
           isError: true,
         },
       })
       expect(fixture.service.getProjectView(projectId).publicationReceipts).toEqual([])
+      expect(
+        fixture.service.getProjectView(projectId).ownerHandoffs[0]?.marketingOpsConfirmation,
+      ).toBeUndefined()
     }
   })
 
@@ -823,6 +1016,9 @@ describe('content Studio local MCP server', () => {
         },
       })
       expect(fixture.service.getProjectView(projectId).publicationReceipts).toEqual([])
+      expect(
+        fixture.service.getProjectView(projectId).ownerHandoffs[0]?.marketingOpsConfirmation,
+      ).toBeUndefined()
     }
   })
 
