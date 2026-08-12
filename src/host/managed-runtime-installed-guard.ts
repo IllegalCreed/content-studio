@@ -68,7 +68,9 @@ export async function verifyInstalledManagedMarketingOpsRuntime(
 
 async function hasPrivateRuntimeFiles(root: string, currentUid: number): Promise<boolean> {
   const files: ReadonlyArray<{ mode: number, path: string }> = [
+    { mode: PRIVATE_FILE_MODE, path: 'browsers.json' },
     { mode: PRIVATE_EXECUTABLE_MODE, path: 'dist/keychain-helper' },
+    { mode: PRIVATE_FILE_MODE, path: 'dist/playwright-core.bundle.cjs' },
     { mode: PRIVATE_FILE_MODE, path: 'dist/server.js' },
     { mode: PRIVATE_FILE_MODE, path: 'package.json' },
     { mode: PRIVATE_FILE_MODE, path: 'runtime-manifest.json' },

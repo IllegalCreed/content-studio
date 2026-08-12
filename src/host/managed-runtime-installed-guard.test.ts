@@ -8,6 +8,7 @@ import {
   lstat,
   mkdir,
   mkdtemp,
+  readFile,
   realpath,
   rm,
   symlink,
@@ -94,6 +95,30 @@ describe.runIf(process.platform !== 'win32')('installed marketing-ops runtime gu
     await chmod(join(root, 'dist'), 0o700)
     await chmod(join(root, 'dist/server.js'), 0o640)
     await expect(verifyInstalledManagedMarketingOpsRuntime(root)).resolves.toBe(false)
+  })
+
+  it('rejects browser runtime sidecars that are no longer private files', async () => {
+    for (const relativePath of ['browsers.json', 'dist/playwright-core.bundle.cjs']) {
+      const root = await createInstalledRuntime()
+      await chmod(join(root, relativePath), 0o640)
+
+      await expect(verifyInstalledManagedMarketingOpsRuntime(root)).resolves.toBe(false)
+    }
+  })
+
+  it('rejects hard-linked browser runtime sidecars', async () => {
+    for (const relativePath of ['browsers.json', 'dist/playwright-core.bundle.cjs']) {
+      const root = await createInstalledRuntime()
+      const source = join(root, relativePath)
+      const outside = join(root, '..', `${relativePath.replaceAll('/', '-')}.outside`)
+      await writeFile(outside, await readFile(source), {
+        mode: 0o600,
+      })
+      await rm(source)
+      await linkIfSupported(outside, source)
+      if ((await lstat(outside)).nlink > 1)
+        await expect(verifyInstalledManagedMarketingOpsRuntime(root)).resolves.toBe(false)
+    }
   })
 
   it('rejects symlinks, extra entries, and hard-linked fixed files', async () => {
