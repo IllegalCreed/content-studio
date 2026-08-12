@@ -421,6 +421,105 @@ describe('content Studio local MCP server', () => {
     })
   })
 
+  it.each([
+    {
+      capabilities: ['content-studio-assisted-publication-v1'] as const,
+      expectedMessage: 'Bilibili 需要 Owner 人工登录：请在 Bilibili 官方页面完成登录，然后使用同一个 MCP 请求重试；不要向 Content Studio 提供登录凭据。',
+      health: 'reauth-required' as const,
+      nextStep: 'reauthorize' as const,
+      runtimeNextAction: '在 Bilibili 官方页面登录后重试',
+    },
+    {
+      capabilities: ['content-studio-assisted-publication-v1'] as const,
+      expectedMessage: 'Bilibili 当前账号状态无法确认：请检查固定流程打开的 Bilibili 官方页面，完成人工登录或页面要求的验证码、风控/2FA 后，用同一个 MCP 请求重试；若未打开官方页面，则 managed runtime 不可用。不要提供凭据或验证码。',
+      health: 'blocked' as const,
+      nextStep: 'blocked' as const,
+      runtimeNextAction: '在 Bilibili 官方页面完成风控验证并确认当前账号',
+    },
+    {
+      capabilities: [] as const,
+      expectedMessage: 'Marketing Ops status unavailable; publishing remains blocked',
+      health: 'reauth-required' as const,
+      nextStep: 'reauthorize' as const,
+      runtimeNextAction: 'untrusted login detail',
+    },
+    {
+      capabilities: ['content-studio-assisted-publication-v1'] as const,
+      expectedMessage: 'Marketing Ops status unavailable; publishing remains blocked',
+      health: 'ready' as const,
+      nextStep: 'ready' as const,
+      runtimeNextAction: 'untrusted ready detail',
+    },
+  ])('returns a fixed Bilibili owner handoff for $health without leaking runtime text', async ({
+    capabilities,
+    expectedMessage,
+    health,
+    nextStep,
+    runtimeNextAction,
+  }) => {
+    const observedAt = new Date()
+    const server = createFixture({
+      includeBilibili: true,
+      marketingOpsPublish: {
+        publishCampaign: async () => {
+          throw new Error('publish should not run before owner intervention')
+        },
+      },
+      marketingOpsStatus: {
+        getChannelsStatus: async () => ({
+          authorizesExternalWrite: false,
+          capabilities: [...capabilities],
+          channels: [{
+            adapterReady: false,
+            assistedPublicationReady: false,
+            channel: 'bilibili',
+            health,
+            nextAction: runtimeNextAction,
+            nextStep,
+          }],
+          contractVersion: 3,
+          expiresAt: new Date(observedAt.getTime() + 30_000).toISOString(),
+          observedAt: observedAt.toISOString(),
+          projectId,
+          runtimeVersion: '0.1.0',
+        }),
+      },
+    })
+
+    const response = await server.handleMessage({
+      jsonrpc: '2.0',
+      id: `bilibili-owner-${health}`,
+      method: 'tools/call',
+      params: {
+        name: 'publish_marketing_ops_package',
+        arguments: {
+          authorization: {
+            authorizedAt: '2026-08-10T10:00:00.000Z',
+            source: 'owner-prompt',
+          },
+          execution: { mode: 'assisted-prepare' },
+          projectId,
+          publicationId: 'bilibili-owner-intervention',
+          renderer: {
+            canonicalUrl: 'https://example.com/bilibili/',
+            format: 'manual-package',
+            links: ['https://example.com/bilibili/'],
+            media: [],
+            utmMedium: 'social',
+          },
+        },
+      },
+    })
+
+    expect(response).toMatchObject({
+      result: {
+        content: [{ text: expectedMessage }],
+        isError: true,
+      },
+    })
+    expect(JSON.stringify(response)).not.toContain(runtimeNextAction)
+  })
+
   it('prepares one locked Bilibili package through the managed client without publishing remotely', async () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)

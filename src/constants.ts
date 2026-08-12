@@ -147,6 +147,12 @@ export const MARKETING_OPS_STATUS_TTL_MS = 60_000
 export const MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE
   = 'Marketing Ops status unavailable; publishing remains blocked'
 
+export const BILIBILI_OWNER_LOGIN_REQUIRED_MESSAGE
+  = 'Bilibili 需要 Owner 人工登录：请在 Bilibili 官方页面完成登录，然后使用同一个 MCP 请求重试；不要向 Content Studio 提供登录凭据。'
+
+export const BILIBILI_OWNER_STATUS_UNCONFIRMED_MESSAGE
+  = 'Bilibili 当前账号状态无法确认：请检查固定流程打开的 Bilibili 官方页面，完成人工登录或页面要求的验证码、风控/2FA 后，用同一个 MCP 请求重试；若未打开官方页面，则 managed runtime 不可用。不要提供凭据或验证码。'
+
 export const MARKETING_OPS_PUBLISH_UNAVAILABLE_MESSAGE
   = 'Marketing Ops publish unavailable; publishing remains blocked'
 

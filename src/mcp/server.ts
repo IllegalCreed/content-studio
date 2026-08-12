@@ -20,6 +20,8 @@ import type {
 import { createHash } from 'node:crypto'
 import { createInterface } from 'node:readline'
 import {
+  BILIBILI_OWNER_LOGIN_REQUIRED_MESSAGE,
+  BILIBILI_OWNER_STATUS_UNCONFIRMED_MESSAGE,
   MARKETING_OPS_MEDIA_KINDS,
   MARKETING_OPS_PACKAGE_FORMAT_VALUES,
   MARKETING_OPS_PUBLISH_UNAVAILABLE_MESSAGE,
@@ -1527,6 +1529,10 @@ function assertBilibiliAssistedReady(
   if (!status.capabilities?.includes('content-studio-assisted-publication-v1'))
     throw new Error(MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE)
   const bilibili = status.channels.find(channel => channel.channel === 'bilibili')
+  if (bilibili?.health === 'reauth-required')
+    throw new Error(BILIBILI_OWNER_LOGIN_REQUIRED_MESSAGE)
+  if (bilibili?.health === 'blocked')
+    throw new Error(BILIBILI_OWNER_STATUS_UNCONFIRMED_MESSAGE)
   if (
     bilibili === undefined
     || bilibili.health !== 'ready'
