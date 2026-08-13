@@ -14,7 +14,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { Readable, Writable } from 'node:stream'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   ContentStudioApplicationService,
   InMemoryContentStudioRepository,
@@ -595,6 +595,28 @@ describe('content Studio local MCP server', () => {
     const marketingOpsPublish: MarketingOpsPublishClient = {
       publishCampaign: async (input) => {
         forwarded = input
+        if (input.execution.mode === 'assisted-abandon') {
+          const packageValue = input.packages[0]!
+          return {
+            campaignId: input.campaignId,
+            failures: [],
+            handoffs: [{
+              channel: packageValue.channel,
+              contentHash: 'b'.repeat(64),
+              contentStudioContentHash: packageValue.contentStudio.contentHash,
+              form: packageValue.contentStudio.contentFormat,
+              idempotencyKey: `${input.idempotencyKey}/bilibili/${packageValue.contentStudio.packageId}/12345678`,
+              nextAction: 'Local owner handoff was abandoned without a remote action.',
+              packageId: packageValue.contentStudio.packageId,
+              publicationId: packageValue.contentStudio.publicationId,
+              reused: false,
+              status: 'abandoned' as const,
+            }],
+            limitations: ['local-owner-handoff-released-without-browser-or-remote-content-action'],
+            projectId: input.projectId,
+            receipts: [],
+          }
+        }
         if (input.execution.mode === 'assisted-confirm') {
           const packageValue = input.packages[0]!
           return {
@@ -621,6 +643,7 @@ describe('content Studio local MCP server', () => {
           }
         }
         prepareCalls += 1
+        const packageValue = input.packages[0]!
         return {
           campaignId: input.campaignId,
           failures: [],
@@ -632,11 +655,12 @@ describe('content Studio local MCP server', () => {
                 }
               : { action: 'final-confirmation' as const }),
             contentHash: 'b'.repeat(64),
-            form: 'image-text',
-            idempotencyKey: 'campaign-v3/algorithm-visualizer/bilibili-assisted-campaign/bilibili/bilibili-assisted-publication/12345678',
+            contentStudioContentHash: packageValue.contentStudio.contentHash,
+            form: packageValue.contentStudio.contentFormat,
+            idempotencyKey: `${input.idempotencyKey}/bilibili/${packageValue.contentStudio.packageId}/12345678`,
             nextAction: 'Publish this package in the official UI, then confirm its public URL.',
-            packageId: 'bilibili-assisted-publication',
-            publicationId: 'bilibili-assisted-publication',
+            packageId: packageValue.contentStudio.packageId,
+            publicationId: packageValue.contentStudio.publicationId,
             status: 'awaiting-owner',
           }],
           limitations: ['publication-is-owner-confirmed-not-remotely-created'],
@@ -646,28 +670,27 @@ describe('content Studio local MCP server', () => {
       },
     }
     const observedAt = new Date()
+    const getChannelsStatus = vi.fn(async (): Promise<MarketingOpsChannelsStatusSnapshot> => ({
+      authorizesExternalWrite: false,
+      capabilities: ['content-studio-assisted-publication-v1' as const],
+      channels: [{
+        accountRef: 'bilibili-main',
+        adapterReady: true,
+        assistedPublicationReady: true,
+        channel: 'bilibili' as const,
+        health: 'ready' as const,
+        nextStep: 'ready' as const,
+      }],
+      contractVersion: 3,
+      expiresAt: new Date(observedAt.getTime() + 30_000).toISOString(),
+      observedAt: observedAt.toISOString(),
+      projectId,
+      runtimeVersion: '0.1.0',
+    }))
     const server = createContentStudioMcpServer({
       marketingOpsPublish,
       marketingOpsStatus: {
-        getChannelsStatus: async () => ({
-          authorizesExternalWrite: false,
-          capabilities: ['content-studio-assisted-publication-v1'],
-          channels: [{
-            accountRef: 'bilibili-main',
-            adapterReady: true,
-            alias: null,
-            assistedPublicationReady: true,
-            channel: 'bilibili',
-            health: 'ready',
-            nextAction: 'Publish in the official Bilibili UI, then confirm its public URL',
-            nextStep: 'ready',
-          }],
-          contractVersion: 3,
-          expiresAt: new Date(observedAt.getTime() + 30_000).toISOString(),
-          observedAt: observedAt.toISOString(),
-          projectId,
-          runtimeVersion: '0.1.0',
-        }),
+        getChannelsStatus,
       },
       marketingOpsAssetBundleRoot: assetBundleRoot,
       marketingOpsSourceRoot: sourceRoot,
@@ -859,6 +882,95 @@ describe('content Studio local MCP server', () => {
       },
     })
     expect(service.getProjectView(projectId).publicationReceipts).toHaveLength(1)
+
+    const abandonedContent = service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: ['bilibili-assisted-cover'],
+      body: '待放弃的快速排序图文：https://example.com/bilibili/',
+      channel: 'bilibili',
+      contentGroupId: group.contentGroupId,
+      contentId: 'bilibili-abandon-content',
+      format: 'image-text',
+      locale: 'zh-CN',
+      projectId,
+      title: '待放弃的快速排序图文',
+    })
+    service.createPublicationPlan({
+      activityId: activity.activityId,
+      channel: 'bilibili',
+      contentId: abandonedContent.contentId,
+      projectId,
+      publicationId: 'bilibili-abandon-publication',
+    })
+    const abandonPrepared = await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'bilibili-abandon-prepare',
+      method: 'tools/call',
+      params: {
+        name: 'publish_marketing_ops_package',
+        arguments: {
+          authorization: {
+            authorizedAt: '2026-08-10T10:05:00.000Z',
+            source: 'owner-prompt',
+          },
+          execution: { mode: 'assisted-prepare' },
+          projectId,
+          publicationId: 'bilibili-abandon-publication',
+          renderer: {
+            canonicalUrl: 'https://example.com/bilibili/',
+            format: 'manual-package',
+            links: ['https://example.com/bilibili/'],
+            media: ['image'],
+            utmMedium: 'social',
+          },
+        },
+      },
+    })
+    expect(abandonPrepared).toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: { handoff: { status: 'pending' } },
+      },
+    })
+    const abandonHandoffId = (abandonPrepared as {
+      result: { structuredContent: { handoff: { handoffId: string } } }
+    }).result.structuredContent.handoff.handoffId
+    const statusCallsBeforeAbandon = getChannelsStatus.mock.calls.length
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'bilibili-assisted-abandon',
+      method: 'tools/call',
+      params: {
+        name: 'publish_marketing_ops_package',
+        arguments: {
+          authorization: {
+            authorizedAt: '2026-08-10T10:06:00.000Z',
+            source: 'owner-prompt',
+          },
+          execution: { mode: 'assisted-abandon' },
+          handoffId: abandonHandoffId,
+          projectId,
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          handoff: { handoffId: abandonHandoffId, status: 'cancelled' },
+          handoffs: [{
+            packageId: 'bilibili-abandon-publication',
+            status: 'abandoned',
+          }],
+          mode: 'assisted-abandon',
+          receipts: [],
+        },
+      },
+    })
+    expect(getChannelsStatus).toHaveBeenCalledTimes(statusCallsBeforeAbandon)
+    expect(forwarded?.execution).toEqual({ mode: 'assisted-abandon' })
+    expect(service.getProjectView(projectId).ownerHandoffs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ handoffId: abandonHandoffId, status: 'cancelled' }),
+    ]))
 
     await expect(server.handleMessage({
       jsonrpc: '2.0',

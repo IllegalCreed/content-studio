@@ -391,4 +391,33 @@ describe('marketing-ops publish bridge', () => {
       packages: [{ contentStudio: { accountRef: 'bilibili-main' } }],
     })
   })
+
+  it('clones abandonment only for one account-bound Bilibili package', () => {
+    const abandoned = buildMarketingOpsCampaignRequest(input({
+      execution: { mode: 'assisted-abandon' },
+      packages: [{ ...packageValue, accountRef: 'account.bilibili.synthetic-owner' }],
+    }))
+
+    expect(abandoned).toMatchObject({
+      execution: { mode: 'assisted-abandon' },
+      packages: [{ contentStudio: { accountRef: 'account.bilibili.synthetic-owner' } }],
+    })
+    expect(() => buildMarketingOpsCampaignRequest(input({
+      execution: { mode: 'assisted-abandon' },
+    }))).toThrow(/abandonment.*account/i)
+    expect(() => buildMarketingOpsCampaignRequest(input({
+      execution: { mode: 'assisted-abandon' },
+      packages: [
+        { ...packageValue, accountRef: 'account.bilibili.synthetic-owner' },
+        {
+          ...packageValue,
+          accountRef: 'account.bilibili.synthetic-owner',
+          contentHash: 'c'.repeat(64),
+          contentId: 'second-content',
+          packageId: 'second-package',
+          publicationId: 'second-publication',
+        },
+      ],
+    }))).toThrow(/abandonment.*one/i)
+  })
 })

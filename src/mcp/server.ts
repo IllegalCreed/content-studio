@@ -914,6 +914,21 @@ function marketingOpsAssistedPublicationSchema(): Record<string, unknown> {
         authorization: marketingOpsOwnerAuthorizationSchema(),
         execution: {
           additionalProperties: false,
+          properties: { mode: { const: 'assisted-abandon', type: 'string' } },
+          required: ['mode'],
+          type: 'object',
+        },
+        handoffId: { type: 'string' },
+        projectId: { type: 'string' },
+      },
+      required: ['authorization', 'execution', 'handoffId', 'projectId'],
+      type: 'object',
+    }, {
+      additionalProperties: false,
+      properties: {
+        authorization: marketingOpsOwnerAuthorizationSchema(),
+        execution: {
+          additionalProperties: false,
           properties: {
             mode: { const: 'assisted-confirm', type: 'string' },
             publicUrl: { format: 'uri', pattern: '^https://', type: 'string' },
@@ -1185,6 +1200,13 @@ interface ParsedMarketingOpsAssistedConfirmation
   projectId: string
 }
 
+interface ParsedMarketingOpsAssistedAbandonment
+  extends ParsedMarketingOpsAssistedPublicationInput {
+  execution: { mode: 'assisted-abandon' }
+  handoffId: string
+  projectId: string
+}
+
 async function executeMarketingOpsAssistedPublication(
   input: unknown,
   options: ContentStudioMcpServerOptions,
@@ -1194,7 +1216,15 @@ async function executeMarketingOpsAssistedPublication(
   const parsed = parseMarketingOpsAssistedPublicationInput(input, options.projectId)
   if ('preparation' in parsed)
     return executeMarketingOpsAssistedPreparation(parsed, options)
+  if (isParsedMarketingOpsAssistedAbandonment(parsed))
+    return executeMarketingOpsAssistedAbandonment(parsed, options)
   return executeMarketingOpsAssistedConfirmation(parsed, options)
+}
+
+function isParsedMarketingOpsAssistedAbandonment(
+  value: ParsedMarketingOpsAssistedConfirmation | ParsedMarketingOpsAssistedAbandonment,
+): value is ParsedMarketingOpsAssistedAbandonment {
+  return value.execution.mode === 'assisted-abandon'
 }
 
 async function executeMarketingOpsAssistedPreparation(
@@ -1335,6 +1365,51 @@ async function executeMarketingOpsAssistedConfirmation(
   }
 }
 
+async function executeMarketingOpsAssistedAbandonment(
+  parsed: ParsedMarketingOpsAssistedAbandonment,
+  options: ContentStudioMcpServerOptions,
+): Promise<unknown> {
+  const handoff = options.service.getMarketingOpsPublicationHandoffForAbandonment(
+    parsed.projectId,
+    parsed.handoffId,
+  )
+  const packageValue = handoff.marketingOpsPackage
+  if (packageValue === undefined)
+    throw new Error('Owner handoff does not contain a marketing-ops package')
+  assertBilibiliAssistedPackage(packageValue)
+  if (packageValue.accountRef === undefined)
+    throw new Error('Bilibili owner handoff has no locked account reference')
+  assertCurrentBilibiliOwnerAssistedBinding(options.service, packageValue)
+  const result = await options.marketingOpsPublish!.publishCampaign(
+    buildMarketingOpsCampaignRequest({
+      authorization: parsed.authorization,
+      campaignId: packageValue.campaignId,
+      execution: { mode: 'assisted-abandon' },
+      idempotencyKey: publicationIdempotencyKey(packageValue),
+      packages: [packageValue],
+      spec: createMarketingOpsCampaignSpec([packageValue]),
+    }),
+  )
+  const abandoned = result.handoffs.filter(candidate =>
+    candidate.packageId === packageValue.packageId
+    && candidate.publicationId === packageValue.publicationId
+    && candidate.form === packageValue.contentFormat
+    && candidate.status === 'abandoned',
+  )
+  if (result.failures.length > 0 || result.receipts.length > 0 || abandoned.length !== 1)
+    throw new Error('Marketing Ops did not abandon the exact owner handoff')
+  const cancelled = options.service.abandonMarketingOpsPublicationHandoff(
+    parsed.projectId,
+    parsed.handoffId,
+  )
+  return {
+    ...result,
+    handoff: cancelled,
+    mode: 'assisted-abandon',
+    package: packageValue,
+  }
+}
+
 function assertCurrentBilibiliOwnerAssistedBinding(
   service: ContentStudioApplicationService,
   packageValue: MarketingOpsPublicationPackage,
@@ -1462,7 +1537,7 @@ function summarizeMarketingOpsFailures(
 function parseMarketingOpsAssistedPublicationInput(
   input: unknown,
   projectId: string,
-): ParsedMarketingOpsAssistedPreparation | ParsedMarketingOpsAssistedConfirmation {
+): ParsedMarketingOpsAssistedPreparation | ParsedMarketingOpsAssistedConfirmation | ParsedMarketingOpsAssistedAbandonment {
   const value = asRecord(input, 'marketingOpsAssistedPublication')
   const scopedProjectId = scopedId(value.projectId, projectId, 'projectId')
   const authorization = asRecord(value.authorization, 'marketingOps authorization')
@@ -1494,6 +1569,20 @@ function parseMarketingOpsAssistedPublicationInput(
       authorization: { authorizedAt, source: 'owner-prompt' },
       execution: { mode },
       preparation,
+    }
+  }
+  if (mode === 'assisted-abandon') {
+    assertKeys(
+      value,
+      ['authorization', 'execution', 'handoffId', 'projectId'],
+      'marketingOpsAssistedPublication',
+    )
+    assertKeys(execution, ['mode'], 'marketingOps execution')
+    return {
+      authorization: { authorizedAt, source: 'owner-prompt' },
+      execution: { mode },
+      handoffId: identifierField(value.handoffId, 'handoffId'),
+      projectId: scopedProjectId,
     }
   }
   if (mode !== 'assisted-confirm')

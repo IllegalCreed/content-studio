@@ -3198,6 +3198,53 @@ describe('content studio application service', () => {
     })
   })
 
+  it('idempotently cancels an expired marketing-ops handoff only after remote abandonment', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-10T00:00:00.000Z'))
+    const { handoff, publication, service } = createMarketingOpsPublicationHandoffFixture()
+    const publicUrl = 'https://www.youtube.com/watch?v=12345678901'
+    service.claimMarketingOpsPublicationConfirmation('project-a', handoff.handoffId, publicUrl)
+    vi.setSystemTime(new Date('2026-08-12T00:00:00.000Z'))
+
+    expect(() => service.getMarketingOpsPublicationHandoff('project-a', handoff.handoffId))
+      .toThrow(/expired/i)
+    expect(service.getMarketingOpsPublicationHandoffForAbandonment(
+      'project-a',
+      handoff.handoffId,
+    )).toMatchObject({ handoffId: handoff.handoffId, status: 'pending' })
+
+    const cancelled = service.abandonMarketingOpsPublicationHandoff(
+      'project-a',
+      handoff.handoffId,
+    )
+    expect(cancelled).toMatchObject({ handoffId: handoff.handoffId, status: 'cancelled' })
+    expect(cancelled.marketingOpsConfirmation).toBeUndefined()
+    expect(service.abandonMarketingOpsPublicationHandoff(
+      'project-a',
+      handoff.handoffId,
+    )).toEqual(cancelled)
+    expect(service.getProjectView('project-a').tasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        status: 'cancelled',
+        taskId: `publication-${publication.publicationId}`,
+      }),
+    ]))
+  })
+
+  it('will not abandon a completed marketing-ops handoff', () => {
+    const { handoff, service } = createMarketingOpsPublicationHandoffFixture()
+    const completed = service.completeMarketingOpsPublicationHandoff(
+      'project-a',
+      handoff.handoffId,
+    )
+    expect(completed.status).toBe('completed')
+
+    expect(() => service.abandonMarketingOpsPublicationHandoff(
+      'project-a',
+      handoff.handoffId,
+    )).toThrow(/completed/i)
+  })
+
   it('rejects mismatched ownership and duplicate immutable records', () => {
     const repository = new InMemoryContentStudioRepository()
     const service = new ContentStudioApplicationService(repository)

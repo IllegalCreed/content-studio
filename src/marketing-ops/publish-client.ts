@@ -210,7 +210,7 @@ function parseHandoff(
   const value = asRecord(input)
   const packageValue = matchPackage(value, packages)
   const status = value.status
-  if (status !== 'awaiting-owner' && status !== 'confirmed')
+  if (status !== 'abandoned' && status !== 'awaiting-owner' && status !== 'confirmed')
     throw new Error('Marketing-ops handoff status is invalid')
   const contentHash = stringValue(value.contentHash)
   const contentStudioContentHash = stringValue(value.contentStudioContentHash)
@@ -230,9 +230,13 @@ function parseHandoff(
     throw new Error('Marketing-ops handoff form does not match request')
   const action = parseHandoffAction(value.action)
   const publicUrl = parseHandoffPublicUrl(value.publicUrl, packageValue)
+  const reused = value.reused
+  if (status === 'abandoned' && typeof reused !== 'boolean')
+    throw new Error('Marketing-ops abandoned handoff reuse state is invalid')
   if (
-    (action === 'assisted-confirm' && publicUrl === undefined)
-    || (publicUrl !== undefined && action !== 'assisted-confirm')
+    (status === 'abandoned' && (action !== undefined || publicUrl !== undefined))
+    || (status !== 'abandoned' && action === 'assisted-confirm' && publicUrl === undefined)
+    || (status !== 'abandoned' && publicUrl !== undefined && action !== 'assisted-confirm')
   ) {
     throw new Error('Marketing-ops handoff reference does not match its action')
   }
@@ -254,6 +258,7 @@ function parseHandoff(
     packageId: packageValue.contentStudio.packageId,
     ...(publicUrl === undefined ? {} : { publicUrl }),
     publicationId: packageValue.contentStudio.publicationId,
+    ...(typeof reused === 'boolean' ? { reused } : {}),
     status,
     ...(videoOrientation === undefined ? {} : { videoOrientation }),
   }

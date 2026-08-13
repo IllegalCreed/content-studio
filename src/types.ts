@@ -729,6 +729,7 @@ export interface MarketingOpsPublicationConfirmation {
 
 export type MarketingOpsCampaignExecution
   = | { mode: 'assisted-prepare' }
+    | { mode: 'assisted-abandon' }
     | {
       confirmations: MarketingOpsPublicationConfirmation[]
       mode: 'assisted-confirm'
@@ -798,7 +799,8 @@ export interface MarketingOpsPublishHandoff {
   /** Strict canonical URL observed by the fixed owner runner, never caller supplied. */
   publicUrl?: string
   publicationId: string
-  status: 'awaiting-owner' | 'confirmed'
+  reused?: boolean
+  status: 'abandoned' | 'awaiting-owner' | 'confirmed'
   videoOrientation?: VideoFormat
 }
 

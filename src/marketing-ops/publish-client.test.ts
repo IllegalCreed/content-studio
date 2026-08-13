@@ -161,6 +161,35 @@ describe('marketing-ops publish client', () => {
     })
   })
 
+  it('parses only an identity-bound abandoned handoff without a public reference', async () => {
+    const abandonedRequest: MarketingOpsCampaignRequest = {
+      ...request,
+      execution: { mode: 'assisted-abandon' },
+    }
+    await expect(publishReturned(resultEnvelope({
+      handoffs: [handoffEnvelope({
+        nextAction: 'Local owner handoff was abandoned without a remote action.',
+        reused: false,
+        status: 'abandoned',
+      })],
+    }), abandonedRequest)).resolves.toMatchObject({
+      handoffs: [{
+        packageId: 'bilibili-image-text-zh',
+        publicationId: 'bilibili-image-text-zh',
+        reused: false,
+        status: 'abandoned',
+      }],
+    })
+
+    await expect(publishReturned(resultEnvelope({
+      handoffs: [handoffEnvelope({
+        action: 'final-confirmation',
+        reused: false,
+        status: 'abandoned',
+      })],
+    }), abandonedRequest)).rejects.toThrow(/abandoned.*action|handoff.*action/i)
+  })
+
   it('rejects observed Bilibili handoff references that are not strict canonical form URLs', async () => {
     for (const publicUrl of [
       'https://www.bilibili.com/opus/123456789?spm_id_from=333.1.0.0',

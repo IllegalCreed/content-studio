@@ -1791,6 +1791,39 @@ export class ContentStudioApplicationService {
     return handoff
   }
 
+  getMarketingOpsPublicationHandoffForAbandonment(
+    projectId: string,
+    handoffId: string,
+  ): OwnerHandoff {
+    this.requireProject(projectId)
+    const handoff = this.repository.getOwnerHandoff(projectId, handoffId)
+    if (handoff === undefined)
+      throw new RecordNotFoundError('OwnerHandoff', handoffId)
+    if (handoff.marketingOpsPackage === undefined)
+      throw new Error('Owner handoff does not contain a marketing-ops package')
+    if (handoff.status === 'completed')
+      throw new Error(`Owner handoff ${handoffId} is completed and cannot be abandoned`)
+    if (handoff.status !== 'pending' && handoff.status !== 'cancelled')
+      throw new Error(`Owner handoff ${handoffId} is not available for abandonment`)
+    this.assertMarketingOpsPublicationHandoffPackage(handoff.marketingOpsPackage)
+    return handoff
+  }
+
+  abandonMarketingOpsPublicationHandoff(
+    projectId: string,
+    handoffId: string,
+  ): OwnerHandoff {
+    const handoff = this.getMarketingOpsPublicationHandoffForAbandonment(projectId, handoffId)
+    if (handoff.status === 'cancelled')
+      return handoff
+    const cancelled = this.cancelOwnerHandoff(projectId, handoffId)
+    if (cancelled.marketingOpsConfirmation === undefined)
+      return cancelled
+    const sanitized: OwnerHandoff = { ...cancelled }
+    delete sanitized.marketingOpsConfirmation
+    return this.repository.updateOwnerHandoff(sanitized)
+  }
+
   /**
    * Reserves the exact public URL an owner is confirming. The repository
    * update is synchronous, so two confirmations handled by this process

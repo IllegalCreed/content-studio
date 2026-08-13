@@ -145,6 +145,8 @@ function assertCampaignInput(input: MarketingOpsCampaignRequestInput): void {
   }
   if (input.execution.mode === 'assisted-confirm')
     assertConfirmations(input)
+  if (input.execution.mode === 'assisted-abandon')
+    assertAbandonment(input)
 }
 
 function assertPackage(packageValue: MarketingOpsPublicationPackage): void {
@@ -241,6 +243,16 @@ function assertConfirmations(input: MarketingOpsCampaignRequestInput): void {
   }
 }
 
+function assertAbandonment(input: MarketingOpsCampaignRequestInput): void {
+  if (input.execution.mode !== 'assisted-abandon')
+    return
+  if (input.packages.length !== 1)
+    throw new Error('Marketing-ops abandonment requires one Bilibili package')
+  const packageValue = input.packages[0]!
+  if (packageValue.channel !== 'bilibili' || packageValue.accountRef === undefined)
+    throw new Error('Marketing-ops abandonment requires an account-bound Bilibili package')
+}
+
 function toRenderedPackage(
   packageValue: MarketingOpsPublicationPackage,
 ): MarketingOpsRenderedCampaignPackage {
@@ -283,6 +295,8 @@ function cloneExecution(
 ): MarketingOpsCampaignRequestInput['execution'] {
   if (input.execution.mode === 'assisted-prepare')
     return { mode: 'assisted-prepare' }
+  if (input.execution.mode === 'assisted-abandon')
+    return { mode: 'assisted-abandon' }
   return {
     confirmations: input.execution.confirmations.map(confirmation => ({ ...confirmation })),
     mode: 'assisted-confirm',
