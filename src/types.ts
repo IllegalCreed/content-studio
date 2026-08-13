@@ -787,6 +787,7 @@ export interface MarketingOpsCampaignRequest {
 }
 
 export interface MarketingOpsPublishHandoff {
+  action?: 'assisted-confirm' | 'challenge' | 'final-confirmation' | 'login'
   contentHash: string
   /** Source hash echoed by marketing-ops when the package carries CS provenance. */
   contentStudioContentHash?: string
@@ -794,6 +795,8 @@ export interface MarketingOpsPublishHandoff {
   idempotencyKey: string
   nextAction?: string
   packageId: string
+  /** Strict canonical URL observed by the fixed owner runner, never caller supplied. */
+  publicUrl?: string
   publicationId: string
   status: 'awaiting-owner' | 'confirmed'
   videoOrientation?: VideoFormat

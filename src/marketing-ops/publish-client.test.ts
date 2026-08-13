@@ -128,6 +128,7 @@ describe('marketing-ops publish client', () => {
       campaignId: 'quick-sort-launch',
       failures: [],
       handoffs: [{
+        action: 'assisted-confirm',
         channel: 'bilibili',
         contentHash: 'c'.repeat(64),
         contentStudioContentHash: 'b'.repeat(64),
@@ -135,6 +136,7 @@ describe('marketing-ops publish client', () => {
         idempotencyKey: 'campaign-v3/algorithm-visualizer/quick-sort-launch/bilibili/package/hash',
         nextAction: 'Publish this package in the official UI, then confirm its public URL.',
         packageId: 'bilibili-image-text-zh',
+        publicUrl: 'https://www.bilibili.com/opus/123456789',
         publicationId: 'bilibili-image-text-zh',
         status: 'awaiting-owner',
       }],
@@ -148,13 +150,52 @@ describe('marketing-ops publish client', () => {
     expect(result).toMatchObject({
       campaignId: 'quick-sort-launch',
       handoffs: [{
+        action: 'assisted-confirm',
         form: 'image-text',
         packageId: 'bilibili-image-text-zh',
+        publicUrl: 'https://www.bilibili.com/opus/123456789',
         publicationId: 'bilibili-image-text-zh',
         status: 'awaiting-owner',
       }],
       projectId: 'algorithm-visualizer',
     })
+  })
+
+  it('rejects observed Bilibili handoff references that are not strict canonical form URLs', async () => {
+    for (const publicUrl of [
+      'https://www.bilibili.com/opus/123456789?spm_id_from=333.1.0.0',
+      'https://www.bilibili.com/opus/123456789/',
+      'https://t.bilibili.com/123456789',
+      'https://www.bilibili.com/video/BV1WrongForm',
+      'https://www.bilibili.com/opus/12345',
+      `https://www.bilibili.com/opus/${'1'.repeat(31)}`,
+      'https://www.bilibili.com/read/cv12345',
+      `https://www.bilibili.com/read/cv${'1'.repeat(31)}`,
+    ]) {
+      await expect(publishReturned(resultEnvelope({
+        handoffs: [handoffEnvelope({
+          action: 'assisted-confirm',
+          publicUrl,
+        })],
+      }))).rejects.toThrow(/handoff.*URL|reference/i)
+    }
+  })
+
+  it('requires observed handoff references to be paired with assisted confirmation', async () => {
+    await expect(publishReturned(resultEnvelope({
+      handoffs: [handoffEnvelope({
+        action: 'final-confirmation',
+        publicUrl: 'https://www.bilibili.com/opus/123456789',
+      })],
+    }))).rejects.toThrow(/handoff.*action|reference/i)
+
+    await expect(publishReturned(resultEnvelope({
+      handoffs: [handoffEnvelope({ action: 'assisted-confirm' })],
+    }))).rejects.toThrow(/handoff.*URL|reference/i)
+
+    await expect(publishReturned(resultEnvelope({
+      handoffs: [handoffEnvelope({ action: 'unexpected' })],
+    }))).rejects.toThrow(/handoff.*action/i)
   })
 
   it('rejects a receipt that cannot be mapped to one Content Studio package', async () => {

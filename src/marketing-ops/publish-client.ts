@@ -228,6 +228,14 @@ function parseHandoff(
   const form = stringValue(value.form)
   if (form !== packageValue.contentStudio.contentFormat)
     throw new Error('Marketing-ops handoff form does not match request')
+  const action = parseHandoffAction(value.action)
+  const publicUrl = parseHandoffPublicUrl(value.publicUrl, packageValue)
+  if (
+    (action === 'assisted-confirm' && publicUrl === undefined)
+    || (publicUrl !== undefined && action !== 'assisted-confirm')
+  ) {
+    throw new Error('Marketing-ops handoff reference does not match its action')
+  }
   const videoOrientation = parseVideoOrientation(value.videoOrientation)
   assertVideoOrientationMatchesPackage(
     videoOrientation,
@@ -237,16 +245,69 @@ function parseHandoff(
     'handoff',
   )
   return {
+    ...(action === undefined ? {} : { action }),
     contentHash,
     contentStudioContentHash,
     form,
     idempotencyKey,
     ...(typeof value.nextAction === 'string' ? { nextAction: value.nextAction } : {}),
     packageId: packageValue.contentStudio.packageId,
+    ...(publicUrl === undefined ? {} : { publicUrl }),
     publicationId: packageValue.contentStudio.publicationId,
     status,
     ...(videoOrientation === undefined ? {} : { videoOrientation }),
   }
+}
+
+function parseHandoffAction(
+  input: unknown,
+): MarketingOpsPublishHandoff['action'] {
+  if (input === undefined)
+    return undefined
+  if (
+    input !== 'assisted-confirm'
+    && input !== 'challenge'
+    && input !== 'final-confirmation'
+    && input !== 'login'
+  ) {
+    throw new Error('Marketing-ops handoff action is invalid')
+  }
+  return input
+}
+
+function parseHandoffPublicUrl(
+  input: unknown,
+  packageValue: MarketingOpsCampaignRequest['packages'][number],
+): string | undefined {
+  if (input === undefined)
+    return undefined
+  if (packageValue.channel !== 'bilibili')
+    throw new Error('Marketing-ops handoff reference is invalid')
+  const value = optionalHttpsUrl(input)
+  if (value === undefined)
+    return undefined
+  const url = new URL(value)
+  if (
+    url.hostname !== 'www.bilibili.com'
+    || url.port !== ''
+    || url.search !== ''
+    || url.hash !== ''
+    || url.username !== ''
+    || url.password !== ''
+  ) {
+    throw new Error('Marketing-ops handoff URL is invalid')
+  }
+  const form = packageValue.contentStudio.contentFormat
+  const pathMatches = form === 'video'
+    ? /^\/video\/(?:BV[A-Za-z\d]+|av\d+)$/u.test(url.pathname)
+    : form === 'image-text'
+      ? /^(?:\/opus\/\d{6,30}|\/read\/cv\d{6,30})$/u.test(url.pathname)
+      : form === 'short-post'
+        ? /^\/opus\/\d{6,30}$/u.test(url.pathname)
+        : false
+  if (!pathMatches || url.href !== value)
+    throw new Error('Marketing-ops handoff URL does not match the package form')
+  return value
 }
 
 function parseVideoOrientation(input: unknown):

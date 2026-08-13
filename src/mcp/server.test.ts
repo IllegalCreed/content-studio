@@ -591,6 +591,7 @@ describe('content Studio local MCP server', () => {
     let forwarded:
       | Parameters<MarketingOpsPublishClient['publishCampaign']>[0]
       | undefined
+    let prepareCalls = 0
     const marketingOpsPublish: MarketingOpsPublishClient = {
       publishCampaign: async (input) => {
         forwarded = input
@@ -619,10 +620,17 @@ describe('content Studio local MCP server', () => {
             }],
           }
         }
+        prepareCalls += 1
         return {
           campaignId: input.campaignId,
           failures: [],
           handoffs: [{
+            ...(prepareCalls > 1
+              ? {
+                  action: 'assisted-confirm' as const,
+                  publicUrl: 'https://www.bilibili.com/opus/966723264948731941',
+                }
+              : { action: 'final-confirmation' as const }),
             contentHash: 'b'.repeat(64),
             form: 'image-text',
             idempotencyKey: 'campaign-v3/algorithm-visualizer/bilibili-assisted-campaign/bilibili/bilibili-assisted-publication/12345678',
@@ -714,6 +722,41 @@ describe('content Studio local MCP server', () => {
     const handoffId = (preparedResponse as {
       result: { structuredContent: { handoff: { handoffId: string } } }
     }).result.structuredContent.handoff.handoffId
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'bilibili-assisted-prepare-recovery',
+      method: 'tools/call',
+      params: {
+        name: 'publish_marketing_ops_package',
+        arguments: {
+          authorization: {
+            authorizedAt: '2026-08-10T10:00:00.000Z',
+            source: 'owner-prompt',
+          },
+          execution: { mode: 'assisted-prepare' },
+          projectId,
+          publicationId: 'bilibili-assisted-publication',
+          renderer: {
+            canonicalUrl: 'https://example.com/bilibili/',
+            format: 'manual-package',
+            links: ['https://example.com/bilibili/'],
+            media: ['image'],
+            utmMedium: 'social',
+          },
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          handoffs: [{
+            action: 'assisted-confirm',
+            publicUrl: 'https://www.bilibili.com/opus/966723264948731941',
+          }],
+        },
+      },
+    })
     expect(forwarded).toMatchObject({
       campaignId: 'bilibili-assisted-campaign',
       execution: { mode: 'assisted-prepare' },
