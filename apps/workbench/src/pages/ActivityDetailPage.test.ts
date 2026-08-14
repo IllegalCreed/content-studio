@@ -27,6 +27,9 @@ describe('activity detail page', () => {
     expect(wrapper.text()).toContain('活动产物，不等于项目素材')
     expect(wrapper.text()).toContain('核心算法演示')
     expect(wrapper.find('[data-testid="activity-business-progress"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('按业务结果更新')
+    expect(wrapper.text()).not.toContain('不等同于任务内部阶段')
+    expect(wrapper.get('.activity-progress-list').attributes('style')).toMatch(/--activity-progress: 0(?:\.\d+)?/u)
     expect(wrapper.find('[data-testid="activity-publication-results"]').exists()).toBe(true)
     expect(wrapper.get('a[data-module="activities"]').attributes('aria-current')).toBe('page')
   })
@@ -98,10 +101,14 @@ describe('activity detail page', () => {
 
     expect(wrapper.get('[data-testid="channel-content-body"]').text())
       .toBe('第一段解释分区不变量。\n\n第二段解释复杂度。')
+    expect(wrapper.get('[data-testid="channel-content-detail"]').attributes('open')).toBe('')
+    expect(wrapper.get('[data-testid="channel-content-detail"] summary').text()).toContain('查看成品')
     expect(wrapper.get('[data-testid="channel-content-media"] img').attributes())
       .toMatchObject({
         alt: '分区动画 · 第 20 帧',
+        height: '3',
         src: '/api/v1/projects/algorithm-visualizer/activity-artifacts/quick-sort-preview-frame/preview',
+        width: '4',
       })
   })
 })

@@ -143,6 +143,13 @@ const activityBusinessProgress = computed(() => activityBusinessProgressProjecti
   publicationResults: publicationResults.value,
   tasks: tasks.value,
 }))
+const activityProgressStyle = computed(() => {
+  const stages = activityBusinessProgress.value
+  const firstPendingIndex = stages.findIndex(stage => stage.status === 'pending')
+  const frontierIndex = firstPendingIndex === -1 ? stages.length - 1 : Math.max(0, firstPendingIndex - 1)
+  const progress = stages.length <= 1 ? 0 : frontierIndex / (stages.length - 1)
+  return { '--activity-progress': progress }
+})
 const isRuntimeActivity = computed(() => runtimeActivity.value !== undefined)
 const canConfirm = computed(() => isRuntimeActivity.value
   && runtimeActivity.value?.video !== undefined
@@ -266,11 +273,11 @@ watch(videoPlan, syncViewportDraft, { immediate: true })
     <section class="detail-section activity-progress-section" data-testid="activity-business-progress">
       <div class="detail-section-heading">
         <div><p class="eyebrow">活动业务进度</p><h2>从主题到监测</h2></div>
-        <span>不等同于任务内部阶段</span>
+        <span>按业务结果更新</span>
       </div>
-      <ol class="activity-progress-list">
+      <ol class="activity-progress-list" :style="activityProgressStyle">
         <li v-for="stage in activityBusinessProgress" :key="stage.label" :data-stage-status="stage.status">
-          <span class="activity-progress-marker" />
+          <span class="activity-progress-marker" aria-hidden="true" />
           <div><strong>{{ stage.label }}</strong><small>{{ stage.detail }}</small></div>
         </li>
       </ol>
@@ -312,29 +319,40 @@ watch(videoPlan, syncViewportDraft, { immediate: true })
       <div class="detail-section-heading"><div><p class="eyebrow">活动内容</p><h2>渠道成品与内容组</h2></div><span>{{ contentGroups.length }} 个内容组</span></div>
       <div v-if="contentGroups.length > 0" class="detail-content-groups">
         <article v-for="group in contentGroups" :key="group.contentGroupId" class="detail-content-group">
-          <div><h3>{{ group.title }}</h3><p>{{ group.coreMessage }}</p></div>
-          <ul>
-            <li v-for="content in group.contents" :key="content.contentId" class="detail-channel-content">
-              <div class="detail-channel-content-heading">
-                <strong>{{ content.title }}</strong>
-                <span>{{ content.channel }} · {{ content.format }} · 已登记</span>
-              </div>
-              <p v-if="content.body" class="detail-channel-content-body" data-testid="channel-content-body">{{ content.body }}</p>
-              <div
-                v-if="contentArtifacts(content.artifactIds).some(artifact => artifact.previewKind === 'image' && artifact.previewUrl)"
-                class="detail-channel-content-media"
-                data-testid="channel-content-media"
-              >
-                <figure
-                  v-for="artifact in contentArtifacts(content.artifactIds).filter(item => item.previewKind === 'image' && item.previewUrl)"
-                  :key="artifact.artifactId"
+          <header class="detail-content-group-header"><h3>{{ group.title }}</h3><p>{{ group.coreMessage }}</p></header>
+          <div class="detail-channel-content-list">
+            <details
+              v-for="(content, contentIndex) in group.contents"
+              :key="content.contentId"
+              class="detail-channel-content"
+              data-testid="channel-content-detail"
+              :open="contentIndex === 0"
+            >
+              <summary>
+                <span class="detail-channel-content-heading">
+                  <strong>{{ content.title }}</strong>
+                  <span>{{ content.channel }} · {{ content.format }} · 已登记</span>
+                </span>
+                <span class="detail-channel-content-action">查看成品 <span aria-hidden="true">⌄</span></span>
+              </summary>
+              <div class="detail-channel-content-panel">
+                <p v-if="content.body" class="detail-channel-content-body" data-testid="channel-content-body">{{ content.body }}</p>
+                <div
+                  v-if="contentArtifacts(content.artifactIds).some(artifact => artifact.previewKind === 'image' && artifact.previewUrl)"
+                  class="detail-channel-content-media"
+                  data-testid="channel-content-media"
                 >
-                  <img :src="artifact.previewUrl" :alt="artifact.name" loading="lazy" />
-                  <figcaption>{{ artifact.name }}</figcaption>
-                </figure>
+                  <figure
+                    v-for="artifact in contentArtifacts(content.artifactIds).filter(item => item.previewKind === 'image' && item.previewUrl)"
+                    :key="artifact.artifactId"
+                  >
+                    <img :src="artifact.previewUrl" :alt="artifact.name" width="4" height="3" loading="lazy" decoding="async" />
+                    <figcaption>{{ artifact.name }}</figcaption>
+                  </figure>
+                </div>
               </div>
-            </li>
-          </ul>
+            </details>
+          </div>
         </article>
       </div>
       <p v-else class="empty-state">当前活动还没有渠道成品。下一步应由 AI 根据主题、渠道和所选内容形态生成文章、图文、动态、视频脚本或其他内容版本。</p>
