@@ -3,11 +3,12 @@
 import { Buffer } from 'node:buffer'
 import { KeyObject, timingSafeEqual, verify } from 'node:crypto'
 import process from 'node:process'
+import { MARKETING_OPS_MANAGED_RUNTIME_VERSION } from '../constants'
 
 const RELEASE_SCHEMA_VERSION = 1
 const RELEASE_KIND = 'marketing-ops-runtime-release'
 const RUNTIME_NAME = 'marketing-ops'
-const RUNTIME_VERSION = '0.1.0'
+const RUNTIME_VERSION = MARKETING_OPS_MANAGED_RUNTIME_VERSION
 const CONTENT_STUDIO_VERSION = '0.1.0'
 const CONTRACT_VERSION = 3
 const SUPPORTED_TARGET = { arch: 'arm64', os: 'darwin' } as const

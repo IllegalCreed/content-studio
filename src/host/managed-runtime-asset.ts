@@ -4,6 +4,7 @@ import { Buffer } from 'node:buffer'
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { lstat, readFile, realpath } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
+import { MARKETING_OPS_MANAGED_RUNTIME_VERSION } from '../constants'
 
 const MANAGED_RUNTIME_MANIFEST_FILE = 'runtime-manifest.json'
 const MANAGED_RUNTIME_FILES = [
@@ -16,7 +17,6 @@ const MANAGED_RUNTIME_FILES = [
   'dist/server.js',
   'package.json',
 ] as const
-const MANAGED_RUNTIME_VERSION = '0.1.0'
 const MANAGED_RUNTIME_CONTRACT_VERSION = 3
 const MANAGED_RUNTIME_NAME = 'marketing-ops'
 
@@ -129,7 +129,7 @@ function parseManifest(input: Buffer): ManagedRuntimeManifest | null {
   if (
     value.schemaVersion !== 1
     || value.runtimeName !== MANAGED_RUNTIME_NAME
-    || value.runtimeVersion !== MANAGED_RUNTIME_VERSION
+    || value.runtimeVersion !== MARKETING_OPS_MANAGED_RUNTIME_VERSION
     || value.contractVersion !== MANAGED_RUNTIME_CONTRACT_VERSION
     || !Array.isArray(value.files)
     || value.files.length !== MANAGED_RUNTIME_FILES.length

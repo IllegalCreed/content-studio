@@ -78,7 +78,7 @@ describe('workbench runtime store', () => {
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
       observedAt: new Date(Date.now() - 1000).toISOString(),
       projectId: 'project-a',
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     }), { status: 200 })))
 
     await expect(store.refreshMarketingOpsStatus('project-a')).resolves.toMatchObject({
@@ -104,7 +104,7 @@ describe('workbench runtime store', () => {
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
       observedAt: new Date().toISOString(),
       projectId: 'project-a',
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     }), { status: 200 }))
 
     await expect(refresh).resolves.toBe(null)

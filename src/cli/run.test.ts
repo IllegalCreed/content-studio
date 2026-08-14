@@ -243,7 +243,7 @@ describe('content-studio CLI', () => {
         }),
         getServerVersion: () => ({
           name: 'marketing-ops',
-          version: '0.1.0',
+          version: '0.2.0',
         }),
       },
     })
@@ -348,7 +348,7 @@ describe('content-studio CLI', () => {
           }),
           getRuntimeInfo: async () => ({
             name: 'marketing-ops',
-            version: '0.1.0',
+            version: '0.2.0',
           }),
         },
       })
@@ -365,7 +365,7 @@ describe('content-studio CLI', () => {
         },
       )).resolves.toBe(0)
       expect(messages.join('\n')).toContain('[✓] Marketing Ops runtime')
-      expect(messages.join('\n')).toContain('0.1.0 / contract v3')
+      expect(messages.join('\n')).toContain('0.2.0 / contract v3')
       expect(messages.join('\n')).toContain('1/1 个适配器已就绪')
       expect(messages.join('\n')).not.toContain('@private-project-alias')
 

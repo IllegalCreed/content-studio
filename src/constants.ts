@@ -135,10 +135,11 @@ export const MARKETING_OPS_COMPATIBILITY_MATRIX = [{
   contentStudioMinor: 1,
   contractVersion: 3,
   runtimeMajor: 0,
-  runtimeMinor: 1,
+  runtimeMinor: 2,
 }] as const
 
 export const MARKETING_OPS_RUNTIME_NAME = 'marketing-ops' as const
+export const MARKETING_OPS_MANAGED_RUNTIME_VERSION = '0.2.0' as const
 
 export const MARKETING_OPS_STATUS_REFRESH_INTERVAL_MS = 30_000
 

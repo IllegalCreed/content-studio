@@ -25,7 +25,7 @@ async function createRuntimeAsset(
 ): Promise<ManagedMarketingOpsRuntimeAsset> {
   const parent = await realpath(await mkdtemp(join(await realpath(tmpdir()), 'content-studio-managed-stdio-')))
   temporaryDirectories.push(parent)
-  const root = join(parent, 'runtimes', 'marketing-ops', '0.1.0')
+  const root = join(parent, 'runtimes', 'marketing-ops', '0.2.0')
   const helper = 'managed marketing-ops keychain helper fixture\n'
   const browsers = '{"browsers":[]}\n'
   const bundle = 'managed marketing-ops playwright bundle fixture\n'
@@ -36,7 +36,7 @@ async function createRuntimeAsset(
     name: '@illegalcreed/marketing-ops',
     private: true,
     type: 'module',
-    version: '0.1.0',
+    version: '0.2.0',
   })
   await mkdir(join(root, 'dist'), { recursive: true, mode: 0o700 })
   await mkdir(join(root, 'LICENSES', 'playwright-core'), { recursive: true, mode: 0o700 })
@@ -61,7 +61,7 @@ async function createRuntimeAsset(
       { path: 'package.json', sha256: sha256(packageJson) },
     ],
     runtimeName: 'marketing-ops',
-    runtimeVersion: '0.1.0',
+    runtimeVersion: '0.2.0',
     schemaVersion: 1,
   })
   await writeFile(join(root, 'runtime-manifest.json'), manifest, { encoding: 'utf8', mode: 0o600 })
@@ -98,7 +98,7 @@ function createFakeConnection(): {
     callTool: vi.fn(async () => ({ structuredContent: { ok: true } })),
     close: vi.fn(async () => undefined),
     connect: vi.fn(async () => undefined),
-    getServerVersion: vi.fn(() => ({ name: 'marketing-ops', version: '0.1.0' })),
+    getServerVersion: vi.fn(() => ({ name: 'marketing-ops', version: '0.2.0' })),
   }
   return { client, transport }
 }
@@ -115,7 +115,7 @@ function handle(message) {
     send({ jsonrpc: '2.0', id: message.id, result: {
       capabilities: { tools: {} },
       protocolVersion: message.params?.protocolVersion ?? '2025-06-18',
-      serverInfo: { name: 'marketing-ops', version: '0.1.0' },
+      serverInfo: { name: 'marketing-ops', version: '0.2.0' },
     }});
     return;
   }
@@ -221,7 +221,7 @@ describe('managed marketing-ops stdio connector', () => {
 
     await expect(session.getServerVersion()).resolves.toEqual({
       name: 'marketing-ops',
-      version: '0.1.0',
+      version: '0.2.0',
     })
     await expect(session.callTool({
       arguments: { projectId: 'project-a' },

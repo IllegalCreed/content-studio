@@ -32,7 +32,7 @@ const PACKAGE_JSON = JSON.stringify({
   name: '@illegalcreed/marketing-ops',
   private: true,
   type: 'module',
-  version: '0.1.0',
+  version: '0.2.0',
 })
 
 function sha256(contents: string): string {
@@ -42,7 +42,7 @@ function sha256(contents: string): string {
 async function createInstalledRuntime(includeAssetBundles = false): Promise<string> {
   const parent = await realpath(await mkdtemp(join(await realpath(tmpdir()), 'content-studio-installed-guard-')))
   temporaryDirectories.push(parent)
-  const root = join(parent, 'runtimes', 'marketing-ops', '0.1.0')
+  const root = join(parent, 'runtimes', 'marketing-ops', '0.2.0')
   await mkdir(join(root, 'dist'), { recursive: true, mode: 0o700 })
   await mkdir(join(root, 'LICENSES', 'playwright-core'), { recursive: true, mode: 0o700 })
   await writeFile(join(root, 'browsers.json'), BROWSERS, { mode: 0o600 })
@@ -66,7 +66,7 @@ async function createInstalledRuntime(includeAssetBundles = false): Promise<stri
       { path: 'package.json', sha256: sha256(PACKAGE_JSON) },
     ],
     runtimeName: 'marketing-ops',
-    runtimeVersion: '0.1.0',
+    runtimeVersion: '0.2.0',
     schemaVersion: 1,
   })
   await writeFile(join(root, 'runtime-manifest.json'), manifest, { mode: 0o600 })

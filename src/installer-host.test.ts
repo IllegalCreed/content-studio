@@ -17,14 +17,14 @@ describe('installer host composition', () => {
       manifestSha256: '0'.repeat(64),
       runtimeName: 'marketing-ops',
       runtimeRoot: '/tmp/untrusted',
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     })
     const unavailable = createContentStudioInstallerHostBootstrap({
       contractVersion: 3,
       manifestSha256: '0'.repeat(64),
       runtimeName: 'marketing-ops',
-      runtimeRoot: '/missing/runtimes/marketing-ops/0.1.0',
-      runtimeVersion: '0.1.0',
+      runtimeRoot: '/missing/runtimes/marketing-ops/0.2.0',
+      runtimeVersion: '0.2.0',
     })
 
     await expect(invalid.start()).resolves.toBeUndefined()

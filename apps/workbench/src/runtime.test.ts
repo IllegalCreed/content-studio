@@ -123,7 +123,7 @@ describe('workbench runtime client', () => {
       expiresAt: '2026-08-10T00:01:00.000Z',
       observedAt: '2026-08-10T00:00:00.000Z',
       projectId: 'project-a',
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 

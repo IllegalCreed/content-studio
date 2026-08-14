@@ -32,7 +32,7 @@ function canonicalJson(value: JsonValue): string {
 function releaseStatement(overrides: Partial<JsonObject> = {}): JsonObject {
   return {
     archive: {
-      fileName: 'marketing-ops-0.1.0-darwin-arm64.tar.gz',
+      fileName: 'marketing-ops-0.2.0-darwin-arm64.tar.gz',
       sha256: 'a'.repeat(64),
       sizeBytes: 123_456,
     },
@@ -42,12 +42,12 @@ function releaseStatement(overrides: Partial<JsonObject> = {}): JsonObject {
     },
     keyId: 'test-key-2026',
     kind: 'marketing-ops-runtime-release',
-    releaseId: 'marketing-ops-0.1.0-darwin-arm64',
+    releaseId: 'marketing-ops-0.2.0-darwin-arm64',
     runtime: {
       contractVersion: 3,
       manifestSha256: 'b'.repeat(64),
       name: 'marketing-ops',
-      version: '0.1.0',
+      version: '0.2.0',
     },
     schemaVersion: 1,
     target: supportedTarget,
@@ -90,7 +90,7 @@ describe('installer-only marketing-ops release statement verification', () => {
 
     expect(result).toEqual({
       archive: {
-        fileName: 'marketing-ops-0.1.0-darwin-arm64.tar.gz',
+        fileName: 'marketing-ops-0.2.0-darwin-arm64.tar.gz',
         sha256: 'a'.repeat(64),
         sizeBytes: 123_456,
       },
@@ -100,12 +100,12 @@ describe('installer-only marketing-ops release statement verification', () => {
       },
       keyId: 'test-key-2026',
       kind: 'marketing-ops-runtime-release',
-      releaseId: 'marketing-ops-0.1.0-darwin-arm64',
+      releaseId: 'marketing-ops-0.2.0-darwin-arm64',
       runtime: {
         contractVersion: 3,
         manifestSha256: 'b'.repeat(64),
         name: 'marketing-ops',
-        version: '0.1.0',
+        version: '0.2.0',
       },
       schemaVersion: 1,
       target: supportedTarget,
@@ -237,7 +237,7 @@ describe('installer-only marketing-ops release statement verification', () => {
     const malformedDigest = signedInput(
       releaseStatement({
         archive: {
-          fileName: 'marketing-ops-0.1.0-darwin-arm64.tar.gz',
+          fileName: 'marketing-ops-0.2.0-darwin-arm64.tar.gz',
           sha256: 'A'.repeat(64),
           sizeBytes: 123_456,
         },

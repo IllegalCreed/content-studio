@@ -34,7 +34,7 @@ async function createRuntimeAsset(
   await writeFile(join(root, 'dist/playwright-core.bundle.cjs'), bundleContents, 'utf8')
   const packageJson = JSON.stringify({
     name: '@illegalcreed/marketing-ops',
-    version: '0.1.0',
+    version: '0.2.0',
   })
   await writeFile(join(root, 'package.json'), packageJson, 'utf8')
   const manifest = JSON.stringify({
@@ -50,7 +50,7 @@ async function createRuntimeAsset(
       { path: 'package.json', sha256: sha256(packageJson) },
     ],
     runtimeName: 'marketing-ops',
-    runtimeVersion: '0.1.0',
+    runtimeVersion: '0.2.0',
     schemaVersion: 1,
     ...manifestOverrides,
   })
@@ -78,7 +78,7 @@ describe('installer-owned marketing-ops runtime asset', () => {
       entrypoint: join(safeRoot, 'dist/server.js'),
       manifestSha256: asset.manifestSha256,
       runtimeRoot: safeRoot,
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     })
   })
 

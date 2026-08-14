@@ -13,10 +13,11 @@ import {
 } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import process from 'node:process'
+import { MARKETING_OPS_MANAGED_RUNTIME_VERSION } from '../constants'
 import { resolveManagedMarketingOpsRuntimeAsset } from './managed-runtime-asset'
 import { parseInstallerManagedRuntimeHandoff } from './managed-runtime-handoff'
 
-const FIXED_RUNTIME_SEGMENTS = ['runtimes', 'marketing-ops', '0.1.0'] as const
+const FIXED_RUNTIME_SEGMENTS = ['runtimes', 'marketing-ops', MARKETING_OPS_MANAGED_RUNTIME_VERSION] as const
 const RUNTIME_PARENT_SEGMENTS = FIXED_RUNTIME_SEGMENTS.slice(0, -1)
 const PRIVATE_DIRECTORY_MODE = 0o700
 const PRIVATE_FILE_MODE = 0o600

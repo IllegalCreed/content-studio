@@ -87,7 +87,7 @@ Content Studio 可以保存账号引用和脱敏投影，但不能保存或转�
 
 2026-08-10 先加入了 `content-studio-host` 入口和受管资产校验器：host 只转发三个
 `CONTENT_STUDIO_*` 项目路径变量，未来只接受由安装器内置摘要或签名信任的
-`marketing-ops` 0.1.0 固定布局，逐一校验 `dist/server.js`、`dist/keychain-helper` 以及
+`marketing-ops` 0.2.0 固定布局，逐一校验 `dist/server.js`、`dist/keychain-helper` 以及
 `package.json`，并拒绝软链接、未知 manifest 字段、路径扩展和哈希不符。当前只能生成
 本地 staging 包，尚无安装器信任的正式发布制品，因此 host 不会启动任何进程、更不会回退到
 PATH 或用户输入；真实 stdio 初始化与注入仍保持未完成。
@@ -98,7 +98,7 @@ SDK 1.30 的有界 stdio 缓冲，并把 MCP 面收窄为 `channels_status`。�
 标准握手和脱敏状态读取；普通 CLI/Plugin 入口仍不自动发现或启动 runtime。
 
 同日，安装器 API 已能接收**安装器自身已信任**的 manifest 摘要，把 staging 包放入唯一的
-`runtimes/marketing-ops/0.1.0` 路径：POSIX 下先用 `mkdir` 原子占位，已有目录就拒绝覆盖；
+`runtimes/marketing-ops/0.2.0` 路径：POSIX 下先用 `mkdir` 原子占位，已有目录就拒绝覆盖；
 再以 owner-only 权限写入固定文件，并把 manifest 放在最后，半成品因此不会被验包器接受。失败时
 保留半成品而不递归删除未知文件。它仍不是正式发行或升级机制：摘要的签名/内置来源、平台制品映射
 和真正把可信交接单接入发布安装流程仍是下一步。

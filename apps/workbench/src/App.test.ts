@@ -351,7 +351,7 @@ describe('content studio workbench', () => {
       expiresAt: '2099-01-01T00:01:00.000Z',
       observedAt: '2026-01-01T00:00:00.000Z',
       projectId: 'algorithm-visualizer',
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     }
     await nextTick()
 

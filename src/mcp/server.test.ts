@@ -118,7 +118,7 @@ function freshMarketingOpsStatus(
     expiresAt: new Date(observedAt.getTime() + 30_000).toISOString(),
     observedAt: observedAt.toISOString(),
     projectId: snapshotProjectId,
-    runtimeVersion: '0.1.0',
+    runtimeVersion: '0.2.0',
   }
 }
 
@@ -319,7 +319,7 @@ async function createBilibiliAssistedConfirmationFixture(): Promise<{
         expiresAt: new Date(observedAt.getTime() + 30_000).toISOString(),
         observedAt: observedAt.toISOString(),
         projectId,
-        runtimeVersion: '0.1.0',
+        runtimeVersion: '0.2.0',
       }),
     },
     marketingOpsAssetBundleRoot,
@@ -481,7 +481,7 @@ describe('content Studio local MCP server', () => {
           expiresAt: new Date(observedAt.getTime() + 30_000).toISOString(),
           observedAt: observedAt.toISOString(),
           projectId,
-          runtimeVersion: '0.1.0',
+          runtimeVersion: '0.2.0',
         }),
       },
     })
@@ -685,7 +685,7 @@ describe('content Studio local MCP server', () => {
       expiresAt: new Date(observedAt.getTime() + 30_000).toISOString(),
       observedAt: observedAt.toISOString(),
       projectId,
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     }))
     const server = createContentStudioMcpServer({
       marketingOpsPublish,
@@ -1101,7 +1101,7 @@ describe('content Studio local MCP server', () => {
           expiresAt: new Date(observedAt.getTime() + 30_000).toISOString(),
           observedAt: observedAt.toISOString(),
           projectId,
-          runtimeVersion: '0.1.0',
+          runtimeVersion: '0.2.0',
         }),
       },
       marketingOpsAssetBundleRoot: assetBundleRoot,
@@ -1755,7 +1755,7 @@ describe('content Studio local MCP server', () => {
       expiresAt: new Date(observedAtMs + 60_000).toISOString(),
       observedAt: new Date(observedAtMs).toISOString(),
       projectId,
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     }
     const server = createFixture({
       marketingOpsStatus: {

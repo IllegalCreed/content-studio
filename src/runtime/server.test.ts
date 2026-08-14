@@ -1264,7 +1264,7 @@ describe('content studio local application server', () => {
       expiresAt,
       observedAt,
       projectId: 'project-a',
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     }
     const getChannelsStatus = vi.fn(async (projectId: string) => {
       expect(projectId).toBe('project-a')

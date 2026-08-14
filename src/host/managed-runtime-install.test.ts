@@ -53,7 +53,7 @@ async function createRuntimeStaging(): Promise<{
     name: '@illegalcreed/marketing-ops',
     private: true,
     type: 'module',
-    version: '0.1.0',
+    version: '0.2.0',
   })
   await mkdir(join(root, 'dist'), { mode: 0o700 })
   await mkdir(join(root, 'LICENSES', 'playwright-core'), { mode: 0o700, recursive: true })
@@ -82,7 +82,7 @@ async function createRuntimeStaging(): Promise<{
       { path: 'package.json', sha256: sha256(packageJson) },
     ],
     runtimeName: 'marketing-ops',
-    runtimeVersion: '0.1.0',
+    runtimeVersion: '0.2.0',
     schemaVersion: 1,
   })
   await writeFile(join(root, 'runtime-manifest.json'), manifest, { mode: 0o600 })
@@ -90,7 +90,7 @@ async function createRuntimeStaging(): Promise<{
 }
 
 function runtimeRoot(installerRoot: string): string {
-  return join(installerRoot, 'runtimes', 'marketing-ops', '0.1.0')
+  return join(installerRoot, 'runtimes', 'marketing-ops', '0.2.0')
 }
 
 afterEach(async () => {
@@ -115,7 +115,7 @@ describe.runIf(process.platform !== 'win32')('installer-owned marketing-ops runt
       manifestSha256: staging.manifestSha256,
       runtimeName: 'marketing-ops',
       runtimeRoot: destination,
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     })
 
     await expect(readdir(destination)).resolves.toEqual([

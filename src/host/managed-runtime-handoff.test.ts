@@ -8,8 +8,8 @@ const validHandoff = {
   contractVersion: 3,
   manifestSha256: 'a'.repeat(64),
   runtimeName: 'marketing-ops',
-  runtimeRoot: '/opt/content-studio/runtimes/marketing-ops/0.1.0',
-  runtimeVersion: '0.1.0',
+  runtimeRoot: '/opt/content-studio/runtimes/marketing-ops/0.2.0',
+  runtimeVersion: '0.2.0',
 } as const
 
 describe('installer-managed runtime handoff', () => {
@@ -40,11 +40,11 @@ describe('installer-managed runtime handoff', () => {
     expect(parseInstallerManagedRuntimeHandoff({ ...validHandoff, runtimeRoot: '/opt/../tmp/runtime' })).toBeNull()
     expect(parseInstallerManagedRuntimeHandoff({
       ...validHandoff,
-      runtimeRoot: '/opt/content-studio/runtimes/other/0.1.0',
+      runtimeRoot: '/opt/content-studio/runtimes/other/0.2.0',
     })).toBeNull()
     expect(parseInstallerManagedRuntimeHandoff({
       ...validHandoff,
-      runtimeRoot: '/opt/content-studio/runtimes/marketing-ops/0.1.0/extra',
+      runtimeRoot: '/opt/content-studio/runtimes/marketing-ops/0.2.0/extra',
     })).toBeNull()
     expect(parseInstallerManagedRuntimeHandoff({ ...validHandoff, runtimeRoot: '/tmp/runtime\u0000leak' })).toBeNull()
     expect(parseInstallerManagedRuntimeHandoff('{"runtimeRoot":"/private/secret"')).toBeNull()

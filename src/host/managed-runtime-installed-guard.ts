@@ -3,8 +3,9 @@
 import { lstat, readdir, realpath } from 'node:fs/promises'
 import { isAbsolute, resolve } from 'node:path'
 import process from 'node:process'
+import { MARKETING_OPS_MANAGED_RUNTIME_VERSION } from '../constants'
 
-const RUNTIME_VERSION = '0.1.0'
+const RUNTIME_VERSION = MARKETING_OPS_MANAGED_RUNTIME_VERSION
 const RUNTIME_NAME = 'marketing-ops'
 const RUNTIMES_DIRECTORY = 'runtimes'
 const PRIVATE_DIRECTORY_MODE = 0o700

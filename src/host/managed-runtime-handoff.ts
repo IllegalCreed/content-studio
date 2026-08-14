@@ -1,11 +1,12 @@
 // @env node
 
 import { isAbsolute, resolve } from 'node:path'
+import { MARKETING_OPS_MANAGED_RUNTIME_VERSION } from '../constants'
 
 export const INSTALLER_MANAGED_RUNTIME_HANDOFF = {
   contractVersion: 3,
   runtimeName: 'marketing-ops',
-  runtimeVersion: '0.1.0',
+  runtimeVersion: MARKETING_OPS_MANAGED_RUNTIME_VERSION,
 } as const
 
 const HANDOFF_KEYS = [
@@ -84,7 +85,7 @@ function isSafeAbsoluteRuntimeRoot(input: string): boolean {
   if (resolve(input) !== input)
     return false
   const segments = input.split(/[\\/]+/u).filter(Boolean)
-  return segments.slice(-3).join('/') === 'runtimes/marketing-ops/0.1.0'
+  return segments.slice(-3).join('/') === `runtimes/marketing-ops/${MARKETING_OPS_MANAGED_RUNTIME_VERSION}`
 }
 
 function isSha256(input: string): boolean {

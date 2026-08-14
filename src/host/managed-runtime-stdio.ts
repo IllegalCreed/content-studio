@@ -16,13 +16,14 @@ import {
   DEFAULT_INHERITED_ENV_VARS,
   StdioClientTransport,
 } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { MARKETING_OPS_MANAGED_RUNTIME_VERSION } from '../constants'
 import { assertNoSensitiveKeys } from '../validation'
 import { resolveManagedMarketingOpsRuntimeAsset } from './managed-runtime-asset'
 import { verifyInstalledManagedMarketingOpsRuntime } from './managed-runtime-installed-guard'
 
 const CLIENT_NAME = 'content-studio-host'
 const CLIENT_VERSION = '0.1.0'
-const RUNTIME_VERSION = '0.1.0'
+const RUNTIME_VERSION = MARKETING_OPS_MANAGED_RUNTIME_VERSION
 const DEFAULT_CONNECT_TIMEOUT_MS = 5_000
 const DEFAULT_REQUEST_TIMEOUT_MS = 300_000
 const CLOSE_TIMEOUT_MS = 2_000
@@ -160,7 +161,7 @@ async function revalidateAsset(
 
 function isFixedRuntimeRoot(path: string): boolean {
   const segments = path.split(/[\\/]+/u).filter(Boolean)
-  return segments.slice(-3).join('/') === 'runtimes/marketing-ops/0.1.0'
+  return segments.slice(-3).join('/') === 'runtimes/marketing-ops/0.2.0'
 }
 
 function createServerParameters(

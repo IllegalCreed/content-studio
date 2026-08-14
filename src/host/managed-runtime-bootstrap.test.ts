@@ -16,7 +16,7 @@ function sha256(contents: string): string {
 
 async function createRuntimeAsset(): Promise<{ manifestSha256: string, root: string }> {
   const parent = await mkdtemp(join(tmpdir(), 'content-studio-managed-bootstrap-'))
-  const root = join(parent, 'runtimes', 'marketing-ops', '0.1.0')
+  const root = join(parent, 'runtimes', 'marketing-ops', '0.2.0')
   temporaryDirectories.push(parent)
   const server = 'managed marketing-ops server fixture\n'
   const helper = 'managed marketing-ops keychain helper fixture\n'
@@ -36,7 +36,7 @@ async function createRuntimeAsset(): Promise<{ manifestSha256: string, root: str
   await writeFile(join(root, 'dist/playwright-core.bundle.cjs'), bundle, 'utf8')
   const packageJson = JSON.stringify({
     name: '@illegalcreed/marketing-ops',
-    version: '0.1.0',
+    version: '0.2.0',
   })
   await writeFile(join(root, 'package.json'), packageJson, 'utf8')
   const manifest = JSON.stringify({
@@ -52,7 +52,7 @@ async function createRuntimeAsset(): Promise<{ manifestSha256: string, root: str
       { path: 'package.json', sha256: sha256(packageJson) },
     ],
     runtimeName: 'marketing-ops',
-    runtimeVersion: '0.1.0',
+    runtimeVersion: '0.2.0',
     schemaVersion: 1,
   })
   await writeFile(join(root, 'runtime-manifest.json'), manifest, 'utf8')
@@ -78,7 +78,7 @@ describe('installer-owned marketing-ops bootstrap', () => {
         },
       })),
       close: vi.fn(async () => undefined),
-      getServerVersion: vi.fn(() => ({ name: 'marketing-ops', version: '0.1.0' })),
+      getServerVersion: vi.fn(() => ({ name: 'marketing-ops', version: '0.2.0' })),
     }
     const connector = { connect: vi.fn(async () => session) }
     const bootstrap = createInstallerManagedRuntimeBootstrap({
@@ -92,7 +92,7 @@ describe('installer-owned marketing-ops bootstrap', () => {
     expect(runtime).toBeDefined()
     expect(connector.connect).toHaveBeenCalledWith(expect.objectContaining({
       entrypoint: expect.stringMatching(/dist\/server\.js$/u),
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     }))
     expect(session.callTool).not.toHaveBeenCalled()
     await expect(runtime!.statusClient.getChannelsStatus('project-a')).resolves.toMatchObject({
@@ -164,7 +164,7 @@ describe('installer-owned marketing-ops bootstrap', () => {
       getServerVersion: vi.fn(() => ({
         detail: '/private/runtime/token=secret',
         name: 'marketing-ops',
-        version: '0.1.0',
+        version: '0.2.0',
       })),
     }
     const bootstrap = createInstallerManagedRuntimeBootstrap({
@@ -182,7 +182,7 @@ describe('installer-owned marketing-ops bootstrap', () => {
     const session = {
       callTool: vi.fn(),
       close: vi.fn(async () => undefined),
-      getServerVersion: vi.fn(() => ({ name: 'marketing-ops', version: '0.1.0' })),
+      getServerVersion: vi.fn(() => ({ name: 'marketing-ops', version: '0.2.0' })),
     }
     const connector = { connect: vi.fn(async () => session) }
     const bootstrap = createInstallerManagedRuntimeBootstrapFromHandoff({
@@ -192,7 +192,7 @@ describe('installer-owned marketing-ops bootstrap', () => {
         manifestSha256: asset.manifestSha256,
         runtimeName: 'marketing-ops',
         runtimeRoot: asset.root,
-        runtimeVersion: '0.1.0',
+        runtimeVersion: '0.2.0',
       },
     })
 
@@ -209,7 +209,7 @@ describe('installer-owned marketing-ops bootstrap', () => {
         manifestSha256: '0'.repeat(64),
         runtimeName: 'marketing-ops',
         runtimeRoot: dirname('/tmp/not-a-fixed-runtime-root'),
-        runtimeVersion: '0.1.0',
+        runtimeVersion: '0.2.0',
       },
     })
 

@@ -154,7 +154,7 @@ describe('workbench runtime projections', () => {
       expiresAt: '2099-01-01T00:01:00.000Z',
       observedAt: '2099-01-01T00:00:00.000Z',
       projectId: 'project-a',
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     })
 
     expect(live).toMatchObject({
@@ -200,7 +200,7 @@ describe('workbench runtime projections', () => {
       expiresAt: '2026-08-10T01:01:00.000Z',
       observedAt: '2026-08-10T01:00:00.000Z',
       projectId: 'project-a',
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     }
     const now = new Date('2026-08-10T01:00:30.000Z')
 
@@ -260,7 +260,7 @@ describe('workbench runtime projections', () => {
       expiresAt: '2099-01-01T00:01:00.000Z',
       observedAt: '2099-01-01T00:00:00.000Z',
       projectId: 'project-a',
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     }
 
     const [projected] = projectMarketingOpsChannels(channels, status)
@@ -321,7 +321,7 @@ describe('workbench runtime projections', () => {
       expiresAt: '2099-01-01T00:01:00.000Z',
       observedAt: '2099-01-01T00:00:00.000Z',
       projectId: 'project-a',
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     }
 
     const [projected] = projectMarketingOpsChannels(channels, status)
@@ -382,7 +382,7 @@ describe('workbench runtime projections', () => {
       expiresAt: '2099-01-01T00:01:00.000Z',
       observedAt: '2099-01-01T00:00:00.000Z',
       projectId: 'project-a',
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     }
 
     const [projected] = projectMarketingOpsChannels(channels, status)

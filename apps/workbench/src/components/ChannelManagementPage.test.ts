@@ -15,7 +15,7 @@ describe('channelManagementPage', () => {
       expiresAt: '2026-08-10T00:01:00.000Z',
       observedAt: '2026-08-10T00:00:00.000Z',
       projectId: snapshot.project.projectId,
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     }
 
     const wrapper = mount(ChannelManagementPage, {
@@ -32,7 +32,7 @@ describe('channelManagementPage', () => {
     })
 
     expect(wrapper.get('[data-testid="marketing-ops-status-summary"]').text())
-      .toContain('runtime 0.1.0 · contract v3')
+      .toContain('runtime 0.2.0 · contract v3')
     expect(wrapper.get('[data-testid="marketing-ops-status-summary"]').text())
       .toContain('不授予外部写入权限')
   })

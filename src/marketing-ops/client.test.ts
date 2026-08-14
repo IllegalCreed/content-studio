@@ -224,7 +224,7 @@ describe('marketing-ops client boundary', () => {
         },
         getRuntimeInfo: async () => ({
           name: 'marketing-ops',
-          version: '0.1.0+codex.20260728231229',
+          version: '0.2.0+codex.20260814000000',
         }),
       },
     })
@@ -253,7 +253,7 @@ describe('marketing-ops client boundary', () => {
       ).toISOString(),
       observedAt: '2026-08-09T12:00:00.000Z',
       projectId: 'project-a',
-      runtimeVersion: '0.1.0+codex.20260728231229',
+      runtimeVersion: '0.2.0+codex.20260814000000',
     })
     expect(isMarketingOpsStatusSnapshotFresh(
       snapshot,
@@ -273,22 +273,22 @@ describe('marketing-ops client boundary', () => {
     expect(assessMarketingOpsCompatibility({
       contractVersion: 3,
       runtimeName: 'marketing-ops',
-      runtimeVersion: '0.1.9+codex.local',
+      runtimeVersion: '0.2.9+codex.local',
     })).toMatchObject({ compatible: true })
     expect(assessMarketingOpsCompatibility({
       contractVersion: 3,
       runtimeName: 'marketing-ops',
-      runtimeVersion: '0.2.0',
+      runtimeVersion: '0.1.0',
     })).toMatchObject({ compatible: false, issue: 'runtime-version' })
     expect(assessMarketingOpsCompatibility({
       contractVersion: 4,
       runtimeName: 'marketing-ops',
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     })).toMatchObject({ compatible: false, issue: 'contract-version' })
     expect(assessMarketingOpsCompatibility({
       contractVersion: 3,
       runtimeName: 'other-runtime',
-      runtimeVersion: '0.1.0',
+      runtimeVersion: '0.2.0',
     })).toMatchObject({ compatible: false, issue: 'runtime-name' })
   })
 
@@ -312,7 +312,7 @@ describe('marketing-ops client boundary', () => {
           contractVersion: 3,
           projectId: 'project-a',
         }),
-        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.1.0' }),
+        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.2.0' }),
       },
     })
     await expect(client.getChannelsStatus('project-a')).resolves.toMatchObject({
@@ -338,7 +338,7 @@ describe('marketing-ops client boundary', () => {
           contractVersion: 3,
           projectId: 'project-a',
         }),
-        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.1.0' }),
+        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.2.0' }),
       },
     })
 
@@ -366,7 +366,7 @@ describe('marketing-ops client boundary', () => {
           contractVersion: 3,
           projectId: 'project-a',
         }),
-        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.1.0' }),
+        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.2.0' }),
       },
     })
 
@@ -395,7 +395,7 @@ describe('marketing-ops client boundary', () => {
           contractVersion: 3,
           projectId: 'project-a',
         }),
-        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.1.0' }),
+        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.2.0' }),
       },
     })
 
@@ -410,7 +410,7 @@ describe('marketing-ops client boundary', () => {
           statusCalls += 1
           return {}
         },
-        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.2.0' }),
+        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.1.0' }),
       },
     })
     await expect(incompatible.getChannelsStatus('project-a'))
@@ -438,7 +438,7 @@ describe('marketing-ops client boundary', () => {
           password: null,
           projectId: 'project-b',
         }),
-        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.1.0' }),
+        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.2.0' }),
       },
     })
     await expect(malformed.getChannelsStatus('project-a'))
@@ -464,7 +464,7 @@ describe('marketing-ops client boundary', () => {
           contractVersion: 3,
           projectId: 'project-a',
         }),
-        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.1.0' }),
+        getRuntimeInfo: async () => ({ name: 'marketing-ops', version: '0.2.0' }),
       },
     })
     await expect(duplicate.getChannelsStatus('project-a'))
@@ -497,7 +497,7 @@ describe('marketing-ops client boundary', () => {
             },
           }
         },
-        getServerVersion: () => ({ name: 'marketing-ops', version: '0.1.0' }),
+        getServerVersion: () => ({ name: 'marketing-ops', version: '0.2.0' }),
       },
       now: () => new Date('2026-08-10T00:00:00.000Z'),
     })
@@ -531,7 +531,7 @@ describe('marketing-ops client boundary', () => {
         }),
         getServerVersion: () => ({
           name: 'marketing-ops',
-          version: '0.1.0',
+          version: '0.2.0',
         }),
       },
       now: () => new Date('2026-08-10T00:00:00.000Z'),
@@ -549,7 +549,7 @@ describe('marketing-ops client boundary', () => {
     const createClient = (result: unknown) => createMarketingOpsMcpStatusClient({
       mcp: {
         callTool: async () => result,
-        getServerVersion: () => ({ name: 'marketing-ops', version: '0.1.0' }),
+        getServerVersion: () => ({ name: 'marketing-ops', version: '0.2.0' }),
       },
     })
 
