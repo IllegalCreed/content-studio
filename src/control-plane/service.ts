@@ -12,6 +12,7 @@ import type {
   ChannelContentFormat,
   ChannelContentMediaRevisionInput,
   ChannelContentReadiness,
+  ChannelContentRevisionInput,
   ChannelId,
   ComposeProduction,
   ComposeProductionResult,
@@ -20,6 +21,8 @@ import type {
   CompositionProgressEvent,
   CompositionTaskEventKind,
   ConfirmActivityVideoPlanInput,
+  ConfirmChannelContentInput,
+  ConfirmChannelContentProductionInput,
   ContentFormat,
   ContentGroup,
   ContentStudioGlobalProjectView,
@@ -902,6 +905,23 @@ export class ContentStudioApplicationService {
     const task = this.taskStore.getTask(projectId, taskId)
     if (task !== undefined && task.kind !== 'production')
       throw new Error('Only production tasks can be started by this operation')
+    if (task?.contentId !== undefined) {
+      const content = this.repository.getChannelContent(projectId, task.contentId)
+      if (content === undefined)
+        throw new RecordNotFoundError('Channel content', task.contentId)
+      this.assertChannelContentConfirmed(content)
+      if (content.format === 'video') {
+        const activity = this.requireActivity(projectId, content.activityId)
+        if (
+          activity.video !== undefined
+          && activity.videoPlanReviewStatus !== 'confirmed'
+        ) {
+          throw new Error(
+            `Activity ${activity.activityId} video plan must be confirmed before production`,
+          )
+        }
+      }
+    }
     return this.taskStore.transitionTask(projectId, taskId, 'generating')
   }
 
@@ -1428,10 +1448,99 @@ export class ContentStudioApplicationService {
     )
     const content = this.repository.saveChannelContent({
       ...input,
+      contentReviewStatus: 'pending',
+      productionReviewStatus: 'pending',
       version: 1,
     })
     this.createProductionTask(content)
     return content
+  }
+
+  reviseChannelContent(
+    input: ChannelContentRevisionInput,
+  ): ChannelContent {
+    this.requireProject(input.projectId)
+    const current = this.repository.getChannelContent(
+      input.projectId,
+      input.contentId,
+    )
+    if (current === undefined)
+      throw new RecordNotFoundError('Channel content', input.contentId)
+    if (current.version !== input.baseVersion) {
+      throw new Error(
+        `Channel content ${input.contentId} has moved past version ${input.baseVersion}`,
+      )
+    }
+    this.assertChannelContentHasNoPublicationPlan(current)
+    if (input.title.trim().length === 0)
+      throw new Error('Channel content title must not be empty')
+    if (input.body.trim().length === 0)
+      throw new Error('Channel content body must not be empty')
+    if (current.title === input.title && current.body === input.body)
+      return current
+    return this.repository.saveChannelContent({
+      ...current,
+      body: input.body,
+      contentReviewStatus: 'pending',
+      productionReviewStatus: 'pending',
+      title: input.title,
+      version: current.version + 1,
+    })
+  }
+
+  confirmChannelContent(
+    input: ConfirmChannelContentInput,
+  ): ChannelContent {
+    this.requireProject(input.projectId)
+    const current = this.repository.getChannelContent(
+      input.projectId,
+      input.contentId,
+    )
+    if (current === undefined)
+      throw new RecordNotFoundError('Channel content', input.contentId)
+    if (current.version !== input.baseVersion) {
+      throw new Error(
+        `Channel content ${input.contentId} has moved past version ${input.baseVersion}`,
+      )
+    }
+    this.assertChannelContentHasNoPublicationPlan(current)
+    if (current.contentReviewStatus === 'confirmed')
+      return current
+    return this.repository.saveChannelContent({
+      ...current,
+      contentReviewStatus: 'confirmed',
+      ...(current.format === 'short-post'
+        ? { productionReviewStatus: 'confirmed' as const }
+        : {}),
+      version: current.version + 1,
+    })
+  }
+
+  confirmChannelContentProduction(
+    input: ConfirmChannelContentProductionInput,
+  ): ChannelContent {
+    this.requireProject(input.projectId)
+    const current = this.repository.getChannelContent(
+      input.projectId,
+      input.contentId,
+    )
+    if (current === undefined)
+      throw new RecordNotFoundError('Channel content', input.contentId)
+    if (current.version !== input.baseVersion) {
+      throw new Error(
+        `Channel content ${input.contentId} has moved past version ${input.baseVersion}`,
+      )
+    }
+    this.assertChannelContentHasNoPublicationPlan(current)
+    this.assertChannelContentConfirmed(current)
+    this.assertChannelContentPublicationReadiness(current)
+    if (current.productionReviewStatus === 'confirmed')
+      return current
+    return this.repository.saveChannelContent({
+      ...current,
+      productionReviewStatus: 'confirmed',
+      version: current.version + 1,
+    })
   }
 
   reviseChannelContentMedia(
@@ -1451,13 +1560,7 @@ export class ContentStudioApplicationService {
         `Channel content ${input.contentId} has moved past version ${input.baseVersion}`,
       )
     }
-    const existingPlan = this.repository.listPublicationPlans(input.projectId)
-      .find(plan => plan.contentId === input.contentId)
-    if (existingPlan !== undefined) {
-      throw new Error(
-        `Channel content ${input.contentId} cannot be revised after publication plan ${existingPlan.publicationId}`,
-      )
-    }
+    this.assertChannelContentHasNoPublicationPlan(current)
     this.assertChannelContentArtifacts(
       input.projectId,
       current.activityId,
@@ -1505,6 +1608,7 @@ export class ContentStudioApplicationService {
     return this.repository.saveChannelContent({
       ...current,
       artifactIds: nextArtifactIds,
+      productionReviewStatus: 'pending',
       version: current.version + 1,
     })
   }
@@ -1561,7 +1665,9 @@ export class ContentStudioApplicationService {
       ...content,
       activityId: input.activityId,
       contentGroupId: input.contentGroupId,
+      contentReviewStatus: 'pending',
       projectId: input.projectId,
+      productionReviewStatus: 'pending',
       version: 1,
     }))
     contents.forEach(content => this.createProductionTask(content))
@@ -1624,6 +1730,7 @@ export class ContentStudioApplicationService {
     ])
     this.assertPublishableChannel(input.projectId, input.channel)
     this.assertChannelContentPublicationReadiness(content)
+    this.assertChannelContentReadyForPublication(content)
     const plan = this.repository.savePublicationPlan(input)
     this.createPublicationTask(plan)
     return plan
@@ -2363,6 +2470,7 @@ export class ContentStudioApplicationService {
     return this.repository.saveChannelContent({
       ...content,
       artifactIds: nextArtifactIds,
+      productionReviewStatus: 'pending',
       version: content.version + 1,
     })
   }
@@ -2405,8 +2513,38 @@ export class ContentStudioApplicationService {
     return this.repository.saveChannelContent({
       ...content,
       artifactIds: [...new Set(nextArtifactIds)],
+      productionReviewStatus: 'pending',
       version: content.version + 1,
     })
+  }
+
+  private assertChannelContentConfirmed(content: ChannelContent): void {
+    if (content.contentReviewStatus !== 'confirmed') {
+      throw new Error(
+        `Channel content ${content.contentId} content version must be confirmed before production or publication`,
+      )
+    }
+  }
+
+  private assertChannelContentReadyForPublication(content: ChannelContent): void {
+    this.assertChannelContentConfirmed(content)
+    if (content.productionReviewStatus !== 'confirmed') {
+      throw new Error(
+        `Channel content ${content.contentId} production version must be confirmed before publication`,
+      )
+    }
+  }
+
+  private assertChannelContentHasNoPublicationPlan(
+    content: ChannelContent,
+  ): void {
+    const existingPlan = this.repository.listPublicationPlans(content.projectId)
+      .find(plan => plan.contentId === content.contentId)
+    if (existingPlan !== undefined) {
+      throw new Error(
+        `Channel content ${content.contentId} cannot be revised after publication plan ${existingPlan.publicationId}`,
+      )
+    }
   }
 
   private assertActivityVideo(

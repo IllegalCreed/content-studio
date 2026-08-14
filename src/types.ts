@@ -395,6 +395,8 @@ export type CreateContentGroupInput = Omit<ContentGroup, 'version'>
 
 export type ChannelContentFormat = 'article' | 'image-text' | 'short-post' | 'video'
 
+export type ChannelContentReviewStatus = 'confirmed' | 'pending'
+
 export interface ChannelContent {
   activityId: string
   /**
@@ -404,16 +406,37 @@ export interface ChannelContent {
   artifactIds: string[]
   body: string
   channel: ChannelId
+  contentReviewStatus?: ChannelContentReviewStatus
   contentGroupId: string
   contentId: string
   format: ChannelContentFormat
   locale: Locale
   projectId: string
+  productionReviewStatus?: ChannelContentReviewStatus
   title: string
   version: number
 }
 
-export type CreateChannelContentInput = Omit<ChannelContent, 'version'>
+export type CreateChannelContentInput = Omit<
+  ChannelContent,
+  'contentReviewStatus' | 'productionReviewStatus' | 'version'
+>
+
+export interface ChannelContentRevisionInput {
+  baseVersion: number
+  body: string
+  contentId: string
+  projectId: string
+  title: string
+}
+
+export interface ConfirmChannelContentInput {
+  baseVersion: number
+  contentId: string
+  projectId: string
+}
+
+export type ConfirmChannelContentProductionInput = ConfirmChannelContentInput
 
 export type ChannelContentMediaRevisionMode = 'append' | 'replace'
 
@@ -428,7 +451,15 @@ export interface ChannelContentMediaRevisionInput {
 export interface CreateActivityContentPackInput {
   activityId: string
   contentGroupId: string
-  contents: Array<Omit<ChannelContent, 'activityId' | 'contentGroupId' | 'projectId' | 'version'>>
+  contents: Array<Omit<
+    ChannelContent,
+    | 'activityId'
+    | 'contentGroupId'
+    | 'contentReviewStatus'
+    | 'productionReviewStatus'
+    | 'projectId'
+    | 'version'
+  >>
   coreMessage: string
   projectId: string
   title: string

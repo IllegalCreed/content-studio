@@ -787,6 +787,32 @@ describe('content-studio CLI', () => {
         id: 4,
         method: 'tools/call',
         params: {
+          name: 'confirm_channel_content',
+          arguments: {
+            baseVersion: 1,
+            contentId: 'mcp-cli-video-content',
+            projectId: 'algorithm-visualizer',
+          },
+        },
+      },
+      {
+        jsonrpc: '2.0',
+        id: 5,
+        method: 'tools/call',
+        params: {
+          name: 'confirm_activity_video_plan',
+          arguments: {
+            activityId: 'mcp-cli-video',
+            baseVersion: 1,
+            projectId: 'algorithm-visualizer',
+          },
+        },
+      },
+      {
+        jsonrpc: '2.0',
+        id: 6,
+        method: 'tools/call',
+        params: {
           name: 'start_production_task',
           arguments: {
             projectId: 'algorithm-visualizer',

@@ -37,6 +37,8 @@ import {
 import { createMarketingOpsAssistedPublicationService } from '../marketing-ops/assisted-publication'
 import { isMarketingOpsStatusSnapshotFresh } from '../marketing-ops/client'
 import {
+  parseConfirmActivityVideoPlanInput,
+  parseConfirmChannelContentInput,
   parseCreateActivityArtifactInput,
   parseCreateActivityInput,
   parseCreateChannelContentInput,
@@ -45,6 +47,7 @@ import {
   parseCreatePublicationPlanInput,
   parsePrepareMarketingOpsPublicationPackageInput,
   parsePromoteActivityArtifactInput,
+  parseReviseChannelContentInput,
   parseReviseChannelContentMediaInput,
 } from '../runtime/server'
 import { assertNoSensitiveKeys } from '../validation'
@@ -585,6 +588,17 @@ function toolDefinitions(): Array<Record<string, unknown>> {
         openWorldHint: false,
         readOnlyHint: false,
       },
+      description: '确认当前精确版本的活动视频分镜与拍摄计划；活动计划后续变化会重新回到待确认。不会启动录制或发布。',
+      inputSchema: versionedActivitySchema(),
+      name: 'confirm_activity_video_plan',
+      title: '确认活动视频计划',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: false,
+      },
       description: '在发布活动中保存一次主题内容组。',
       inputSchema: contentGroupSchema(),
       name: 'create_content_group',
@@ -611,6 +625,39 @@ function toolDefinitions(): Array<Record<string, unknown>> {
       inputSchema: channelContentSchema(),
       name: 'save_channel_content',
       title: '保存渠道内容',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: false,
+      },
+      description: '基于当前版本修订渠道内容标题和正文，保存为新的待确认版本；不会启动制作或发布。',
+      inputSchema: channelContentRevisionSchema(),
+      name: 'revise_channel_content',
+      title: '修订渠道内容',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: false,
+      },
+      description: '确认当前精确版本的渠道内容；后续正文或媒体变化会重新回到待确认。不会启动制作或发布。',
+      inputSchema: versionedChannelContentSchema(),
+      name: 'confirm_channel_content',
+      title: '确认渠道内容',
+    },
+    {
+      annotations: {
+        destructiveHint: false,
+        openWorldHint: false,
+        readOnlyHint: false,
+      },
+      description: '在正文已确认且逐形态媒体就绪后，确认当前精确版本的渠道成品；后续媒体变化会重新回到待确认。不会建立发布计划或发布。',
+      inputSchema: versionedChannelContentSchema(),
+      name: 'confirm_channel_content_production',
+      title: '确认渠道成品',
     },
     {
       annotations: {
@@ -716,6 +763,18 @@ function activityVideoPlanSchema(): Record<string, unknown> {
       projectId: { type: 'string' },
     },
     required: ['activityId', 'projectId'],
+    type: 'object',
+  }
+}
+
+function versionedActivitySchema(): Record<string, unknown> {
+  return {
+    properties: {
+      activityId: { type: 'string' },
+      baseVersion: { minimum: 1, type: 'integer' },
+      projectId: { type: 'string' },
+    },
+    required: ['activityId', 'baseVersion', 'projectId'],
     type: 'object',
   }
 }
@@ -1038,6 +1097,32 @@ function channelContentSchema(): Record<string, unknown> {
       'projectId',
       'title',
     ],
+    type: 'object',
+  }
+}
+
+function channelContentRevisionSchema(): Record<string, unknown> {
+  return {
+    properties: {
+      baseVersion: { minimum: 1, type: 'integer' },
+      body: { type: 'string' },
+      contentId: { type: 'string' },
+      projectId: { type: 'string' },
+      title: { type: 'string' },
+    },
+    required: ['baseVersion', 'body', 'contentId', 'projectId', 'title'],
+    type: 'object',
+  }
+}
+
+function versionedChannelContentSchema(): Record<string, unknown> {
+  return {
+    properties: {
+      baseVersion: { minimum: 1, type: 'integer' },
+      contentId: { type: 'string' },
+      projectId: { type: 'string' },
+    },
+    required: ['baseVersion', 'contentId', 'projectId'],
     type: 'object',
   }
 }
@@ -1430,6 +1515,24 @@ async function executeTool(
       const activityId = identifierField(value.activityId, 'activityId')
       return options.service.getActivityVideoPlan(value.projectId, activityId)
     }
+    case 'confirm_activity_video_plan': {
+      const value = asRecord(input, 'confirmActivityVideoPlan')
+      assertKeys(
+        value,
+        ['activityId', 'baseVersion', 'projectId'],
+        'confirmActivityVideoPlan',
+      )
+      const projectId = scopedId(value.projectId, options.projectId, 'projectId')
+      const activityId = identifierField(value.activityId, 'activityId')
+      const parsed = parseConfirmActivityVideoPlanInput({
+        baseVersion: value.baseVersion,
+      })
+      return options.service.confirmActivityVideoPlan({
+        activityId,
+        baseVersion: parsed.baseVersion,
+        projectId,
+      })
+    }
     case 'create_content_group': {
       const value = asRecord(input, 'contentGroup')
       assertKeys(value, [
@@ -1519,6 +1622,47 @@ async function executeTool(
       const contentGroupId = identifierField(value.contentGroupId, 'contentGroupId')
       return options.service.createChannelContent(
         parseCreateChannelContentInput(value, projectId, activityId, contentGroupId),
+      )
+    }
+    case 'revise_channel_content': {
+      const value = asRecord(input, 'channelContentRevision')
+      assertKeys(value, [
+        'baseVersion',
+        'body',
+        'contentId',
+        'projectId',
+        'title',
+      ], 'channelContentRevision')
+      const projectId = scopedId(value.projectId, options.projectId, 'projectId')
+      const contentId = identifierField(value.contentId, 'contentId')
+      return options.service.reviseChannelContent(
+        parseReviseChannelContentInput(value, projectId, contentId),
+      )
+    }
+    case 'confirm_channel_content': {
+      const value = asRecord(input, 'confirmChannelContent')
+      assertKeys(
+        value,
+        ['baseVersion', 'contentId', 'projectId'],
+        'confirmChannelContent',
+      )
+      const projectId = scopedId(value.projectId, options.projectId, 'projectId')
+      const contentId = identifierField(value.contentId, 'contentId')
+      return options.service.confirmChannelContent(
+        parseConfirmChannelContentInput(value, projectId, contentId),
+      )
+    }
+    case 'confirm_channel_content_production': {
+      const value = asRecord(input, 'confirmChannelContentProduction')
+      assertKeys(
+        value,
+        ['baseVersion', 'contentId', 'projectId'],
+        'confirmChannelContentProduction',
+      )
+      const projectId = scopedId(value.projectId, options.projectId, 'projectId')
+      const contentId = identifierField(value.contentId, 'contentId')
+      return options.service.confirmChannelContentProduction(
+        parseConfirmChannelContentInput(value, projectId, contentId),
       )
     }
     case 'revise_channel_content_media': {

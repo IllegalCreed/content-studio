@@ -318,7 +318,7 @@ async function createFixture(options: { body?: string } = {}): Promise<{
     relativePath,
     sha256: createHash('sha256').update(contents).digest('hex'),
   })
-  service.createChannelContent({
+  const content = service.createChannelContent({
     activityId: 'activity-a',
     artifactIds: ['cover-a'],
     body: options.body ?? '分区步骤说明：https://project-a.example.com/guide',
@@ -329,6 +329,16 @@ async function createFixture(options: { body?: string } = {}): Promise<{
     locale: 'zh-CN',
     projectId: 'project-a',
     title: '分区步骤说明',
+  })
+  const confirmedContent = service.confirmChannelContent({
+    baseVersion: content.version,
+    contentId: content.contentId,
+    projectId: 'project-a',
+  })
+  service.confirmChannelContentProduction({
+    baseVersion: confirmedContent.version,
+    contentId: confirmedContent.contentId,
+    projectId: 'project-a',
   })
   service.createPublicationPlan({
     activityId: 'activity-a',

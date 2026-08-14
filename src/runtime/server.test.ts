@@ -976,6 +976,44 @@ describe('content studio local application server', () => {
         version: 2,
       })
 
+      const contentConfirmationResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/channel-contents/content-a/confirm`,
+        {
+          body: JSON.stringify({
+            baseVersion: 2,
+            contentId: 'content-a',
+            projectId: 'project-a',
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(contentConfirmationResponse.status).toBe(200)
+      expect(await contentConfirmationResponse.json()).toMatchObject({
+        contentReviewStatus: 'confirmed',
+        productionReviewStatus: 'pending',
+        version: 3,
+      })
+
+      const productionConfirmationResponse = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/channel-contents/content-a/production-confirm`,
+        {
+          body: JSON.stringify({
+            baseVersion: 3,
+            contentId: 'content-a',
+            projectId: 'project-a',
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(productionConfirmationResponse.status).toBe(200)
+      expect(await productionConfirmationResponse.json()).toMatchObject({
+        contentReviewStatus: 'confirmed',
+        productionReviewStatus: 'confirmed',
+        version: 4,
+      })
+
       const promoteResponse = await fetch(
         `${running.baseUrl}/api/v1/projects/project-a/activity-artifacts/artifact-a/promote`,
         {
@@ -1776,6 +1814,16 @@ describe('content studio local application server', () => {
       projectId: project.projectId,
       title: 'Quick sort video',
     })
+    handle.service.confirmChannelContent({
+      baseVersion: content.version,
+      contentId: content.contentId,
+      projectId: project.projectId,
+    })
+    handle.service.confirmActivityVideoPlan({
+      activityId: activity.activityId,
+      baseVersion: activity.version,
+      projectId: project.projectId,
+    })
     const taskId = `production-${content.contentId}`
     handle.service.startProductionTask(project.projectId, taskId)
     const running = await listen(handle.server)
@@ -2109,6 +2157,16 @@ describe('content studio local application server', () => {
       locale: 'en',
       projectId: project.projectId,
       title: 'Quick sort video',
+    })
+    handle.service.confirmChannelContent({
+      baseVersion: content.version,
+      contentId: content.contentId,
+      projectId: project.projectId,
+    })
+    handle.service.confirmActivityVideoPlan({
+      activityId: activity.activityId,
+      baseVersion: activity.version,
+      projectId: project.projectId,
     })
     const taskId = `production-${content.contentId}`
     handle.service.startProductionTask(project.projectId, taskId)
@@ -2637,6 +2695,16 @@ describe('content studio local application server', () => {
       locale: 'en',
       projectId: project.projectId,
       title: 'Quick sort video',
+    })
+    handle.service.confirmChannelContent({
+      baseVersion: content.version,
+      contentId: content.contentId,
+      projectId: project.projectId,
+    })
+    handle.service.confirmActivityVideoPlan({
+      activityId: activity.activityId,
+      baseVersion: activity.version,
+      projectId: project.projectId,
     })
     const taskId = `production-${content.contentId}`
     const running = await listen(handle.server)

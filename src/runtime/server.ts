@@ -13,7 +13,9 @@ import type {
   ActivityRevisionInput,
   ChannelContentFormat,
   ChannelContentMediaRevisionInput,
+  ChannelContentRevisionInput,
   ChannelId,
+  ConfirmChannelContentInput,
   ContentFormat,
   ContentStudioGlobalView,
   ContentStudioProjectIndex,
@@ -999,6 +1001,84 @@ async function handleRequest(
       && segments[0] === 'api'
       && segments[1] === 'v1'
       && segments[2] === 'projects'
+      && segments[4] === 'channel-contents'
+      && segments[6] === 'revise'
+    ) {
+      const projectId = identifierField(
+        decodeSegment(segments[3]!),
+        'projectId',
+      )
+      const contentId = identifierField(
+        decodeSegment(segments[5]!),
+        'contentId',
+      )
+      const input = parseReviseChannelContentInput(
+        await readJsonBody(request),
+        projectId,
+        contentId,
+      )
+      sendJson(response, 200, service.reviseChannelContent(input))
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'channel-contents'
+      && segments[6] === 'confirm'
+    ) {
+      const projectId = identifierField(
+        decodeSegment(segments[3]!),
+        'projectId',
+      )
+      const contentId = identifierField(
+        decodeSegment(segments[5]!),
+        'contentId',
+      )
+      const input = parseConfirmChannelContentInput(
+        await readJsonBody(request),
+        projectId,
+        contentId,
+      )
+      sendJson(response, 200, service.confirmChannelContent(input))
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'channel-contents'
+      && segments[6] === 'production-confirm'
+    ) {
+      const projectId = identifierField(
+        decodeSegment(segments[3]!),
+        'projectId',
+      )
+      const contentId = identifierField(
+        decodeSegment(segments[5]!),
+        'contentId',
+      )
+      const input = parseConfirmChannelContentInput(
+        await readJsonBody(request),
+        projectId,
+        contentId,
+      )
+      sendJson(response, 200, service.confirmChannelContentProduction(input))
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 7
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
       && segments[4] === 'activities'
       && segments[6] === 'artifacts'
     ) {
@@ -1456,7 +1536,7 @@ function parseRecordProductionInput(input: unknown): {
   }
 }
 
-function parseConfirmActivityVideoPlanInput(input: unknown): { baseVersion: number } {
+export function parseConfirmActivityVideoPlanInput(input: unknown): { baseVersion: number } {
   assertNoSensitiveKeys(input)
   const value = asRecord(input, 'confirm video plan')
   const supportedKeys = new Set(['baseVersion'])
@@ -1466,6 +1546,64 @@ function parseConfirmActivityVideoPlanInput(input: unknown): { baseVersion: numb
   }
   return {
     baseVersion: positiveIntegerField(value.baseVersion, 'baseVersion'),
+  }
+}
+
+export function parseReviseChannelContentInput(
+  input: unknown,
+  projectId: string,
+  contentId: string,
+): ChannelContentRevisionInput {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'channelContentRevision')
+  const supportedKeys = new Set([
+    'baseVersion',
+    'body',
+    'contentId',
+    'projectId',
+    'title',
+  ])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key))
+      throw new RequestError(400, `channelContentRevision contains unsupported field: ${key}`)
+  }
+  const inputProjectId = stringField(value.projectId, 'projectId')
+  if (inputProjectId !== projectId)
+    throw new RequestError(400, 'projectId must match the URL')
+  const inputContentId = identifierField(value.contentId, 'contentId')
+  if (inputContentId !== contentId)
+    throw new RequestError(400, 'contentId must match the URL')
+  return {
+    baseVersion: positiveIntegerField(value.baseVersion, 'baseVersion'),
+    body: stringField(value.body, 'body'),
+    contentId,
+    projectId,
+    title: stringField(value.title, 'title'),
+  }
+}
+
+export function parseConfirmChannelContentInput(
+  input: unknown,
+  projectId: string,
+  contentId: string,
+): ConfirmChannelContentInput {
+  assertNoSensitiveKeys(input)
+  const value = asRecord(input, 'confirmChannelContent')
+  const supportedKeys = new Set(['baseVersion', 'contentId', 'projectId'])
+  for (const key of Object.keys(value)) {
+    if (!supportedKeys.has(key))
+      throw new RequestError(400, `confirmChannelContent contains unsupported field: ${key}`)
+  }
+  const inputProjectId = stringField(value.projectId, 'projectId')
+  if (inputProjectId !== projectId)
+    throw new RequestError(400, 'projectId must match the URL')
+  const inputContentId = identifierField(value.contentId, 'contentId')
+  if (inputContentId !== contentId)
+    throw new RequestError(400, 'contentId must match the URL')
+  return {
+    baseVersion: positiveIntegerField(value.baseVersion, 'baseVersion'),
+    contentId,
+    projectId,
   }
 }
 

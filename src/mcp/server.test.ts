@@ -255,6 +255,16 @@ async function createBilibiliAssistedConfirmationFixture(): Promise<{
     projectId,
     title: '快速排序图文',
   })
+  const confirmedContent = service.confirmChannelContent({
+    baseVersion: content.version,
+    contentId: content.contentId,
+    projectId,
+  })
+  service.confirmChannelContentProduction({
+    baseVersion: confirmedContent.version,
+    contentId: confirmedContent.contentId,
+    projectId,
+  })
   service.createPublicationPlan({
     activityId: activity.activityId,
     channel: 'bilibili',
@@ -580,6 +590,16 @@ describe('content Studio local MCP server', () => {
       projectId,
       title: '快速排序图文',
     })
+    const confirmedContent = service.confirmChannelContent({
+      baseVersion: content.version,
+      contentId: content.contentId,
+      projectId,
+    })
+    service.confirmChannelContentProduction({
+      baseVersion: confirmedContent.version,
+      contentId: confirmedContent.contentId,
+      projectId,
+    })
     service.createPublicationPlan({
       activityId: activity.activityId,
       channel: 'bilibili',
@@ -901,6 +921,16 @@ describe('content Studio local MCP server', () => {
       projectId,
       title: '待放弃的快速排序图文',
     })
+    const confirmedAbandonedContent = service.confirmChannelContent({
+      baseVersion: abandonedContent.version,
+      contentId: abandonedContent.contentId,
+      projectId,
+    })
+    service.confirmChannelContentProduction({
+      baseVersion: confirmedAbandonedContent.version,
+      contentId: confirmedAbandonedContent.contentId,
+      projectId,
+    })
     service.createPublicationPlan({
       activityId: activity.activityId,
       channel: 'bilibili',
@@ -1065,6 +1095,16 @@ describe('content Studio local MCP server', () => {
       locale: 'zh-CN',
       projectId,
       title: '快速排序图文',
+    })
+    const confirmedContent = service.confirmChannelContent({
+      baseVersion: content.version,
+      contentId: content.contentId,
+      projectId,
+    })
+    service.confirmChannelContentProduction({
+      baseVersion: confirmedContent.version,
+      contentId: confirmedContent.contentId,
+      projectId,
     })
     service.createPublicationPlan({
       activityId: activity.activityId,
@@ -1528,11 +1568,15 @@ describe('content Studio local MCP server', () => {
       'create_owner_handoff',
       'create_publication_plan',
       'create_publishing_activity',
+      'confirm_activity_video_plan',
+      'confirm_channel_content',
+      'confirm_channel_content_production',
       'get_activity_video_plan',
       'get_marketing_ops_channels_status',
       'prepare_marketing_ops_package',
       'promote_activity_artifact',
       'register_activity_artifact',
+      'revise_channel_content',
       'revise_channel_content_media',
       'retry_task',
     ]))
@@ -1941,6 +1985,30 @@ describe('content Studio local MCP server', () => {
       },
     })
 
+    const confirmedPlanResponse = await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'confirm-video-plan',
+      method: 'tools/call',
+      params: {
+        name: 'confirm_activity_video_plan',
+        arguments: {
+          activityId: 'quick-sort-launch',
+          baseVersion: 1,
+          projectId,
+        },
+      },
+    })
+    expect(confirmedPlanResponse).toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          activityId: 'quick-sort-launch',
+          videoPlanReviewStatus: 'confirmed',
+          version: 2,
+        },
+      },
+    })
+
     const groupResponse = await server.handleMessage({
       jsonrpc: '2.0',
       id: 6,
@@ -1987,6 +2055,83 @@ describe('content Studio local MCP server', () => {
       result: {
         structuredContent: {
           contentId: 'quick-sort-github-en',
+          contentReviewStatus: 'pending',
+          productionReviewStatus: 'pending',
+          version: 1,
+        },
+      },
+    })
+
+    const revisionResponse = await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'revise-content',
+      method: 'tools/call',
+      params: {
+        name: 'revise_channel_content',
+        arguments: {
+          baseVersion: 1,
+          body: 'A revised draft that demonstrates the product and includes a call to action.',
+          contentId: 'quick-sort-github-en',
+          projectId,
+          title: 'Quick sort explained with the visualizer',
+        },
+      },
+    })
+    expect(revisionResponse).toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          contentReviewStatus: 'pending',
+          productionReviewStatus: 'pending',
+          version: 2,
+        },
+      },
+    })
+
+    const confirmationResponse = await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'confirm-content',
+      method: 'tools/call',
+      params: {
+        name: 'confirm_channel_content',
+        arguments: {
+          baseVersion: 2,
+          contentId: 'quick-sort-github-en',
+          projectId,
+        },
+      },
+    })
+    expect(confirmationResponse).toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          contentReviewStatus: 'confirmed',
+          productionReviewStatus: 'pending',
+          version: 3,
+        },
+      },
+    })
+
+    const productionConfirmationResponse = await server.handleMessage({
+      jsonrpc: '2.0',
+      id: 'confirm-content-production',
+      method: 'tools/call',
+      params: {
+        name: 'confirm_channel_content_production',
+        arguments: {
+          baseVersion: 3,
+          contentId: 'quick-sort-github-en',
+          projectId,
+        },
+      },
+    })
+    expect(productionConfirmationResponse).toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          contentReviewStatus: 'confirmed',
+          productionReviewStatus: 'confirmed',
+          version: 4,
         },
       },
     })
@@ -2550,7 +2695,7 @@ describe('content Studio local MCP server', () => {
       service,
     })
 
-    service.createActivity({
+    const workerActivity = service.createActivity({
       activityId: 'mcp-video-worker',
       campaignId: 'mcp-video-worker',
       channels: [{ id: 'youtube', locale: 'en' }],
@@ -2572,7 +2717,7 @@ describe('content Studio local MCP server', () => {
       projectId,
       title: 'Worker scheduling',
     })
-    service.createChannelContent({
+    const workerContent = service.createChannelContent({
       activityId: 'mcp-video-worker',
       artifactIds: [],
       body: 'Worker scheduling video',
@@ -2583,6 +2728,16 @@ describe('content Studio local MCP server', () => {
       locale: 'en',
       projectId,
       title: 'Worker scheduling video',
+    })
+    service.confirmChannelContent({
+      baseVersion: workerContent.version,
+      contentId: workerContent.contentId,
+      projectId,
+    })
+    service.confirmActivityVideoPlan({
+      activityId: workerActivity.activityId,
+      baseVersion: workerActivity.version,
+      projectId,
     })
     const taskId = 'production-mcp-video-worker-content'
 
@@ -2750,6 +2905,52 @@ describe('content Studio local MCP server', () => {
         structuredContent: {
           contentGroup: { contentGroupId: 'content-pack-core' },
           contents: [{ contentId: 'content-pack-github-en' }],
+        },
+      },
+    })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 39.05,
+      method: 'tools/call',
+      params: {
+        name: 'confirm_channel_content',
+        arguments: {
+          baseVersion: 1,
+          contentId: 'content-pack-github-en',
+          projectId,
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          contentReviewStatus: 'confirmed',
+          productionReviewStatus: 'pending',
+          version: 2,
+        },
+      },
+    })
+
+    await expect(server.handleMessage({
+      jsonrpc: '2.0',
+      id: 39.06,
+      method: 'tools/call',
+      params: {
+        name: 'confirm_channel_content_production',
+        arguments: {
+          baseVersion: 2,
+          contentId: 'content-pack-github-en',
+          projectId,
+        },
+      },
+    })).resolves.toMatchObject({
+      result: {
+        isError: false,
+        structuredContent: {
+          contentReviewStatus: 'confirmed',
+          productionReviewStatus: 'confirmed',
+          version: 3,
         },
       },
     })

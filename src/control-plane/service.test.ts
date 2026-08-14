@@ -1,5 +1,6 @@
 import type {
   CaptureFlow,
+  ChannelContent,
   ChannelContentFormat,
   ChannelId,
   ContentStudioReport,
@@ -140,10 +141,20 @@ function createPublication(
     projectId,
     title: 'Quick sort explained',
   })
+  const confirmedContent = service.confirmChannelContent({
+    baseVersion: content.version,
+    contentId: content.contentId,
+    projectId,
+  })
+  const confirmedProduction = service.confirmChannelContentProduction({
+    baseVersion: confirmedContent.version,
+    contentId: confirmedContent.contentId,
+    projectId,
+  })
   const publication = service.createPublicationPlan({
     activityId: activity.activityId,
     channel: 'youtube',
-    contentId: content.contentId,
+    contentId: confirmedProduction.contentId,
     projectId,
     publicationId: `${projectId}-report-publication`,
   })
@@ -177,7 +188,7 @@ function createMarketingOpsPublicationHandoffFixture(): {
     contentFormat: 'video',
     contentHash: 'a'.repeat(64),
     contentId: 'project-a-report-content',
-    contentVersion: 1,
+    contentVersion: 3,
     locale: 'en',
     packageId: publication.publicationId,
     projectId: 'project-a',
@@ -216,6 +227,28 @@ function registerFinalVideoArtifact(
   return artifactId
 }
 
+function confirmContent(
+  service: ContentStudioApplicationService,
+  content: ChannelContent,
+): ChannelContent {
+  return service.confirmChannelContent({
+    baseVersion: content.version,
+    contentId: content.contentId,
+    projectId: content.projectId,
+  })
+}
+
+function confirmProduction(
+  service: ContentStudioApplicationService,
+  content: ChannelContent,
+): ChannelContent {
+  return service.confirmChannelContentProduction({
+    baseVersion: content.version,
+    contentId: content.contentId,
+    projectId: content.projectId,
+  })
+}
+
 function createProductionContent(
   service: ContentStudioApplicationService,
   activity: ReturnType<typeof createActivity>,
@@ -242,6 +275,18 @@ function createProductionContent(
     projectId: activity.projectId,
     title: 'Content',
   })
+  confirmContent(service, content)
+  const currentActivity = service.getProjectView(activity.projectId).activities.find(candidate => candidate.activityId === activity.activityId)
+  if (
+    currentActivity?.video !== undefined
+    && currentActivity.videoPlanReviewStatus !== 'confirmed'
+  ) {
+    service.confirmActivityVideoPlan({
+      activityId: currentActivity.activityId,
+      baseVersion: currentActivity.version,
+      projectId: currentActivity.projectId,
+    })
+  }
   return content.contentId
 }
 
@@ -505,6 +550,193 @@ describe('content studio application service', () => {
         taskId: `production-${content.contentId}`,
       }),
     ])
+  })
+
+  it('requires an explicitly confirmed content version before production or publication', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'review-gate-project')
+    enableYouTube(service, 'review-gate-project')
+    const activity = createActivity(service, 'review-gate-project')
+    const group = service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'review-gate-group',
+      coreMessage: 'Review the script before making the video',
+      projectId: activity.projectId,
+      title: 'Review gate',
+    })
+    const videoArtifactId = registerFinalVideoArtifact(
+      service,
+      activity,
+      'review-gate-video',
+    )
+    const draft = service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: [videoArtifactId],
+      body: 'First script draft',
+      channel: 'youtube',
+      contentGroupId: group.contentGroupId,
+      contentId: 'review-gate-content',
+      format: 'video',
+      locale: 'en',
+      projectId: activity.projectId,
+      title: 'First title',
+    })
+
+    expect(draft).toMatchObject({
+      contentReviewStatus: 'pending',
+      productionReviewStatus: 'pending',
+      version: 1,
+    })
+    expect(() => service.startProductionTask(
+      activity.projectId,
+      `production-${draft.contentId}`,
+    )).toThrow(/content version.*confirm/i)
+    expect(() => service.createPublicationPlan({
+      activityId: activity.activityId,
+      channel: 'youtube',
+      contentId: draft.contentId,
+      projectId: activity.projectId,
+      publicationId: 'review-gate-publication',
+    })).toThrow(/content version.*confirm/i)
+    expect(() => confirmProduction(service, draft)).toThrow(/content version.*confirm/i)
+    expect(() => service.reviseChannelContent({
+      baseVersion: draft.version,
+      body: draft.body,
+      contentId: 'missing-review-gate-content',
+      projectId: activity.projectId,
+      title: draft.title,
+    })).toThrow(/not found/i)
+    expect(() => service.reviseChannelContent({
+      baseVersion: draft.version + 1,
+      body: draft.body,
+      contentId: draft.contentId,
+      projectId: activity.projectId,
+      title: draft.title,
+    })).toThrow(/moved past version/i)
+    expect(() => service.reviseChannelContent({
+      baseVersion: draft.version,
+      body: draft.body,
+      contentId: draft.contentId,
+      projectId: activity.projectId,
+      title: '  ',
+    })).toThrow(/title must not be empty/i)
+    expect(() => service.reviseChannelContent({
+      baseVersion: draft.version,
+      body: '  ',
+      contentId: draft.contentId,
+      projectId: activity.projectId,
+      title: draft.title,
+    })).toThrow(/body must not be empty/i)
+    expect(service.reviseChannelContent({
+      baseVersion: draft.version,
+      body: draft.body,
+      contentId: draft.contentId,
+      projectId: activity.projectId,
+      title: draft.title,
+    })).toEqual(draft)
+
+    const revised = service.reviseChannelContent({
+      baseVersion: draft.version,
+      body: 'Second script draft with the product demo and call to action',
+      contentId: draft.contentId,
+      projectId: activity.projectId,
+      title: 'Second title',
+    })
+    expect(revised).toMatchObject({
+      body: 'Second script draft with the product demo and call to action',
+      contentReviewStatus: 'pending',
+      productionReviewStatus: 'pending',
+      title: 'Second title',
+      version: 2,
+    })
+
+    const confirmed = service.confirmChannelContent({
+      baseVersion: revised.version,
+      contentId: revised.contentId,
+      projectId: activity.projectId,
+    })
+    expect(confirmed).toMatchObject({
+      contentReviewStatus: 'confirmed',
+      productionReviewStatus: 'pending',
+      version: 3,
+    })
+    expect(service.confirmChannelContent({
+      baseVersion: confirmed.version,
+      contentId: confirmed.contentId,
+      projectId: activity.projectId,
+    })).toEqual(confirmed)
+    expect(service.startProductionTask(
+      activity.projectId,
+      `production-${draft.contentId}`,
+    )).toMatchObject({ status: 'generating' })
+    const confirmedProduction = confirmProduction(service, confirmed)
+    expect(confirmProduction(service, confirmedProduction)).toEqual(confirmedProduction)
+    expect(service.createPublicationPlan({
+      activityId: activity.activityId,
+      channel: 'youtube',
+      contentId: confirmedProduction.contentId,
+      projectId: activity.projectId,
+      publicationId: 'review-gate-publication',
+    })).toMatchObject({ publicationId: 'review-gate-publication' })
+    expect(() => service.reviseChannelContent({
+      baseVersion: confirmedProduction.version,
+      body: 'Late edit',
+      contentId: confirmed.contentId,
+      projectId: activity.projectId,
+      title: confirmed.title,
+    })).toThrow(/cannot be revised after publication plan/i)
+  })
+
+  it('returns confirmed content to pending when final media changes', () => {
+    const repository = new InMemoryContentStudioRepository()
+    const service = new ContentStudioApplicationService(repository)
+    registerProject(service, 'media-review-gate-project')
+    enableYouTube(service, 'media-review-gate-project')
+    const activity = createActivity(service, 'media-review-gate-project')
+    const group = service.createContentGroup({
+      activityId: activity.activityId,
+      contentGroupId: 'media-review-gate-group',
+      coreMessage: 'Review the final package',
+      projectId: activity.projectId,
+      title: 'Media review gate',
+    })
+    const firstVideoId = registerFinalVideoArtifact(service, activity, 'first-review-video')
+    const secondVideoId = registerFinalVideoArtifact(service, activity, 'second-review-video')
+    const draft = service.createChannelContent({
+      activityId: activity.activityId,
+      artifactIds: [firstVideoId],
+      body: 'Confirmed script',
+      channel: 'youtube',
+      contentGroupId: group.contentGroupId,
+      contentId: 'media-review-gate-content',
+      format: 'video',
+      locale: 'en',
+      projectId: activity.projectId,
+      title: 'Confirmed title',
+    })
+    const confirmed = service.confirmChannelContent({
+      baseVersion: draft.version,
+      contentId: draft.contentId,
+      projectId: activity.projectId,
+    })
+
+    const revised = service.reviseChannelContentMedia({
+      artifactIds: [secondVideoId],
+      baseVersion: confirmed.version,
+      contentId: confirmed.contentId,
+      mode: 'replace',
+      projectId: activity.projectId,
+    })
+
+    expect(revised).toMatchObject({
+      contentReviewStatus: 'confirmed',
+      productionReviewStatus: 'pending',
+    })
+    expect(service.startProductionTask(
+      activity.projectId,
+      `production-${draft.contentId}`,
+    )).toMatchObject({ status: 'generating' })
   })
 
   it('maps non-video channel forms to article-like production execution', () => {
@@ -809,10 +1041,11 @@ describe('content studio application service', () => {
       projectId: activity.projectId,
       publicationId: 'blocked-video-publication',
     })).toThrow(/not ready.*video artifact.*required/i)
+    const confirmedReady = confirmProduction(service, confirmContent(service, ready))
     expect(service.createPublicationPlan({
       activityId: activity.activityId,
       channel: 'youtube',
-      contentId: ready.contentId,
+      contentId: confirmedReady.contentId,
       projectId: activity.projectId,
       publicationId: 'ready-video-publication',
     })).toMatchObject({ publicationId: 'ready-video-publication' })
@@ -939,10 +1172,11 @@ describe('content studio application service', () => {
       projectId,
       title: 'Package preparation release',
     })
+    const confirmedContent = confirmProduction(service, confirmContent(service, content))
     const publication = service.createPublicationPlan({
       activityId: activity.activityId,
       channel: 'github',
-      contentId: content.contentId,
+      contentId: confirmedContent.contentId,
       projectId,
       publicationId: 'package-preparation-publication',
     })
@@ -1083,10 +1317,11 @@ describe('content studio application service', () => {
       projectId: activity.projectId,
       publicationId: 'bilibili-image-text-publication',
     })).toThrow(/not ready.*image artifact.*required/i)
+    const confirmedShortPost = confirmContent(service, shortPost)
     expect(service.createPublicationPlan({
       activityId: activity.activityId,
       channel: 'bilibili',
-      contentId: shortPost.contentId,
+      contentId: confirmedShortPost.contentId,
       projectId: activity.projectId,
       publicationId: 'bilibili-short-post-publication',
     })).toMatchObject({ publicationId: 'bilibili-short-post-publication' })
@@ -1256,16 +1491,17 @@ describe('content studio application service', () => {
       mode: 'replace',
       projectId: activity.projectId,
     })).toMatchObject({ artifactIds: [], version: 2 })
+    const confirmedRestored = confirmProduction(service, confirmContent(service, restored))
     service.createPublicationPlan({
       activityId: activity.activityId,
       channel: 'bilibili',
-      contentId: content.contentId,
+      contentId: confirmedRestored.contentId,
       projectId: activity.projectId,
       publicationId: 'media-revision-publication',
     })
     expect(() => service.reviseChannelContentMedia({
       artifactIds: [],
-      baseVersion: restored.version,
+      baseVersion: confirmedRestored.version,
       contentId: content.contentId,
       mode: 'replace',
       projectId: activity.projectId,
@@ -2223,7 +2459,9 @@ describe('content studio application service', () => {
         `cover-${taskId}`,
         `gif-${taskId}`,
       ],
-      version: 2,
+      contentReviewStatus: 'confirmed',
+      productionReviewStatus: 'pending',
+      version: 3,
     })
     expect(service.getProjectView('compose-project').channelContentReadiness[contentId])
       .toMatchObject({
@@ -2340,13 +2578,18 @@ describe('content studio application service', () => {
       relativePath: 'composed/legacy.webm',
       sha256: 'f'.repeat(64),
     })
-    service.reviseChannelContentMedia({
+    const contentBeforeMedia = repository.getChannelContent(
+      'compose-bilibili-project',
+      contentId,
+    )!
+    const contentWithMedia = service.reviseChannelContentMedia({
       artifactIds: ['legacy-bilibili-video'],
-      baseVersion: 1,
+      baseVersion: contentBeforeMedia.version,
       contentId,
       mode: 'append',
       projectId: 'compose-bilibili-project',
     })
+    confirmContent(service, contentWithMedia)
     const taskId = `production-${contentId}`
     service.startProductionTask('compose-bilibili-project', taskId)
     const receipt: RecorderAttemptReceipt = {
@@ -2948,10 +3191,11 @@ describe('content studio application service', () => {
       projectId: 'project-a',
       title: 'Quick sort explained',
     })
+    const confirmedContent = confirmProduction(service, confirmContent(service, content))
     const publication = service.createPublicationPlan({
       activityId: activity.activityId,
       channel: 'youtube',
-      contentId: content.contentId,
+      contentId: confirmedContent.contentId,
       projectId: 'project-a',
       publicationId: 'publication-1',
     })
@@ -3507,10 +3751,11 @@ describe('content studio application service', () => {
       projectId: 'project-a',
       title: 'Quick sort explained',
     })
+    const confirmedContent = confirmProduction(service, confirmContent(service, content))
     const publication = service.createPublicationPlan({
       activityId: activity.activityId,
       channel: 'youtube',
-      contentId: content.contentId,
+      contentId: confirmedContent.contentId,
       projectId: 'project-a',
       publicationId: 'publication-1',
     })
@@ -3568,10 +3813,11 @@ describe('content studio application service', () => {
       projectId: 'project-a',
       title: 'Quick sort explained',
     })
+    const confirmedContent = confirmProduction(service, confirmContent(service, content))
     const publication = service.createPublicationPlan({
       activityId: activity.activityId,
       channel: 'youtube',
-      contentId: content.contentId,
+      contentId: confirmedContent.contentId,
       projectId: 'project-a',
       publicationId: 'publication-handoff',
     })
@@ -3648,10 +3894,11 @@ describe('content studio application service', () => {
       projectId: 'project-a',
       title: 'Quick sort explained',
     })
+    const confirmedContent = confirmProduction(service, confirmContent(service, content))
     const publication = service.createPublicationPlan({
       activityId: activity.activityId,
       channel: 'youtube',
-      contentId: content.contentId,
+      contentId: confirmedContent.contentId,
       projectId: 'project-a',
       publicationId: 'publication-observation',
     })
@@ -3733,10 +3980,11 @@ describe('content studio application service', () => {
       projectId: 'project-a',
       title: 'Quick sort explained',
     })
+    const confirmedContent = confirmProduction(service, confirmContent(service, content))
     const publication = service.createPublicationPlan({
       activityId: activity.activityId,
       channel: 'youtube',
-      contentId: content.contentId,
+      contentId: confirmedContent.contentId,
       projectId: 'project-a',
       publicationId: 'publication-report',
     })
