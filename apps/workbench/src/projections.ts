@@ -636,6 +636,7 @@ export function activityBusinessProgressProjection({
   contentGroups,
   publicationResults,
   tasks,
+  videoPlanReviewStatus,
 }: {
   channels: readonly ChannelId[]
   contentGroups: readonly ContentGroupProjection[]
@@ -644,10 +645,24 @@ export function activityBusinessProgressProjection({
     kind: ExecutionTask['kind'] | '制作' | '发布' | '监测'
     status: ExecutionTask['status']
   }>
+  videoPlanReviewStatus?: PublishingActivity['videoPlanReviewStatus']
 }): ActivityBusinessProgressProjection[] {
+  const contents = contentGroups.flatMap(group => group.contents)
+  const confirmedContents = contents.filter(content => content.contentReviewStatus === '已确认')
+  const allContentConfirmed = contents.length > 0
+    && confirmedContents.length === contents.length
+  const confirmedProductions = contents.filter(content => content.productionReviewStatus === '已确认')
+  const allProductionConfirmed = contents.length > 0
+    && confirmedProductions.length === contents.length
+  const hasVideoContent = contents.some(content => content.format === '视频')
   const productionTasks = tasks.filter(task => task.kind === 'production' || task.kind === '制作')
   const publicationTasks = tasks.filter(task => task.kind === 'publication' || task.kind === '发布')
   const monitoringTasks = tasks.filter(task => task.kind === 'monitoring' || task.kind === '监测')
+  const productionStarted = productionTasks.some(task => task.status !== 'queued')
+  const productionCompleted = productionTasks.length > 0
+    && productionTasks.every(task => task.status === 'completed')
+  const productionPlanConfirmed = allContentConfirmed
+    && (!hasVideoContent || videoPlanReviewStatus === 'confirmed')
   const publicationScheduled = publicationResults.some(result => result.status !== '待建立安排')
   const publicationCompleted = publicationResults.some(result => result.status === '已发布')
   const monitoringCompleted = publicationResults.some(result => result.latestObservation !== undefined)
@@ -658,40 +673,68 @@ export function activityBusinessProgressProjection({
       status: channels.length > 0 ? 'done' : 'active',
     },
     {
-      detail: contentGroups.length > 0
-        ? `${contentGroups.length} 个内容组，${contentGroups.reduce((total, group) => total + group.contents.length, 0)} 个渠道版本`
-        : '等待 AI 或用户建立内容组',
-      label: '内容组与渠道成品',
-      status: contentGroups.length > 0 ? 'done' : 'active',
+      detail: contents.length > 0
+        ? `${contentGroups.length} 个内容组，${contents.length} 个草案版本`
+        : '等待 Agent 提交第一版草案',
+      label: '内容草案',
+      status: contents.length > 0 ? 'done' : 'active',
     },
     {
-      detail: productionTasks.length > 0
-        ? `${productionTasks.length} 个制作任务 · ${humanizeTaskStatus(productionTasks[0]!.status)}`
-        : '尚未建立制作任务',
-      label: '制作执行',
-      status: productionTasks.length === 0
+      detail: contents.length === 0
+        ? '草案尚未建立'
+        : allContentConfirmed
+          ? `${confirmedContents.length} 个当前版本已确认`
+          : `${confirmedContents.length}/${contents.length} 个当前版本已确认`,
+      label: '内容确认',
+      status: contents.length === 0
         ? 'pending'
-        : productionTasks.every(task => task.status === 'completed') ? 'done' : 'active',
+        : allContentConfirmed ? 'done' : 'active',
     },
     {
-      detail: publicationScheduled
-        ? `${publicationResults.filter(result => result.status !== '待建立安排').length} 个发布安排`
-        : '尚未建立发布安排',
-      label: '发布安排',
-      status: publicationScheduled ? 'done' : 'pending',
+      detail: !allContentConfirmed
+        ? '等待内容确认'
+        : hasVideoContent && videoPlanReviewStatus !== 'confirmed'
+          ? '等待视频分镜与拍摄计划确认'
+          : hasVideoContent ? '视频分镜已确认' : '图文沿用已确认内容与媒体清单',
+      label: '制作计划',
+      status: productionPlanConfirmed ? 'done' : allContentConfirmed ? 'active' : 'pending',
+    },
+    {
+      detail: productionTasks.length === 0
+        ? '尚未建立制作任务'
+        : `${productionTasks.length} 个制作任务 · ${humanizeTaskStatus(productionTasks[0]!.status)}`,
+      label: '分段制作',
+      status: productionCompleted
+        ? 'done'
+        : productionStarted ? 'active' : 'pending',
+    },
+    {
+      detail: !productionCompleted
+        ? '等待制作产物完成'
+        : allProductionConfirmed
+          ? `${confirmedProductions.length} 个当前成品版本已确认`
+          : `${confirmedProductions.length}/${contents.length} 个当前成品版本已确认`,
+      label: '成品确认',
+      status: productionCompleted
+        ? allProductionConfirmed ? 'done' : 'active'
+        : 'pending',
     },
     {
       detail: publicationCompleted
         ? `${publicationResults.filter(result => result.status === '已发布').length} 个渠道已收到成功回执`
-        : publicationTasks.length > 0 ? '等待渠道回执' : '发布任务尚未建立',
-      label: '发布回执',
-      status: publicationCompleted ? 'done' : publicationTasks.length > 0 ? 'active' : 'pending',
+        : publicationScheduled
+          ? `${publicationResults.filter(result => result.status !== '待建立安排').length} 个发布安排等待渠道回执`
+          : '尚未建立发布安排',
+      label: '发布协作',
+      status: publicationCompleted
+        ? 'done'
+        : publicationScheduled || publicationTasks.length > 0 ? 'active' : 'pending',
     },
     {
       detail: monitoringCompleted
         ? `${publicationResults.filter(result => result.latestObservation !== undefined).length} 个渠道已有监测数据`
         : monitoringTasks.length > 0 ? '等待第一次监测采集' : '监测任务尚未建立',
-      label: '监测结果',
+      label: '监测复盘',
       status: monitoringCompleted ? 'done' : monitoringTasks.length > 0 ? 'active' : 'pending',
     },
   ]
@@ -772,6 +815,8 @@ export function activityToCampaign({
                   publicationReadiness: publicationReadinessLabel(readiness),
                   publicationReady: readiness.ready,
                 }),
+            contentReviewStatus: content.contentReviewStatus === 'confirmed' ? '已确认' : '待确认',
+            productionReviewStatus: content.productionReviewStatus === 'confirmed' ? '已确认' : '待确认',
             status: '已生成',
             title: content.title,
             version: content.version,

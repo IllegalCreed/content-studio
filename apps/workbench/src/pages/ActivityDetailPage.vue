@@ -113,8 +113,11 @@ const contentGroups = computed<ContentGroupProjection[]>(() => {
           contentId: content.contentId,
           format: humanizeChannelContentFormat(content.format),
           locale: content.locale,
+          contentReviewStatus: content.contentReviewStatus === 'confirmed' ? '已确认' : '待确认',
+          productionReviewStatus: content.productionReviewStatus === 'confirmed' ? '已确认' : '待确认',
           status: '已生成',
           title: content.title,
+          version: content.version,
         })),
     }))
 })
@@ -142,6 +145,7 @@ const activityBusinessProgress = computed(() => activityBusinessProgressProjecti
   contentGroups: contentGroups.value,
   publicationResults: publicationResults.value,
   tasks: tasks.value,
+  videoPlanReviewStatus: runtimeActivity.value?.videoPlanReviewStatus,
 }))
 const activityProgressStyle = computed(() => {
   const stages = activityBusinessProgress.value
@@ -331,9 +335,24 @@ watch(videoPlan, syncViewportDraft, { immediate: true })
               <summary>
                 <span class="detail-channel-content-heading">
                   <strong>{{ content.title }}</strong>
-                  <span>{{ content.channel }} · {{ content.format }} · 已登记</span>
+                  <span>{{ content.channel }} · {{ content.format }} · 第 {{ content.version ?? 1 }} 版</span>
                 </span>
-                <span class="detail-channel-content-action">查看成品 <span aria-hidden="true">⌄</span></span>
+                <span class="detail-channel-content-review-states">
+                  <span
+                    class="plan-review-status"
+                    :data-status="content.contentReviewStatus ?? '待确认'"
+                    data-testid="channel-content-review-status"
+                  >内容{{ content.contentReviewStatus ?? '待确认' }}</span>
+                  <span
+                    class="plan-review-status"
+                    :data-status="content.productionReviewStatus ?? '待确认'"
+                    data-testid="channel-content-production-review-status"
+                  >成品{{ content.productionReviewStatus ?? '待确认' }}</span>
+                </span>
+                <span class="detail-channel-content-action">
+                  {{ content.productionReviewStatus === '已确认' ? '查看成品' : content.contentReviewStatus === '已确认' ? '查看待确认成品' : '查看草案' }}
+                  <span aria-hidden="true">⌄</span>
+                </span>
               </summary>
               <div class="detail-channel-content-panel">
                 <p v-if="content.body" class="detail-channel-content-body" data-testid="channel-content-body">{{ content.body }}</p>

@@ -3410,7 +3410,7 @@ footer {
 
   position: relative;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 0;
   margin: 1rem 0 0;
   padding: 0;
@@ -3703,6 +3703,17 @@ footer {
   display: grid;
   gap: 0.2rem;
   min-width: 0;
+  margin-right: auto;
+}
+
+.detail-channel-content-review-states {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.35rem;
+}
+
+.detail-channel-content-review-states > .plan-review-status {
+  flex: 0 0 auto;
 }
 
 .detail-channel-content .detail-channel-content-action {

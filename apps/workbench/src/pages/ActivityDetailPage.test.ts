@@ -84,6 +84,9 @@ describe('activity detail page', () => {
     const content = campaign.contentGroups[0]!.contents[0]!
     content.body = '第一段解释分区不变量。\n\n第二段解释复杂度。'
     content.artifactIds = ['quick-sort-preview-frame']
+    content.contentReviewStatus = '已确认'
+    content.productionReviewStatus = '待确认'
+    content.version = 4
     campaign.activityArtifacts[0] = {
       ...campaign.activityArtifacts[0]!,
       previewKind: 'image',
@@ -102,7 +105,10 @@ describe('activity detail page', () => {
     expect(wrapper.get('[data-testid="channel-content-body"]').text())
       .toBe('第一段解释分区不变量。\n\n第二段解释复杂度。')
     expect(wrapper.get('[data-testid="channel-content-detail"]').attributes('open')).toBe('')
-    expect(wrapper.get('[data-testid="channel-content-detail"] summary').text()).toContain('查看成品')
+    expect(wrapper.get('[data-testid="channel-content-detail"] summary').text()).toContain('第 4 版')
+    expect(wrapper.get('[data-testid="channel-content-review-status"]').text()).toBe('内容已确认')
+    expect(wrapper.get('[data-testid="channel-content-production-review-status"]').text()).toBe('成品待确认')
+    expect(wrapper.get('[data-testid="channel-content-detail"] summary').text()).toContain('查看待确认成品')
     expect(wrapper.get('[data-testid="channel-content-media"] img').attributes())
       .toMatchObject({
         alt: '分区动画 · 第 20 帧',

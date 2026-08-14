@@ -465,6 +465,8 @@ describe('workbench runtime projections', () => {
       format: 'article',
       locale: 'en',
       projectId: 'project-a',
+      contentReviewStatus: 'pending',
+      productionReviewStatus: 'pending',
       title: 'Channel article',
       version: 1,
     }
@@ -539,6 +541,8 @@ describe('workbench runtime projections', () => {
         accountAlias: '项目账号',
         publicationReadiness: '发布受阻 · 至少 1 张图片，当前匹配 0 个活动产物',
         publicationReady: false,
+        contentReviewStatus: '待确认',
+        productionReviewStatus: '待确认',
         title: 'Channel article',
       }] }],
       handoffs: [{
@@ -662,6 +666,8 @@ describe('workbench runtime projections', () => {
       contentId: 'content-a',
       format: '文章' as const,
       locale: 'zh-CN' as const,
+      contentReviewStatus: '待确认' as const,
+      productionReviewStatus: '待确认' as const,
       status: '已生成' as const,
       title: '版本说明',
     }
@@ -721,6 +727,50 @@ describe('workbench runtime projections', () => {
       tasks: [{ kind: 'production', status: 'composing' }],
     })
     expect(progress.find(stage => stage.label === '主题与渠道')).toMatchObject({ status: 'done' })
-    expect(progress.find(stage => stage.label === '发布回执')).toMatchObject({ status: 'done' })
+    expect(progress.map(stage => stage.label)).toEqual([
+      '主题与渠道',
+      '内容草案',
+      '内容确认',
+      '制作计划',
+      '分段制作',
+      '成品确认',
+      '发布协作',
+      '监测复盘',
+    ])
+    expect(progress.find(stage => stage.label === '内容确认')).toMatchObject({ status: 'active' })
+    expect(progress.find(stage => stage.label === '发布协作')).toMatchObject({ status: 'done' })
+  })
+
+  it('分开投影内容确认和成品确认，不把脚本定稿当作制作完成', () => {
+    const content = {
+      channel: 'youtube' as const,
+      contentId: 'video-content-a',
+      contentReviewStatus: '已确认' as const,
+      format: '视频' as const,
+      locale: 'zh-CN' as const,
+      productionReviewStatus: '待确认' as '待确认' | '已确认',
+      status: '已完成' as const,
+      title: '分镜版视频',
+    }
+    const input = {
+      channels: ['youtube' as const],
+      contentGroups: [{
+        contentGroupId: 'group-a',
+        contents: [content],
+        coreMessage: '展示网站的算法可视化',
+        title: '视频内容',
+      }],
+      publicationResults: [],
+      tasks: [{ kind: 'production' as const, status: 'completed' as const }],
+      videoPlanReviewStatus: 'confirmed' as const,
+    }
+
+    const pending = activityBusinessProgressProjection(input)
+    expect(pending.find(stage => stage.label === '内容确认')).toMatchObject({ status: 'done' })
+    expect(pending.find(stage => stage.label === '成品确认')).toMatchObject({ status: 'active' })
+
+    content.productionReviewStatus = '已确认'
+    const confirmed = activityBusinessProgressProjection(input)
+    expect(confirmed.find(stage => stage.label === '成品确认')).toMatchObject({ status: 'done' })
   })
 })
