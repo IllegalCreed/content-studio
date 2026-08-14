@@ -887,7 +887,7 @@ export function taskToProjection({
   accountAliasForChannel,
   campaigns,
   events = [],
-  publicationPlans = [],
+  publicationPlans,
   task,
 }: TaskProjectionInput): TaskProjection {
   const campaign = campaigns.find(candidate => candidate.campaignId === task.activityId)
@@ -900,15 +900,19 @@ export function taskToProjection({
     ?.title
     ?? '等待 AI 生成内容'
   const lifecycle = taskLifecycleProjection(task, [...events])
-  const publicationId = task.kind === 'publication'
-    ? publicationPlans.find(plan =>
-      plan.projectId === task.projectId
-      && plan.activityId === task.activityId
-      && plan.channel === task.channel
-      && plan.contentId === task.contentId
-      && task.taskId === `publication-${plan.publicationId}`,
-    )?.publicationId
-    : undefined
+  const publicationId = task.kind !== 'publication'
+    ? undefined
+    : publicationPlans === undefined
+      ? task.taskId.startsWith('publication-')
+        ? task.taskId.slice('publication-'.length) || undefined
+        : undefined
+      : publicationPlans.find(plan =>
+        plan.projectId === task.projectId
+        && plan.activityId === task.activityId
+        && plan.channel === task.channel
+        && plan.contentId === task.contentId
+        && task.taskId === `publication-${plan.publicationId}`,
+      )?.publicationId
   return {
     accountAlias: account,
     activityId: task.activityId,

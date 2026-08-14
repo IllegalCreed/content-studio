@@ -626,6 +626,12 @@ describe('workbench runtime projections', () => {
     expect(taskToProjection({
       accountAliasForChannel: () => '项目账号',
       campaigns: [],
+      task,
+    }).publicationId).toBe('publication-a')
+
+    expect(taskToProjection({
+      accountAliasForChannel: () => '项目账号',
+      campaigns: [],
       publicationPlans: [{
         activityId: 'activity-a',
         channel: 'bilibili',
