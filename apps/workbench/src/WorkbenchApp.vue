@@ -261,7 +261,9 @@ const projectCaptureFlowIds = ref<string[]>([])
 const taskActionError = ref<string | null>(null)
 const taskActionPending = ref<'cancel' | 'confirm-owner' | 'record' | 'retry' | 'start' | null>(null)
 const ownerHandoffActionError = ref<string | null>(null)
-const ownerHandoffActionPending = ref<'cancel' | 'complete' | null>(null)
+const ownerHandoffActionPending = ref<
+  'cancel' | 'complete' | 'managed-abandon' | 'managed-confirm' | 'managed-resume' | null
+>(null)
 const videoPlanActionError = ref<string | null>(null)
 const videoPlanActionPending = ref(false)
 const videoPlanRevisionError = ref<string | null>(null)
@@ -998,6 +1000,57 @@ async function updateOwnerHandoff(
   }
   catch (error: unknown) {
     ownerHandoffActionError.value = error instanceof Error ? error.message : '人工交接状态保存失败'
+  }
+  finally {
+    ownerHandoffActionPending.value = null
+  }
+}
+
+async function updateManagedPublicationHandoff(
+  handoffId: string,
+  action: 'abandon' | 'confirm' | 'resume',
+): Promise<void> {
+  if (!runtimeConnected.value || ownerHandoffActionPending.value !== null)
+    return
+  if (
+    action === 'confirm'
+    && !window.confirm('确认将运行时观察到的严格公开地址写入发布回执吗？')
+  ) {
+    return
+  }
+  if (
+    action === 'abandon'
+    && !window.confirm('确认放弃这次受管发布交接吗？这不会删除任何已发布内容。')
+  ) {
+    return
+  }
+  ownerHandoffActionPending.value = `managed-${action}`
+  ownerHandoffActionError.value = null
+  try {
+    if (action === 'resume') {
+      await workbenchRuntime.resumeManagedPublicationHandoff(
+        snapshot.project.projectId,
+        handoffId,
+      )
+    }
+    else if (action === 'confirm') {
+      await workbenchRuntime.confirmManagedPublicationHandoff(
+        snapshot.project.projectId,
+        handoffId,
+      )
+    }
+    else {
+      await workbenchRuntime.abandonManagedPublicationHandoff(
+        snapshot.project.projectId,
+        handoffId,
+      )
+    }
+    await refreshProjectView()
+  }
+  catch (error: unknown) {
+    ownerHandoffActionError.value = error instanceof Error
+      ? error.message
+      : '受管发布交接处理失败'
   }
   finally {
     ownerHandoffActionPending.value = null
@@ -2045,9 +2098,12 @@ async function openProjectSpace(projectId: string): Promise<void> {
           :action-error="ownerHandoffActionError"
           :action-pending="ownerHandoffActionPending"
           :owner-handoffs="ownerHandoffs"
+          @abandon-managed-handoff="updateManagedPublicationHandoff($event, 'abandon')"
           @cancel-handoff="updateOwnerHandoff($event, 'cancel')"
+          @confirm-managed-handoff="updateManagedPublicationHandoff($event, 'confirm')"
           @complete-handoff="updateOwnerHandoff($event, 'complete')"
           @open-task="openOwnerTask"
+          @resume-managed-handoff="updateManagedPublicationHandoff($event, 'resume')"
         />
       </template>
 

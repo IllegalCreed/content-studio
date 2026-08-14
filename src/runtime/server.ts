@@ -26,8 +26,10 @@ import type {
   ExecutionTask,
   ExecutionTaskStore,
   Locale,
+  MarketingOpsAssistedPublicationService,
   MarketingOpsMediaKind,
   MarketingOpsPackageFormat,
+  MarketingOpsPublishClient,
   MarketingOpsStatusClient,
   MarketingOpsUtmMedium,
   MonitoringObservation,
@@ -64,6 +66,7 @@ import {
   DEFAULT_STORAGE_RETENTION_POLICY,
   MARKETING_OPS_MEDIA_KINDS,
   MARKETING_OPS_PACKAGE_FORMAT_VALUES,
+  MARKETING_OPS_PUBLISH_UNAVAILABLE_MESSAGE,
   MARKETING_OPS_STATUS_UNAVAILABLE_MESSAGE,
   MARKETING_OPS_UTM_MEDIUM_VALUES,
 } from '../constants'
@@ -84,6 +87,7 @@ import {
   TaskStateError,
 } from '../jobs/task'
 import { ProductionWorker } from '../jobs/worker'
+import { createMarketingOpsAssistedPublicationService } from '../marketing-ops/assisted-publication'
 import { isMarketingOpsStatusSnapshotFresh } from '../marketing-ops/client'
 import { exportBilibiliVideo } from '../media/export'
 import { createProjectRecord } from '../project/record'
@@ -190,6 +194,9 @@ export interface ContentStudioServerOptions {
     snapshot: ProjectSnapshot
   }>
   databasePath?: string
+  marketingOpsAssetBundleRoot?: string
+  marketingOpsPublication?: MarketingOpsAssistedPublicationService
+  marketingOpsPublish?: MarketingOpsPublishClient
   marketingOpsStatus?: MarketingOpsStatusClient
   production?: ProductionTaskDependencies
   productionOutputRoot?: string
@@ -236,6 +243,20 @@ export function createContentStudioServer(
       dirname(options.databasePath ?? '.content-studio/content-studio.sqlite'),
       'production',
     )
+  const marketingOpsPublication = options.marketingOpsPublication
+    ?? (
+      options.marketingOpsAssetBundleRoot !== undefined
+      && options.marketingOpsPublish !== undefined
+      && options.marketingOpsStatus !== undefined
+        ? createMarketingOpsAssistedPublicationService({
+            assetBundleRoot: options.marketingOpsAssetBundleRoot,
+            publish: options.marketingOpsPublish,
+            service: application.service,
+            sourceRoot: productionOutputRoot,
+            status: options.marketingOpsStatus,
+          })
+        : undefined
+    )
   const worker = new ProductionWorker({
     onError: (_error, job) => {
       const task = application.taskStore.getTask(job.projectId, job.taskId)
@@ -278,6 +299,7 @@ export function createContentStudioServer(
       options.project.projectId,
       {
         dependencies: production,
+        marketingOpsPublication,
         marketingOpsStatus: options.marketingOpsStatus,
         ownerTakeovers,
         outputRoot: productionOutputRoot,
@@ -458,6 +480,56 @@ async function handleRequest(
         ),
         projectId,
       })
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 8
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
+      && segments[4] === 'owner-handoffs'
+      && segments[6] === 'marketing-ops'
+      && (
+        segments[7] === 'resume'
+        || segments[7] === 'confirm'
+        || segments[7] === 'abandon'
+      )
+    ) {
+      const requestProjectId = identifierField(
+        decodeSegment(segments[3]!),
+        'projectId',
+      )
+      const handoffId = identifierField(
+        decodeSegment(segments[5]!),
+        'handoffId',
+      )
+      assertOwnerActionRequestOrigin(request)
+      await assertEmptyRequestBody(request)
+      if (production.marketingOpsPublication === undefined) {
+        response.setHeader('Cache-Control', 'private, no-store')
+        sendJson(response, 503, {
+          error: MARKETING_OPS_PUBLISH_UNAVAILABLE_MESSAGE,
+        })
+        return
+      }
+      service.getProjectView(requestProjectId)
+      const input = {
+        authorization: {
+          authorizedAt: new Date().toISOString(),
+          source: 'owner-prompt' as const,
+        },
+        handoffId,
+        projectId: requestProjectId,
+      }
+      const result = segments[7] === 'resume'
+        ? await production.marketingOpsPublication.resume(input)
+        : segments[7] === 'confirm'
+          ? await production.marketingOpsPublication.confirm(input)
+          : await production.marketingOpsPublication.abandon(input)
+      response.setHeader('Cache-Control', 'private, no-store')
+      sendJson(response, 200, result)
       return
     }
 
@@ -1303,6 +1375,26 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   }
   catch {
     throw new RequestError(400, 'Request body must be valid JSON')
+  }
+}
+
+async function assertEmptyRequestBody(request: IncomingMessage): Promise<void> {
+  let size = 0
+  for await (const chunk of request) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    size += buffer.byteLength
+    if (size > 0)
+      throw new RequestError(400, 'Managed publication actions do not accept a request body')
+  }
+}
+
+function assertOwnerActionRequestOrigin(request: IncomingMessage): void {
+  const fetchSite = request.headers['sec-fetch-site']
+  if (fetchSite !== undefined && fetchSite !== 'same-origin') {
+    throw new RequestError(
+      403,
+      'Managed publication actions require the local same-origin Workbench',
+    )
   }
 }
 
@@ -2719,6 +2811,7 @@ class RequestError extends Error {
 
 interface RuntimeProductionOptions {
   dependencies: ProductionTaskDependencies
+  marketingOpsPublication?: MarketingOpsAssistedPublicationService
   marketingOpsStatus?: MarketingOpsStatusClient
   ownerTakeovers: OwnerTakeoverRegistry
   outputRoot: string

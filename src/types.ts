@@ -826,6 +826,44 @@ export interface MarketingOpsPublishClient {
   ) => Promise<MarketingOpsPublishResult>
 }
 
+export interface MarketingOpsAssistedPublicationAuthorization {
+  authorizedAt: string
+  source: 'owner-prompt'
+}
+
+export interface MarketingOpsAssistedPublicationResult extends MarketingOpsPublishResult {
+  channelsStatus?: {
+    after: MarketingOpsChannelsStatusSnapshot
+    before: MarketingOpsChannelsStatusSnapshot
+  }
+  handoff: OwnerHandoff
+  mode: 'assisted-abandon' | 'assisted-confirm' | 'assisted-prepare'
+  package: MarketingOpsPublicationPackage
+}
+
+export interface MarketingOpsAssistedPublicationService {
+  abandon: (input: {
+    authorization: MarketingOpsAssistedPublicationAuthorization
+    handoffId: string
+    projectId: string
+  }) => Promise<MarketingOpsAssistedPublicationResult>
+  confirm: (input: {
+    authorization: MarketingOpsAssistedPublicationAuthorization
+    handoffId: string
+    projectId: string
+    publicUrl?: string
+  }) => Promise<MarketingOpsAssistedPublicationResult>
+  prepare: (input: {
+    authorization: MarketingOpsAssistedPublicationAuthorization
+    preparation: PrepareMarketingOpsPublicationPackageInput
+  }) => Promise<MarketingOpsAssistedPublicationResult>
+  resume: (input: {
+    authorization: MarketingOpsAssistedPublicationAuthorization
+    handoffId: string
+    projectId: string
+  }) => Promise<MarketingOpsAssistedPublicationResult>
+}
+
 export type MarketingOpsChannelHealth
   = | 'blocked'
     | 'not-configured'

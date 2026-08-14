@@ -773,6 +773,12 @@ describe('content Studio local MCP server', () => {
       result: {
         isError: false,
         structuredContent: {
+          handoff: {
+            marketingOpsConfirmation: {
+              publicUrl: 'https://www.bilibili.com/opus/966723264948731941',
+              status: 'pending',
+            },
+          },
           handoffs: [{
             action: 'assisted-confirm',
             publicUrl: 'https://www.bilibili.com/opus/966723264948731941',

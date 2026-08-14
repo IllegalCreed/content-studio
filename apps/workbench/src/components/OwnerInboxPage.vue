@@ -8,14 +8,17 @@ interface OwnerHandoffListItem extends OwnerHandoffProjection {
 
 const props = defineProps<{
   actionError?: string | null
-  actionPending?: 'cancel' | 'complete' | null
+  actionPending?: 'cancel' | 'complete' | 'managed-abandon' | 'managed-confirm' | 'managed-resume' | null
   ownerHandoffs: OwnerHandoffListItem[]
 }>()
 
 const emit = defineEmits<{
+  'abandon-managed-handoff': [handoffId: string]
   'cancel-handoff': [handoffId: string]
+  'confirm-managed-handoff': [handoffId: string]
   'complete-handoff': [handoffId: string]
   'open-task': [taskId: string]
+  'resume-managed-handoff': [handoffId: string]
 }>()
 
 function handoffStatusLabel(handoff: OwnerHandoffListItem): string {
@@ -78,11 +81,45 @@ function formatExpiry(value: string): string {
           @click="emit('open-task', handoff.taskId)"
         >查看对应任务</button>
         <button v-else type="button" disabled>任务尚未建立</button>
-        <p
-          v-if="handoff.handoffKind === 'marketing-ops'"
-          class="handoff-managed-note"
-          data-testid="owner-handoff-managed-note"
-        >请通过 Content Studio MCP 继续此受管交接。界面不会自行确认或取消；只有运行时观察并确认严格公开地址后才会写入发布回执。</p>
+        <template v-if="handoff.handoffKind === 'marketing-ops'">
+          <p
+            class="handoff-managed-note"
+            data-testid="owner-handoff-managed-note"
+          >此交接由 Content Studio 受管发布流程继续处理。登录、验证码和最终发布仍由你在官方页面完成；界面不会代点，也不接受手填公开地址。</p>
+          <p v-if="handoff.publicUrl" class="handoff-target">
+            运行时观察到的公开页面：
+            <a
+              data-testid="owner-handoff-public-url"
+              :href="handoff.publicUrl"
+              target="_blank"
+              rel="noreferrer"
+            ><code translate="no">{{ handoff.publicUrl }}</code></a>
+          </p>
+          <div v-if="handoff.status === 'waiting'" class="handoff-actions">
+            <button
+              v-if="handoff.confirmationStatus !== 'pending'"
+              type="button"
+              class="primary-button"
+              data-testid="owner-handoff-managed-resume"
+              :disabled="props.actionPending !== null && props.actionPending !== undefined"
+              @click="emit('resume-managed-handoff', handoff.handoffId)"
+            >{{ props.actionPending === 'managed-resume' ? '检查中…' : '检查发布结果' }}</button>
+            <button
+              v-else
+              type="button"
+              class="primary-button"
+              data-testid="owner-handoff-managed-confirm"
+              :disabled="props.actionPending !== null && props.actionPending !== undefined"
+              @click="emit('confirm-managed-handoff', handoff.handoffId)"
+            >{{ props.actionPending === 'managed-confirm' ? '写入回执中…' : '确认并写入回执' }}</button>
+            <button
+              type="button"
+              data-testid="owner-handoff-managed-abandon"
+              :disabled="props.actionPending !== null && props.actionPending !== undefined"
+              @click="emit('abandon-managed-handoff', handoff.handoffId)"
+            >{{ props.actionPending === 'managed-abandon' ? '放弃中…' : '放弃此次交接' }}</button>
+          </div>
+        </template>
         <div v-else-if="handoff.status === 'waiting'" class="handoff-actions">
           <button type="button" class="primary-button" data-testid="owner-handoff-complete" :disabled="props.actionPending !== null && props.actionPending !== undefined" @click="emit('complete-handoff', handoff.handoffId)">{{ props.actionPending === 'complete' ? '保存完成状态中…' : '我已完成官方操作' }}</button>
           <button type="button" data-testid="owner-handoff-cancel" :disabled="props.actionPending !== null && props.actionPending !== undefined" @click="emit('cancel-handoff', handoff.handoffId)">{{ props.actionPending === 'cancel' ? '取消中…' : '取消交接' }}</button>

@@ -558,6 +558,8 @@ function createApplicationOptions(
       ?? environmentDatabasePath
       ?? '.content-studio/content-studio.sqlite',
     ),
+    marketingOpsAssetBundleRoot: runtime.marketingOpsRuntime?.assetBundleRoot,
+    marketingOpsPublish: marketingOpsPublishClient(runtime),
     marketingOpsStatus: marketingOpsStatusClient(runtime),
     project: projectRecord,
     projectChannelBindings,

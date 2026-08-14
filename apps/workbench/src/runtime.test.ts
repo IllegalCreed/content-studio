@@ -268,6 +268,37 @@ describe('workbench runtime client', () => {
     )
   })
 
+  it('uses body-free typed actions for a managed publication handoff', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ mode: 'assisted-prepare' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ mode: 'assisted-confirm' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ mode: 'assisted-abandon' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const runtime = createWorkbenchRuntime('/api/v1')
+    await runtime.resumeManagedPublicationHandoff('project-a', 'handoff-a')
+    await runtime.confirmManagedPublicationHandoff('project-a', 'handoff-a')
+    await runtime.abandonManagedPublicationHandoff('project-a', 'handoff-a')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/v1/projects/project-a/owner-handoffs/handoff-a/marketing-ops/resume',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/projects/project-a/owner-handoffs/handoff-a/marketing-ops/confirm',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/v1/projects/project-a/owner-handoffs/handoff-a/marketing-ops/abandon',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    for (const call of fetchMock.mock.calls)
+      expect(call[1]).not.toHaveProperty('body')
+  })
+
   it('turns a non-success response into a readable error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: 'blocked' }), { status: 403 }),

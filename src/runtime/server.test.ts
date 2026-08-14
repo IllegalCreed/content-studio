@@ -1,6 +1,7 @@
 // @env node
 
 import type {
+  MarketingOpsAssistedPublicationService,
   MarketingOpsChannelsStatusSnapshot,
   PlaywrightRecordingOptions,
   ProjectChannelBinding,
@@ -1310,6 +1311,143 @@ describe('content studio local application server', () => {
       expect(await response.json()).toEqual({
         error: 'Marketing Ops status unavailable; publishing remains blocked',
       })
+    }
+    finally {
+      await running.close()
+      handle.close()
+    }
+  })
+
+  it('routes body-free managed handoff actions through the shared publication service', async () => {
+    const { project, snapshot } = createProject()
+    const result = {
+      campaignId: 'campaign-a',
+      failures: [],
+      handoff: { handoffId: 'handoff-a', status: 'pending' },
+      handoffs: [],
+      limitations: [],
+      mode: 'assisted-prepare',
+      package: { packageId: 'publication-a' },
+      projectId: 'project-a',
+      receipts: [],
+    }
+    const resume = vi.fn(async () => result)
+    const confirm = vi.fn(async () => ({ ...result, mode: 'assisted-confirm' as const }))
+    const abandon = vi.fn(async () => ({ ...result, mode: 'assisted-abandon' as const }))
+    const marketingOpsPublication = {
+      abandon,
+      confirm,
+      prepare: vi.fn(),
+      resume,
+    } as unknown as MarketingOpsAssistedPublicationService
+    const handle = createContentStudioServer({
+      marketingOpsPublication,
+      project,
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    const running = await listen(handle.server)
+
+    try {
+      for (const action of ['resume', 'confirm', 'abandon'] as const) {
+        const response = await fetch(
+          `${running.baseUrl}/api/v1/projects/project-a/owner-handoffs/handoff-a/marketing-ops/${action}`,
+          { method: 'POST' },
+        )
+        expect(response.status).toBe(200)
+      }
+      for (const action of [resume, confirm, abandon]) {
+        expect(action).toHaveBeenCalledWith({
+          authorization: {
+            authorizedAt: expect.any(String),
+            source: 'owner-prompt',
+          },
+          handoffId: 'handoff-a',
+          projectId: 'project-a',
+        })
+      }
+    }
+    finally {
+      await running.close()
+      handle.close()
+    }
+  })
+
+  it('keeps managed handoff actions blocked when the publication service is unavailable', async () => {
+    const { project, snapshot } = createProject()
+    const handle = createContentStudioServer({
+      project,
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const response = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/owner-handoffs/handoff-a/marketing-ops/resume`,
+        { method: 'POST' },
+      )
+      expect(response.status).toBe(503)
+      expect(await response.json()).toEqual({
+        error: 'Marketing Ops publish unavailable; publishing remains blocked',
+      })
+    }
+    finally {
+      await running.close()
+      handle.close()
+    }
+  })
+
+  it('rejects caller fields on managed handoff actions', async () => {
+    const { project, snapshot } = createProject()
+    const resume = vi.fn()
+    const handle = createContentStudioServer({
+      marketingOpsPublication: { resume } as unknown as MarketingOpsAssistedPublicationService,
+      project,
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const response = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/owner-handoffs/handoff-a/marketing-ops/resume`,
+        {
+          body: JSON.stringify({ publicUrl: 'https://example.com/caller-supplied' }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        },
+      )
+      expect(response.status).toBe(400)
+      expect(resume).not.toHaveBeenCalled()
+    }
+    finally {
+      await running.close()
+      handle.close()
+    }
+  })
+
+  it('rejects cross-site browser requests before granting owner-prompt authority', async () => {
+    const { project, snapshot } = createProject()
+    const resume = vi.fn()
+    const handle = createContentStudioServer({
+      marketingOpsPublication: { resume } as unknown as MarketingOpsAssistedPublicationService,
+      project,
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const response = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/owner-handoffs/handoff-a/marketing-ops/resume`,
+        {
+          headers: { 'sec-fetch-site': 'cross-site' },
+          method: 'POST',
+        },
+      )
+      expect(response.status).toBe(403)
+      expect(resume).not.toHaveBeenCalled()
     }
     finally {
       await running.close()

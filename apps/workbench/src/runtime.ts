@@ -13,6 +13,7 @@ import type {
   CreatePublishingActivityInput,
   ExecutionTask,
   ExecutionTaskEvent,
+  MarketingOpsAssistedPublicationResult,
   MarketingOpsChannelsStatusSnapshot,
   OwnerHandoff,
   OwnerTakeoverRecord,
@@ -54,6 +55,10 @@ export interface OwnerTakeoverConfirmationResult {
 }
 
 export interface WorkbenchRuntime {
+  abandonManagedPublicationHandoff: (
+    projectId: string,
+    handoffId: string,
+  ) => Promise<MarketingOpsAssistedPublicationResult>
   cancelOwnerHandoff: (projectId: string, handoffId: string) => Promise<OwnerHandoff>
   cancelTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
   confirmOwnerTakeover: (
@@ -74,6 +79,10 @@ export interface WorkbenchRuntime {
   createActivityArtifact: (input: CreateActivityArtifactInput) => Promise<ActivityArtifact>
   createPublicationPlan: (input: PublicationPlan) => Promise<PublicationPlan>
   health: () => Promise<RuntimeHealth>
+  confirmManagedPublicationHandoff: (
+    projectId: string,
+    handoffId: string,
+  ) => Promise<MarketingOpsAssistedPublicationResult>
   marketingOpsStatus: (projectId: string) => Promise<MarketingOpsChannelsStatusSnapshot>
   global: () => Promise<ContentStudioGlobalView>
   project: (projectId: string) => Promise<ContentStudioProjectView>
@@ -90,6 +99,10 @@ export interface WorkbenchRuntime {
   storageRecycle: (projectId: string) => Promise<{ entries: StorageRecycleEntry[], projectId: string }>
   restoreStorageRecycleEntry: (projectId: string, recycleId: string) => Promise<StorageRestoreResult>
   retryTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
+  resumeManagedPublicationHandoff: (
+    projectId: string,
+    handoffId: string,
+  ) => Promise<MarketingOpsAssistedPublicationResult>
   startTask: (projectId: string, taskId: string) => Promise<ExecutionTask>
   taskEvents: (projectId: string, taskId: string) => Promise<ExecutionTaskEvent[]>
   saveProjectChannelBinding: (binding: ProjectChannelBinding) => Promise<ProjectChannelBinding>
@@ -112,6 +125,10 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
   }
 
   return {
+    abandonManagedPublicationHandoff: (projectId, handoffId) => request<MarketingOpsAssistedPublicationResult>(
+      `/projects/${encodeURIComponent(projectId)}/owner-handoffs/${encodeURIComponent(handoffId)}/marketing-ops/abandon`,
+      { method: 'POST' },
+    ),
     cancelOwnerHandoff: (projectId, handoffId) => request<OwnerHandoff>(
       `/projects/${encodeURIComponent(projectId)}/owner-handoffs/${encodeURIComponent(handoffId)}/cancel`,
       { method: 'POST' },
@@ -185,6 +202,10 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
       },
     ),
     health: () => request<RuntimeHealth>('/health'),
+    confirmManagedPublicationHandoff: (projectId, handoffId) => request<MarketingOpsAssistedPublicationResult>(
+      `/projects/${encodeURIComponent(projectId)}/owner-handoffs/${encodeURIComponent(handoffId)}/marketing-ops/confirm`,
+      { method: 'POST' },
+    ),
     marketingOpsStatus: projectId => request<MarketingOpsChannelsStatusSnapshot>(
       `/projects/${encodeURIComponent(projectId)}/marketing-ops/channels-status`,
     ),
@@ -233,6 +254,10 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
     ),
     retryTask: (projectId, taskId) => request<ExecutionTask>(
       `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/retry`,
+      { method: 'POST' },
+    ),
+    resumeManagedPublicationHandoff: (projectId, handoffId) => request<MarketingOpsAssistedPublicationResult>(
+      `/projects/${encodeURIComponent(projectId)}/owner-handoffs/${encodeURIComponent(handoffId)}/marketing-ops/resume`,
       { method: 'POST' },
     ),
     startTask: (projectId, taskId) => request<ExecutionTask>(

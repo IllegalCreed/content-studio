@@ -868,7 +868,20 @@ export class ContentStudioApplicationService {
   }
 
   cancelOwnerHandoff(projectId: string, handoffId: string): OwnerHandoff {
-    const handoff = this.updateOwnerHandoffStatus(projectId, handoffId, 'cancelled')
+    return this.cancelOwnerHandoffWithPolicy(projectId, handoffId, false)
+  }
+
+  private cancelOwnerHandoffWithPolicy(
+    projectId: string,
+    handoffId: string,
+    allowManagedPublication: boolean,
+  ): OwnerHandoff {
+    const handoff = this.updateOwnerHandoffStatus(
+      projectId,
+      handoffId,
+      'cancelled',
+      allowManagedPublication,
+    )
     const publicationTaskId = `publication-${handoff.publicationId}`
     const publicationTask = this.taskStore.getTask(projectId, publicationTaskId)
     if (publicationTask?.status === 'awaiting-owner')
@@ -1816,7 +1829,7 @@ export class ContentStudioApplicationService {
     const handoff = this.getMarketingOpsPublicationHandoffForAbandonment(projectId, handoffId)
     if (handoff.status === 'cancelled')
       return handoff
-    const cancelled = this.cancelOwnerHandoff(projectId, handoffId)
+    const cancelled = this.cancelOwnerHandoffWithPolicy(projectId, handoffId, true)
     if (cancelled.marketingOpsConfirmation === undefined)
       return cancelled
     const sanitized: OwnerHandoff = { ...cancelled }
@@ -1904,7 +1917,12 @@ export class ContentStudioApplicationService {
       }
       return handoff
     }
-    const completed = this.completeOwnerHandoff(projectId, handoffId)
+    const completed = this.updateOwnerHandoffStatus(
+      projectId,
+      handoffId,
+      'completed',
+      true,
+    )
     if (publicUrl === undefined && completed.marketingOpsConfirmation === undefined)
       return completed
     const current = completed.marketingOpsConfirmation
@@ -1959,11 +1977,17 @@ export class ContentStudioApplicationService {
     projectId: string,
     handoffId: string,
     status: Extract<OwnerHandoff['status'], 'cancelled' | 'completed'>,
+    allowManagedPublication = false,
   ): OwnerHandoff {
     this.requireProject(projectId)
     const handoff = this.repository.getOwnerHandoff(projectId, handoffId)
     if (handoff === undefined)
       throw new RecordNotFoundError('OwnerHandoff', handoffId)
+    if (handoff.marketingOpsPackage !== undefined && !allowManagedPublication) {
+      throw new Error(
+        `Owner handoff ${handoffId} is a managed publication and requires its typed workflow`,
+      )
+    }
     if (handoff.status !== 'pending')
       throw new Error(`Owner handoff ${handoffId} is not pending`)
     return this.repository.updateOwnerHandoff({ ...handoff, status })

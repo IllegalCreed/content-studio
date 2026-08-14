@@ -96,6 +96,42 @@ describe('ownerInboxPage', () => {
       target: '_blank',
     })
     expect(wrapper.get('[data-testid="owner-handoff-managed-note"]').text())
-      .toContain('Content Studio MCP')
+      .toContain('受管发布流程')
+    expect(wrapper.get('[data-testid="owner-handoff-managed-resume"]').text())
+      .toContain('检查发布结果')
+    expect(wrapper.find('[data-testid="owner-handoff-managed-confirm"]').exists()).toBe(false)
+  })
+
+  it('emits typed managed actions without accepting a caller-supplied public URL', async () => {
+    const wrapper = mount(OwnerInboxPage, {
+      props: {
+        ownerHandoffs: [{
+          accountAlias: 'Bilibili Owner',
+          campaignTitle: '真实活动',
+          channel: 'bilibili',
+          checklist: ['确认严格公开地址'],
+          confirmationStatus: 'pending',
+          expiresAt: '2026-08-14T08:00:00.000Z',
+          handoffId: 'handoff-bilibili-confirm',
+          handoffKind: 'marketing-ops',
+          officialTargetUrl: 'https://member.bilibili.com/platform/upload/text/edit',
+          publicUrl: 'https://www.bilibili.com/opus/900000000000000005',
+          reason: '等待确认回执',
+          status: 'waiting',
+          taskId: 'publication-bilibili-confirm',
+        }],
+      },
+    })
+
+    expect(wrapper.get('[data-testid="owner-handoff-public-url"]').attributes()).toMatchObject({
+      href: 'https://www.bilibili.com/opus/900000000000000005',
+      rel: 'noreferrer',
+      target: '_blank',
+    })
+    expect(wrapper.find('[data-testid="owner-handoff-managed-resume"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="owner-handoff-managed-confirm"]').trigger('click')
+    await wrapper.get('[data-testid="owner-handoff-managed-abandon"]').trigger('click')
+    expect(wrapper.emitted('confirm-managed-handoff')).toEqual([['handoff-bilibili-confirm']])
+    expect(wrapper.emitted('abandon-managed-handoff')).toEqual([['handoff-bilibili-confirm']])
   })
 })

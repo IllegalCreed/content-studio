@@ -3125,6 +3125,28 @@ describe('content studio application service', () => {
     ]))
   })
 
+  it('rejects generic completion and cancellation for managed publication handoffs', () => {
+    const completion = createMarketingOpsPublicationHandoffFixture()
+    expect(() => completion.service.completeOwnerHandoff(
+      'project-a',
+      completion.handoff.handoffId,
+    )).toThrow(/managed publication/i)
+    expect(completion.service.getMarketingOpsPublicationHandoff(
+      'project-a',
+      completion.handoff.handoffId,
+    ).status).toBe('pending')
+
+    const cancellation = createMarketingOpsPublicationHandoffFixture()
+    expect(() => cancellation.service.cancelOwnerHandoff(
+      'project-a',
+      cancellation.handoff.handoffId,
+    )).toThrow(/managed publication/i)
+    expect(cancellation.service.getMarketingOpsPublicationHandoff(
+      'project-a',
+      cancellation.handoff.handoffId,
+    ).status).toBe('pending')
+  })
+
   it('releases only the matching pending marketing-ops confirmation for retry', () => {
     const { handoff, service } = createMarketingOpsPublicationHandoffFixture()
     const firstUrl = 'https://www.youtube.com/watch?v=12345678901'

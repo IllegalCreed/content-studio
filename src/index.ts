@@ -65,6 +65,9 @@ export {
   type ProductionWorkerSnapshot,
 } from './jobs/worker'
 export {
+  createMarketingOpsAssistedPublicationService,
+} from './marketing-ops/assisted-publication'
+export {
   assertMatchingMarketingOpsReceipt,
   assessMarketingOpsCompatibility,
   createFakeMarketingOpsClient,
