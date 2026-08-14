@@ -88,6 +88,10 @@ export interface WorkbenchRuntime {
   project: (projectId: string) => Promise<ContentStudioProjectView>
   projects: () => Promise<ContentStudioProjectIndex>
   promoteActivityArtifact: (input: PromoteActivityArtifactInput) => Promise<ProjectAsset>
+  prepareManagedBilibiliPublication: (
+    projectId: string,
+    publicationId: string,
+  ) => Promise<MarketingOpsAssistedPublicationResult>
   registerProject: (manifest: ProjectManifest) => Promise<ProjectRecord>
   reviseActivity: (input: ActivityRevisionInput) => Promise<PublishingActivity>
   recordTask: (
@@ -214,6 +218,10 @@ export function createWorkbenchRuntime(basePath = '/api/v1'): WorkbenchRuntime {
       `/projects/${encodeURIComponent(projectId)}`,
     ),
     projects: () => request<ContentStudioProjectIndex>('/projects'),
+    prepareManagedBilibiliPublication: (projectId, publicationId) => request<MarketingOpsAssistedPublicationResult>(
+      `/projects/${encodeURIComponent(projectId)}/publication-plans/${encodeURIComponent(publicationId)}/marketing-ops/prepare`,
+      { method: 'POST' },
+    ),
     promoteActivityArtifact: input => request<ProjectAsset>(
       `/projects/${encodeURIComponent(input.projectId)}/activity-artifacts/${encodeURIComponent(input.artifactId)}/promote`,
       {

@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 import {
   compileMarketingOpsPublicationPackage,
   compileMarketingOpsPublicationPackages,
+  createBilibiliMarketingOpsRendererOutput,
 } from './package'
 
 const projectId = 'package-project'
@@ -123,6 +124,66 @@ function input(overrides: Partial<MarketingOpsPublicationPackageInput> = {}): Ma
 }
 
 describe('marketing-ops publication package compiler', () => {
+  it('derives the fixed Bilibili renderer only from locked publication facts', () => {
+    const currentActivity = activity()
+    const currentContent = content({
+      artifactIds: ['image-zh'],
+      body: `查看完整演示：${currentActivity.targetUrl}`,
+      channel: 'bilibili',
+      contentId: 'bilibili-zh-content',
+      format: 'image-text',
+      locale: 'zh-CN',
+      title: '快速排序图解',
+    })
+
+    expect(createBilibiliMarketingOpsRendererOutput({
+      activity: currentActivity,
+      artifacts: [artifact('image-zh', 'image', 'images/cover.png', 'zh-CN')],
+      content: currentContent,
+      publication: {
+        activityId,
+        channel: 'bilibili',
+        contentId: currentContent.contentId,
+        projectId,
+        publicationId: 'bilibili-zh-publication',
+      },
+      snapshot: snapshot(),
+    })).toEqual({
+      canonicalUrl: currentActivity.targetUrl,
+      format: 'manual-package',
+      links: [currentActivity.targetUrl],
+      media: ['image'],
+      utmMedium: 'social',
+    })
+  })
+
+  it('will not invent a Bilibili renderer link that is absent from locked copy', () => {
+    const currentActivity = activity()
+    const currentContent = content({
+      artifactIds: [],
+      body: '这段已锁定内容没有项目落地页。',
+      channel: 'bilibili',
+      contentId: 'bilibili-short-content',
+      format: 'short-post',
+      locale: 'zh-CN',
+      title: '快速排序短动态',
+    })
+
+    expect(() => createBilibiliMarketingOpsRendererOutput({
+      activity: currentActivity,
+      artifacts: [],
+      content: currentContent,
+      publication: {
+        activityId,
+        channel: 'bilibili',
+        contentId: currentContent.contentId,
+        projectId,
+        publicationId: 'bilibili-short-publication',
+      },
+      snapshot: snapshot(),
+    })).toThrow(/target URL.*locked content/i)
+  })
+
   it('compiles an English GitHub package with immutable artifact references', () => {
     const compiled = compileMarketingOpsPublicationPackage(input())
 

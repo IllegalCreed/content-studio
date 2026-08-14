@@ -857,6 +857,11 @@ export interface MarketingOpsAssistedPublicationService {
     authorization: MarketingOpsAssistedPublicationAuthorization
     preparation: PrepareMarketingOpsPublicationPackageInput
   }) => Promise<MarketingOpsAssistedPublicationResult>
+  prepareBilibili: (input: {
+    authorization: MarketingOpsAssistedPublicationAuthorization
+    projectId: string
+    publicationId: string
+  }) => Promise<MarketingOpsAssistedPublicationResult>
   resume: (input: {
     authorization: MarketingOpsAssistedPublicationAuthorization
     handoffId: string

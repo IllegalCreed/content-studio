@@ -41,8 +41,33 @@ export function createMarketingOpsAssistedPublicationService(
     abandon: input => abandonMarketingOpsPublication(input, dependencies),
     confirm: input => confirmMarketingOpsPublication(input, dependencies),
     prepare: input => prepareMarketingOpsPublication(input, dependencies),
+    prepareBilibili: input => prepareBilibiliMarketingOpsPublication(input, dependencies),
     resume: input => resumeMarketingOpsPublication(input, dependencies),
   }
+}
+
+async function prepareBilibiliMarketingOpsPublication(
+  input: {
+    authorization: MarketingOpsAssistedPublicationAuthorization
+    projectId: string
+    publicationId: string
+  },
+  dependencies: MarketingOpsAssistedPublicationDependencies,
+): Promise<MarketingOpsAssistedPublicationResult> {
+  const preparedPackage = dependencies.service
+    .prepareBilibiliMarketingOpsPublicationPackage(input)
+    .package
+  const statusBefore = await readMarketingOpsStatus(
+    input.projectId,
+    dependencies.status,
+  )
+  const accountRef = syncBilibiliOwnerAssistedBinding(
+    dependencies.service,
+    input.projectId,
+    statusBefore,
+  )
+  const packageValue = withBilibiliPackageAccountRef(preparedPackage, accountRef)
+  return preparePackage(packageValue, input.authorization, statusBefore, dependencies)
 }
 
 async function prepareMarketingOpsPublication(

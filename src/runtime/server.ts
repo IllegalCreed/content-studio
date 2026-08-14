@@ -489,6 +489,47 @@ async function handleRequest(
       && segments[0] === 'api'
       && segments[1] === 'v1'
       && segments[2] === 'projects'
+      && segments[4] === 'publication-plans'
+      && segments[6] === 'marketing-ops'
+      && segments[7] === 'prepare'
+    ) {
+      const requestProjectId = identifierField(
+        decodeSegment(segments[3]!),
+        'projectId',
+      )
+      const publicationId = identifierField(
+        decodeSegment(segments[5]!),
+        'publicationId',
+      )
+      assertOwnerActionRequestOrigin(request)
+      await assertEmptyRequestBody(request)
+      if (production.marketingOpsPublication === undefined) {
+        response.setHeader('Cache-Control', 'private, no-store')
+        sendJson(response, 503, {
+          error: MARKETING_OPS_PUBLISH_UNAVAILABLE_MESSAGE,
+        })
+        return
+      }
+      service.getProjectView(requestProjectId)
+      const result = await production.marketingOpsPublication.prepareBilibili({
+        authorization: {
+          authorizedAt: new Date().toISOString(),
+          source: 'owner-prompt',
+        },
+        projectId: requestProjectId,
+        publicationId,
+      })
+      response.setHeader('Cache-Control', 'private, no-store')
+      sendJson(response, 200, result)
+      return
+    }
+
+    if (
+      request.method === 'POST'
+      && segments.length === 8
+      && segments[0] === 'api'
+      && segments[1] === 'v1'
+      && segments[2] === 'projects'
       && segments[4] === 'owner-handoffs'
       && segments[6] === 'marketing-ops'
       && (

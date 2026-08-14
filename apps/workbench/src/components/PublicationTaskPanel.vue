@@ -5,13 +5,22 @@ import { humanizeStatus } from '../model'
 
 const props = defineProps<{
   handoff?: OwnerHandoffProjection
+  prepareError?: string | null
+  preparePending?: boolean
   runtimeConnected: boolean
   task: TaskProjection
 }>()
 
 const emit = defineEmits<{
   'go-owner': []
+  'prepare-managed': []
 }>()
+
+const canPrepareManaged = computed(() =>
+  props.task.channel === 'bilibili'
+  && props.task.publicationId !== undefined
+  && props.task.status !== 'published',
+)
 
 const deliveryStateLabel = computed(() => {
   if (props.task.status === 'published')
@@ -97,6 +106,25 @@ const handoffStatusLabel = computed(() => {
         >打开官方页面</a>
         <button type="button" class="primary-button" data-testid="publication-open-owner" @click="emit('go-owner')">打开处理清单</button>
       </div>
+    </section>
+    <section
+      v-else-if="canPrepareManaged"
+      class="publication-managed-prepare"
+      data-testid="publication-managed-prepare"
+    >
+      <div>
+        <p class="eyebrow">Bilibili 人工辅助发布</p>
+        <strong>在官方页准备锁定内容</strong>
+        <p>只会打开并填写 Bilibili 官方页面。未登录时会停下等待你人工登录；验证码、风控和最终发布始终由你处理。</p>
+        <p v-if="props.prepareError" class="publication-action-error" role="alert">{{ props.prepareError }}</p>
+      </div>
+      <button
+        type="button"
+        class="primary-button"
+        data-testid="publication-prepare-managed"
+        :disabled="!props.runtimeConnected || props.preparePending"
+        @click="emit('prepare-managed')"
+      >{{ props.preparePending ? '正在准备…' : '从发布计划开始准备' }}</button>
     </section>
     <section v-else class="publication-receipt-note" data-testid="publication-task-receipt">
       <p class="eyebrow">发布回执</p>

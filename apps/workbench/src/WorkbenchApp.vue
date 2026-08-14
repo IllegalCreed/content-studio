@@ -235,6 +235,8 @@ const contentSaving = ref(false)
 const contentSaveError = ref<string | null>(null)
 const publicationPlanActionError = ref<string | null>(null)
 const publicationPlanActionPending = ref<string | null>(null)
+const publicationPrepareError = ref<string | null>(null)
+const publicationPreparePending = ref<string | null>(null)
 const mediaRevisionArtifactIds = ref<string[]>([])
 const mediaRevisionContent = ref<ChannelContentProjection | null>(null)
 const mediaRevisionError = ref<string | null>(null)
@@ -264,6 +266,9 @@ const ownerHandoffActionError = ref<string | null>(null)
 const ownerHandoffActionPending = ref<
   'cancel' | 'complete' | 'managed-abandon' | 'managed-confirm' | 'managed-resume' | null
 >(null)
+watch(selectedTaskId, () => {
+  publicationPrepareError.value = null
+})
 const videoPlanActionError = ref<string | null>(null)
 const videoPlanActionPending = ref(false)
 const videoPlanRevisionError = ref<string | null>(null)
@@ -1057,6 +1062,38 @@ async function updateManagedPublicationHandoff(
   }
 }
 
+async function prepareSelectedManagedPublication(): Promise<void> {
+  const task = selectedTask.value
+  const publicationId = task.publicationId
+  const projectId = task.projectId ?? snapshot.project.projectId
+  if (
+    !runtimeConnected.value
+    || publicationPreparePending.value !== null
+    || task.channel !== 'bilibili'
+    || publicationId === undefined
+  ) {
+    return
+  }
+  publicationPreparePending.value = publicationId
+  publicationPrepareError.value = null
+  try {
+    await workbenchRuntime.prepareManagedBilibiliPublication(projectId, publicationId)
+    if (projectId !== snapshot.project.projectId)
+      await switchProject(projectId)
+    else
+      await refreshProjectView()
+    selectModule('owner')
+  }
+  catch (error: unknown) {
+    publicationPrepareError.value = error instanceof Error
+      ? error.message
+      : 'Bilibili 发布准备失败'
+  }
+  finally {
+    publicationPreparePending.value = null
+  }
+}
+
 function selectAsset(assetId: string): void {
   uiStore.selectAsset(assetId)
 }
@@ -1824,6 +1861,7 @@ function applyProjectView(
       accountAliasForChannel: projectAccountAliasForChannel,
       campaigns: runtimeCampaigns,
       events: projectView.taskEvents[task.taskId] ?? [],
+      publicationPlans: projectView.publicationPlans,
       task,
     }))
     snapshot.tasks = preferRuntimeData(
@@ -2030,6 +2068,8 @@ async function openProjectSpace(projectId: string): Promise<void> {
           :can-retry-selected-task="canRetrySelectedTask"
           :can-start-selected-task="canStartSelectedTask"
           :owner-handoffs="activeTaskScope === '全部项目' ? globalPendingOwnerHandoffs : pendingOwnerHandoffs"
+          :publication-prepare-error="publicationPrepareError"
+          :publication-prepare-pending="publicationPreparePending !== null"
           :project-count="projectIndexForView.length"
           :project-name="snapshot.project.name"
           :runtime-connected="runtimeConnected"
@@ -2043,6 +2083,7 @@ async function openProjectSpace(projectId: string): Promise<void> {
           @change-task="changeSelectedTask"
           @go-activities="selectModule('activities')"
           @go-owner="selectModule('owner')"
+          @prepare-managed-publication="prepareSelectedManagedPublication"
           @select-task="selectTask"
         />
       </template>

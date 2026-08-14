@@ -404,6 +404,42 @@ describe('content studio workbench', () => {
     expect(wrapper.find('.task-scope-switch').exists()).toBe(false)
   })
 
+  it('从发布任务把明确的 Bilibili 准备点击交给本地运行时', async () => {
+    const router = createWorkbenchRouter(true)
+    await router.push('/project/tasks')
+    await router.isReady()
+    const pinia = createPinia()
+    const runtimeStore = useWorkbenchStore(pinia)
+    const uiStore = useWorkbenchUiStore(pinia)
+    runtimeStore.markRuntimeReady()
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'synthetic blocked state' }), { status: 503 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const wrapper = mount(WorkbenchApp, {
+      global: {
+        plugins: [pinia, router],
+      },
+    })
+    const viewModel = wrapper.vm as unknown as { snapshot: WorkbenchSnapshot }
+    const task = viewModel.snapshot.tasks.find(candidate =>
+      candidate.taskId === 'release-notes-publish-x',
+    )!
+    task.channel = 'bilibili'
+    task.publicationId = 'publication-bilibili-a'
+    uiStore.selectTask(task.taskId)
+    await nextTick()
+
+    await wrapper.get('[data-testid="publication-prepare-managed"]').trigger('click')
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/algorithm-visualizer/publication-plans/publication-bilibili-a/marketing-ops/prepare',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(wrapper.get('[role="alert"]').text()).toContain('synthetic blocked state')
+  })
+
   it('从深链接 query 恢复素材筛选和选中素材', async () => {
     const router = createWorkbenchRouter(true)
     await router.push('/project/assets?asset=quick-sort-template&assetKind=template')

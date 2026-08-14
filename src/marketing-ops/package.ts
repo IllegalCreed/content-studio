@@ -6,6 +6,7 @@ import type {
   MarketingOpsMediaKind,
   MarketingOpsPublicationPackage,
   MarketingOpsPublicationPackageInput,
+  MarketingOpsRendererOutput,
 } from '../types'
 import { createHash } from 'node:crypto'
 import { extname } from 'node:path'
@@ -73,6 +74,35 @@ export function compileMarketingOpsPublicationPackage(
       .digest('hex'),
     packageId: input.publication.publicationId,
     publicationId: input.publication.publicationId,
+  }
+}
+
+/**
+ * Produces the single fixed renderer envelope supported by the Workbench's
+ * Bilibili owner-assisted entry point. The values come only from immutable
+ * activity/content/artifact records; the UI cannot supply or rewrite them.
+ */
+export function createBilibiliMarketingOpsRendererOutput(
+  input: Omit<MarketingOpsPublicationPackageInput, 'renderer'>,
+): MarketingOpsRendererOutput {
+  if (input.content.channel !== 'bilibili' || input.publication.channel !== 'bilibili')
+    throw new Error('Fixed Bilibili renderer requires a Bilibili publication')
+  if (!input.content.body.includes(input.activity.targetUrl)) {
+    throw new Error(
+      'Bilibili renderer target URL must already be present in locked content',
+    )
+  }
+  assertProjectUrl(
+    input.activity.targetUrl,
+    input.snapshot.manifest.canonicalUrl,
+    'activity target URL',
+  )
+  return {
+    canonicalUrl: input.activity.targetUrl,
+    format: 'manual-package',
+    links: [input.activity.targetUrl],
+    media: mediaKindsForArtifacts(resolveArtifacts(input)),
+    utmMedium: 'social',
   }
 }
 
@@ -342,7 +372,7 @@ function hasImageTextCoverToken(artifact: ActivityArtifact): boolean {
 }
 
 function resolveArtifacts(
-  input: MarketingOpsPublicationPackageInput,
+  input: Pick<MarketingOpsPublicationPackageInput, 'artifacts' | 'content'>,
 ): ActivityArtifact[] {
   const latestById = new Map<string, ActivityArtifact>()
   for (const artifact of input.artifacts) {
@@ -368,7 +398,7 @@ function resolveArtifacts(
 }
 
 function assertResolvedArtifact(
-  input: MarketingOpsPublicationPackageInput,
+  input: Pick<MarketingOpsPublicationPackageInput, 'content'>,
   artifact: ActivityArtifact,
 ): void {
   if (

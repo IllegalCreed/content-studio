@@ -299,6 +299,22 @@ describe('workbench runtime client', () => {
       expect(call[1]).not.toHaveProperty('body')
   })
 
+  it('starts a managed Bilibili preparation without caller renderer or credential fields', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ mode: 'assisted-prepare' }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createWorkbenchRuntime('/api/v1')
+      .prepareManagedBilibiliPublication('project-a', 'publication-a')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/projects/project-a/publication-plans/publication-a/marketing-ops/prepare',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchMock.mock.calls[0]![1]).not.toHaveProperty('body')
+  })
+
   it('turns a non-success response into a readable error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: 'blocked' }), { status: 403 }),

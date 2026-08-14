@@ -21,6 +21,8 @@ const props = defineProps<{
   canRetrySelectedTask: boolean
   canStartSelectedTask: boolean
   ownerHandoffs: TaskOwnerHandoff[]
+  publicationPrepareError: string | null
+  publicationPreparePending: boolean
   projectCount: number
   projectName: string
   runtimeConnected: boolean
@@ -37,6 +39,7 @@ const emit = defineEmits<{
   'change-task': [action: TaskAction]
   'go-activities': []
   'go-owner': []
+  'prepare-managed-publication': []
   'select-task': [projectId: string, taskId: string]
 }>()
 
@@ -201,8 +204,11 @@ const selectedTaskHandoff = computed(() =>
   <PublicationTaskPanel
     v-if="!props.runtimeLoading && props.visibleTasks.length > 0 && props.selectedTask.kind === '发布'"
     :handoff="selectedTaskHandoff"
+    :prepare-error="props.publicationPrepareError"
+    :prepare-pending="props.publicationPreparePending"
     :runtime-connected="props.runtimeConnected"
     :task="props.selectedTask"
     @go-owner="emit('go-owner')"
+    @prepare-managed="emit('prepare-managed-publication')"
   />
 </template>

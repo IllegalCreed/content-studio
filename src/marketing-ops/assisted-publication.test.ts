@@ -26,6 +26,82 @@ afterEach(async () => {
 })
 
 describe('marketing-ops assisted publication service', () => {
+  it('prepares a Bilibili publication from the locked plan without caller renderer fields', async () => {
+    const fixture = await createFixture()
+    const publishCampaign = vi.fn(async (
+      input: MarketingOpsCampaignRequest,
+    ): Promise<MarketingOpsPublishResult> => ({
+      campaignId: input.campaignId,
+      failures: [],
+      handoffs: [{
+        action: 'final-confirmation',
+        contentHash: 'a'.repeat(64),
+        contentStudioContentHash: input.packages[0]!.contentStudio.contentHash,
+        form: 'image-text',
+        idempotencyKey: `${input.idempotencyKey}/bilibili/publication-a/synthetic`,
+        packageId: 'publication-a',
+        publicationId: 'publication-a',
+        status: 'awaiting-owner',
+      }],
+      limitations: [],
+      projectId: input.projectId,
+      receipts: [],
+    }))
+    const publication = createMarketingOpsAssistedPublicationService({
+      assetBundleRoot: fixture.assetBundleRoot,
+      publish: { publishCampaign },
+      service: fixture.service,
+      sourceRoot: fixture.sourceRoot,
+      status: { getChannelsStatus: async () => freshStatus() },
+    })
+
+    const prepared = await publication.prepareBilibili({
+      authorization: {
+        authorizedAt: '2026-08-14T05:59:00.000Z',
+        source: 'owner-prompt',
+      },
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+    })
+
+    expect(prepared.package.renderer).toEqual({
+      canonicalUrl: 'https://project-a.example.com/guide',
+      format: 'manual-package',
+      links: ['https://project-a.example.com/guide'],
+      media: ['image'],
+      utmMedium: 'social',
+    })
+    expect(prepared.handoff).toMatchObject({
+      publicationId: 'publication-a',
+      status: 'pending',
+    })
+    expect(publishCampaign).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects an invalid locked Bilibili package before reading channel status', async () => {
+    const fixture = await createFixture({ body: '锁定内容没有项目落地页' })
+    const getChannelsStatus = vi.fn(async () => freshStatus())
+    const publishCampaign = vi.fn()
+    const publication = createMarketingOpsAssistedPublicationService({
+      assetBundleRoot: fixture.assetBundleRoot,
+      publish: { publishCampaign },
+      service: fixture.service,
+      sourceRoot: fixture.sourceRoot,
+      status: { getChannelsStatus },
+    })
+
+    await expect(publication.prepareBilibili({
+      authorization: {
+        authorizedAt: '2026-08-14T05:59:00.000Z',
+        source: 'owner-prompt',
+      },
+      projectId: 'project-a',
+      publicationId: 'publication-a',
+    })).rejects.toThrow(/target URL.*locked content/i)
+    expect(getChannelsStatus).not.toHaveBeenCalled()
+    expect(publishCampaign).not.toHaveBeenCalled()
+  })
+
   it('locks an observed URL during resume and confirms it without a caller URL', async () => {
     const fixture = await createFixture()
     let prepareCalls = 0
@@ -169,7 +245,7 @@ describe('marketing-ops assisted publication service', () => {
   })
 })
 
-async function createFixture(): Promise<{
+async function createFixture(options: { body?: string } = {}): Promise<{
   assetBundleRoot: string
   service: ContentStudioApplicationService
   sourceRoot: string
@@ -245,7 +321,7 @@ async function createFixture(): Promise<{
   service.createChannelContent({
     activityId: 'activity-a',
     artifactIds: ['cover-a'],
-    body: '分区步骤说明：https://project-a.example.com/guide',
+    body: options.body ?? '分区步骤说明：https://project-a.example.com/guide',
     channel: 'bilibili',
     contentGroupId: 'group-a',
     contentId: 'content-a',

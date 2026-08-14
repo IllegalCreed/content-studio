@@ -1373,6 +1373,102 @@ describe('content studio local application server', () => {
     }
   })
 
+  it('starts a Bilibili owner-assisted preparation from a body-free same-origin action', async () => {
+    const { project, snapshot } = createProject()
+    const result = {
+      campaignId: 'campaign-a',
+      failures: [],
+      handoff: { handoffId: 'handoff-a', status: 'pending' },
+      handoffs: [],
+      limitations: [],
+      mode: 'assisted-prepare',
+      package: { packageId: 'publication-a' },
+      projectId: 'project-a',
+      receipts: [],
+    }
+    const prepareBilibili = vi.fn(async () => result)
+    const handle = createContentStudioServer({
+      marketingOpsPublication: { prepareBilibili } as unknown as MarketingOpsAssistedPublicationService,
+      project,
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    const running = await listen(handle.server)
+
+    try {
+      const response = await fetch(
+        `${running.baseUrl}/api/v1/projects/project-a/publication-plans/publication-a/marketing-ops/prepare`,
+        { method: 'POST' },
+      )
+      expect(response.status).toBe(200)
+      expect(prepareBilibili).toHaveBeenCalledWith({
+        authorization: {
+          authorizedAt: expect.any(String),
+          source: 'owner-prompt',
+        },
+        projectId: 'project-a',
+        publicationId: 'publication-a',
+      })
+    }
+    finally {
+      await running.close()
+      handle.close()
+    }
+  })
+
+  it('keeps the initial Bilibili preparation body-free, same-origin, and unavailable by default', async () => {
+    const { project, snapshot } = createProject()
+    const prepareBilibili = vi.fn()
+    const guardedHandle = createContentStudioServer({
+      marketingOpsPublication: { prepareBilibili } as unknown as MarketingOpsAssistedPublicationService,
+      project,
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    const guarded = await listen(guardedHandle.server)
+
+    try {
+      const path = `${guarded.baseUrl}/api/v1/projects/project-a/publication-plans/publication-a/marketing-ops/prepare`
+      const withBody = await fetch(path, {
+        body: JSON.stringify({ accountRef: 'caller-controlled' }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      })
+      expect(withBody.status).toBe(400)
+      const crossSite = await fetch(path, {
+        headers: { 'sec-fetch-site': 'cross-site' },
+        method: 'POST',
+      })
+      expect(crossSite.status).toBe(403)
+      expect(prepareBilibili).not.toHaveBeenCalled()
+    }
+    finally {
+      await guarded.close()
+      guardedHandle.close()
+    }
+
+    const unavailableHandle = createContentStudioServer({
+      project,
+      repository: new InMemoryContentStudioRepository(),
+      snapshot,
+    })
+    const unavailable = await listen(unavailableHandle.server)
+    try {
+      const response = await fetch(
+        `${unavailable.baseUrl}/api/v1/projects/project-a/publication-plans/publication-a/marketing-ops/prepare`,
+        { method: 'POST' },
+      )
+      expect(response.status).toBe(503)
+      expect(await response.json()).toEqual({
+        error: 'Marketing Ops publish unavailable; publishing remains blocked',
+      })
+    }
+    finally {
+      await unavailable.close()
+      unavailableHandle.close()
+    }
+  })
+
   it('keeps managed handoff actions blocked when the publication service is unavailable', async () => {
     const { project, snapshot } = createProject()
     const handle = createContentStudioServer({

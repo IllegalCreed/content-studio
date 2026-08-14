@@ -854,6 +854,39 @@ main {
   line-height: 1.45;
 }
 
+.publication-managed-prepare {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #596233;
+  background: rgb(217 255 67 / 5%);
+}
+
+.publication-managed-prepare strong {
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.publication-managed-prepare p:not(.eyebrow) {
+  max-width: 50rem;
+  margin: 0.45rem 0 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.publication-managed-prepare button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.publication-managed-prepare .publication-action-error {
+  color: var(--danger);
+}
+
 .publication-runtime-note {
   margin: 0.9rem 0 0;
   color: var(--muted);
@@ -5293,7 +5326,8 @@ footer {
   }
 
   .publication-handoff-heading,
-  .publication-handoff-actions {
+  .publication-handoff-actions,
+  .publication-managed-prepare {
     align-items: stretch;
     flex-direction: column;
   }
@@ -5302,5 +5336,9 @@ footer {
   .publication-handoff-actions button {
     width: 100%;
     text-align: center;
+  }
+
+  .publication-managed-prepare button {
+    width: 100%;
   }
 }

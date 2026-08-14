@@ -70,7 +70,10 @@ import {
 import { runProductionTask as executeProductionTask } from '../jobs/production'
 import { InMemoryExecutionTaskStore } from '../jobs/task'
 import { assertMatchingMarketingOpsReceipt } from '../marketing-ops/client'
-import { compileMarketingOpsPublicationPackage } from '../marketing-ops/package'
+import {
+  compileMarketingOpsPublicationPackage,
+  createBilibiliMarketingOpsRendererOutput,
+} from '../marketing-ops/package'
 import { resolveGifOutputSize } from '../media/gif'
 import { compileVideoPlan } from '../video/compile'
 import {
@@ -1676,6 +1679,40 @@ export class ContentStudioApplicationService {
         snapshot,
       }),
     }
+  }
+
+  prepareBilibiliMarketingOpsPublicationPackage(
+    input: Pick<PrepareMarketingOpsPublicationPackageInput, 'projectId' | 'publicationId'>,
+  ): MarketingOpsPublicationPackagePreparation {
+    const publication = this.requirePublicationPlan(
+      input.projectId,
+      input.publicationId,
+    )
+    const content = this.repository.getChannelContent(
+      input.projectId,
+      publication.contentId,
+    )
+    if (content === undefined)
+      throw new RecordNotFoundError('Channel content', publication.contentId)
+    const activity = this.requireActivity(input.projectId, publication.activityId)
+    const snapshot = this.requireSnapshot(
+      input.projectId,
+      activity.projectSnapshotId,
+    )
+    const artifacts = this.repository.listActivityArtifacts(
+      input.projectId,
+      activity.activityId,
+    )
+    return this.prepareMarketingOpsPublicationPackage({
+      ...input,
+      renderer: createBilibiliMarketingOpsRendererOutput({
+        activity,
+        artifacts,
+        content,
+        publication,
+        snapshot,
+      }),
+    })
   }
 
   recordPublicationReceipt(

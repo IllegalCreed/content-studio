@@ -610,6 +610,46 @@ describe('workbench runtime projections', () => {
     })
   })
 
+  it('只把精确匹配的发布安排编号投影到发布任务', () => {
+    const task: ExecutionTask = {
+      activityId: 'activity-a',
+      attempt: 1,
+      channel: 'bilibili',
+      contentId: 'content-a',
+      kind: 'publication',
+      projectId: 'project-a',
+      skipStages: [],
+      status: 'queued',
+      taskId: 'publication-publication-a',
+    }
+
+    expect(taskToProjection({
+      accountAliasForChannel: () => '项目账号',
+      campaigns: [],
+      publicationPlans: [{
+        activityId: 'activity-a',
+        channel: 'bilibili',
+        contentId: 'content-a',
+        projectId: 'project-a',
+        publicationId: 'publication-a',
+      }],
+      task,
+    }).publicationId).toBe('publication-a')
+
+    expect(taskToProjection({
+      accountAliasForChannel: () => '项目账号',
+      campaigns: [],
+      publicationPlans: [{
+        activityId: 'activity-a',
+        channel: 'bilibili',
+        contentId: 'content-a',
+        projectId: 'project-a',
+        publicationId: 'different-publication',
+      }],
+      task,
+    }).publicationId).toBeUndefined()
+  })
+
   it('把活动渠道结果和业务进度集中投影，区分发布回执与监测观测', () => {
     const content = {
       channel: 'github' as const,
