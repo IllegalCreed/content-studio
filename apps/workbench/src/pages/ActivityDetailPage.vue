@@ -127,6 +127,9 @@ const artifacts = computed<ActivityArtifactProjection[]>(() => {
     store.projectView.activityArtifacts.filter(artifact => artifact.activityId === activityId.value),
   )
 })
+const artifactById = computed(() => new Map(
+  artifacts.value.map(artifact => [artifact.artifactId, artifact]),
+))
 const publicationResults = computed(() => activityPublicationProjections({
   activityId: activityId.value,
   contentGroups: contentGroups.value,
@@ -206,6 +209,12 @@ function activityStatusLabel(status: PublishingActivity['status']): string {
     planned: '已规划',
   }
   return labels[status]
+}
+
+function contentArtifacts(artifactIds: readonly string[] | undefined): ActivityArtifactProjection[] {
+  return (artifactIds ?? [])
+    .map(artifactId => artifactById.value.get(artifactId))
+    .filter((artifact): artifact is ActivityArtifactProjection => artifact !== undefined)
 }
 
 watch(routeProjectId, (projectId) => {
@@ -304,7 +313,28 @@ watch(videoPlan, syncViewportDraft, { immediate: true })
       <div v-if="contentGroups.length > 0" class="detail-content-groups">
         <article v-for="group in contentGroups" :key="group.contentGroupId" class="detail-content-group">
           <div><h3>{{ group.title }}</h3><p>{{ group.coreMessage }}</p></div>
-          <ul><li v-for="content in group.contents" :key="content.contentId"><strong>{{ content.title }}</strong><span>{{ content.channel }} · {{ content.format }} · 已登记</span></li></ul>
+          <ul>
+            <li v-for="content in group.contents" :key="content.contentId" class="detail-channel-content">
+              <div class="detail-channel-content-heading">
+                <strong>{{ content.title }}</strong>
+                <span>{{ content.channel }} · {{ content.format }} · 已登记</span>
+              </div>
+              <p v-if="content.body" class="detail-channel-content-body" data-testid="channel-content-body">{{ content.body }}</p>
+              <div
+                v-if="contentArtifacts(content.artifactIds).some(artifact => artifact.previewKind === 'image' && artifact.previewUrl)"
+                class="detail-channel-content-media"
+                data-testid="channel-content-media"
+              >
+                <figure
+                  v-for="artifact in contentArtifacts(content.artifactIds).filter(item => item.previewKind === 'image' && item.previewUrl)"
+                  :key="artifact.artifactId"
+                >
+                  <img :src="artifact.previewUrl" :alt="artifact.name" loading="lazy" />
+                  <figcaption>{{ artifact.name }}</figcaption>
+                </figure>
+              </div>
+            </li>
+          </ul>
         </article>
       </div>
       <p v-else class="empty-state">当前活动还没有渠道成品。下一步应由 AI 根据主题、渠道和所选内容形态生成文章、图文、动态、视频脚本或其他内容版本。</p>
