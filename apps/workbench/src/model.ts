@@ -216,9 +216,12 @@ export interface OwnerHandoffProjection {
   accountAlias: string
   checklist: string[]
   channel: ChannelId
+  confirmationStatus?: 'confirmed' | 'pending'
   expiresAt: string
   handoffId: string
+  handoffKind: 'generic' | 'marketing-ops'
   officialTargetUrl: string
+  publicUrl?: string
   reason: string
   status: 'cancelled' | 'completed' | 'expired' | 'ready' | 'waiting'
 }
@@ -1023,6 +1026,7 @@ export const snapshot: WorkbenchSnapshot = {
           ],
           expiresAt: '2026-08-03 18:00',
           handoffId: 'handoff-x-01',
+          handoffKind: 'generic',
           officialTargetUrl: 'https://x.com/compose/post',
           reason: '请在官方页面完成审核和最终发布点击。',
           status: 'ready',

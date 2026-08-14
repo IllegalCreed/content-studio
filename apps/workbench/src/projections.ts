@@ -840,7 +840,14 @@ export function activityToCampaign({
         channel: handoff.channel,
         expiresAt: handoff.expiresAt,
         handoffId: handoff.handoffId,
+        handoffKind: handoff.marketingOpsPackage === undefined ? 'generic' : 'marketing-ops',
         officialTargetUrl: handoff.officialTargetUrl,
+        ...(handoff.marketingOpsConfirmation === undefined
+          ? {}
+          : {
+              confirmationStatus: handoff.marketingOpsConfirmation.status,
+              publicUrl: handoff.marketingOpsConfirmation.publicUrl,
+            }),
         reason: '等待渠道授权人完成登录、审核和最终点击',
         status: handoff.status === 'pending' ? 'waiting' : handoff.status,
       })),

@@ -14,6 +14,7 @@ describe('ownerInboxPage', () => {
             checklist: ['确认账号已登录'],
             expiresAt: '2026-08-03 18:00',
             handoffId: 'handoff-x-01',
+            handoffKind: 'generic',
             officialTargetUrl: 'https://x.com/compose/post',
             reason: '请完成 X 发布',
             status: 'waiting',
@@ -26,6 +27,7 @@ describe('ownerInboxPage', () => {
             checklist: ['检查文章内容'],
             expiresAt: '2026-08-03 19:00',
             handoffId: 'handoff-github-01',
+            handoffKind: 'generic',
             officialTargetUrl: 'https://github.com/new',
             reason: '请完成 GitHub 发布',
             status: 'waiting',
@@ -52,6 +54,7 @@ describe('ownerInboxPage', () => {
           checklist: ['确认内容'],
           expiresAt: '2026-08-03 18:00',
           handoffId: 'handoff-a',
+          handoffKind: 'generic',
           officialTargetUrl: 'https://github.com/new',
           reason: '请完成发布',
           status: 'waiting',
@@ -64,5 +67,35 @@ describe('ownerInboxPage', () => {
     await wrapper.get('[data-testid="owner-handoff-cancel"]').trigger('click')
     expect(wrapper.emitted('complete-handoff')).toEqual([['handoff-a']])
     expect(wrapper.emitted('cancel-handoff')).toEqual([['handoff-a']])
+  })
+
+  it('keeps marketing-ops handoffs inside the managed confirmation workflow', () => {
+    const wrapper = mount(OwnerInboxPage, {
+      props: {
+        ownerHandoffs: [{
+          accountAlias: 'Bilibili Owner',
+          campaignTitle: '真实活动',
+          channel: 'bilibili',
+          checklist: ['在官方页面完成最终发布'],
+          expiresAt: '2026-08-14T08:00:00.000Z',
+          handoffId: 'handoff-bilibili-a',
+          handoffKind: 'marketing-ops',
+          officialTargetUrl: 'https://member.bilibili.com/platform/upload/text/edit',
+          reason: '等待渠道授权人完成登录、审核和最终点击',
+          status: 'waiting',
+          taskId: 'publication-bilibili-a',
+        }],
+      },
+    })
+
+    expect(wrapper.find('[data-testid="owner-handoff-complete"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="owner-handoff-cancel"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="owner-handoff-official"]').attributes()).toMatchObject({
+      href: 'https://member.bilibili.com/platform/upload/text/edit',
+      rel: 'noreferrer',
+      target: '_blank',
+    })
+    expect(wrapper.get('[data-testid="owner-handoff-managed-note"]').text())
+      .toContain('Content Studio MCP')
   })
 })
