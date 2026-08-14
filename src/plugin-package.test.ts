@@ -161,4 +161,56 @@ describe('content studio agent plugin package', () => {
       expect(body.trim().length).toBeGreaterThan(0)
     }
   })
+
+  it('ships an agent-first, review-gated activity production workflow', async () => {
+    const skill = await readFile(
+      join(pluginRoot, 'skills', 'produce-activity', 'SKILL.md'),
+      'utf8',
+    )
+    const workflow = await readFile(
+      join(
+        pluginRoot,
+        'skills',
+        'produce-activity',
+        'references',
+        'workflow.md',
+      ),
+      'utf8',
+    )
+
+    expect(skill).toContain('Agent 对话')
+    expect(skill).toContain('Workbench')
+    expect(skill).toContain('references/workflow.md')
+
+    const orderedGates = [
+      '活动简报',
+      '内容草案',
+      '内容确认',
+      '制作计划',
+      '分段制作',
+      '成品确认',
+      '发布协作',
+      '监测复盘',
+    ]
+    let previousIndex = -1
+    for (const gate of orderedGates) {
+      const currentIndex = workflow.indexOf(gate)
+      expect(currentIndex, `missing workflow gate: ${gate}`).toBeGreaterThan(
+        previousIndex,
+      )
+      previousIndex = currentIndex
+    }
+
+    expect(workflow).toContain('视频脚本')
+    expect(workflow).toContain('revise_channel_content')
+    expect(workflow).toContain('confirm_channel_content')
+    expect(workflow).toContain('confirm_channel_content_production')
+    expect(workflow).toContain('confirm_activity_video_plan')
+    expect(workflow).toContain('分镜')
+    expect(workflow).toContain('单段重录')
+    expect(workflow).toContain('字幕')
+    expect(workflow).toContain('配音')
+    expect(workflow).toContain('封面')
+    expect(workflow).toContain('不得创建发布计划')
+  })
 })
